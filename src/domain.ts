@@ -1,0 +1,275 @@
+export type Category = '의류' | '패션잡화' | '문구' | '생활잡화';
+export const CATEGORIES: Category[] = ['의류', '패션잡화', '문구', '생활잡화'];
+/** 카테고리 경로 — Figma 체계(대분류 › 중분류 › 소분류) */
+export const CATEGORY_PATHS = ['패션 › 상의 › 니트/스웨터', '패션 › 상의 › 맨투맨', '패션 › 상의 › 티셔츠', '패션 › 아우터 › 가디건', '패션 › 하의 › 팬츠', '패션 › 잡화 › 가방', '패션 › 잡화 › 모자', '패션 › 잡화 › 소품', '문구 › 노트', '문구 › 필기구', '문구 › 사무용품', '생활잡화 › 수납용품', '생활잡화 › 생활소품'];
+/** 홈 카테고리 탭(의류·패션잡화·문구·생활잡화)에 해당하는 묶음 */
+export function categoryGroup(path: string): Category | undefined { if ((CATEGORIES as string[]).includes(path)) return path as Category; /* 서버 카테고리 이름(예: 의류) — 추측: 체계 매핑 미확정, docs/api-gap.md */ if (path.startsWith('패션 › 잡화')) return '패션잡화'; if (path.startsWith('패션')) return '의류'; if (path.startsWith('문구')) return '문구'; if (path.startsWith('생활잡화')) return '생활잡화'; }
+export interface Extra { key: string; value: string }
+export interface Faq { id: string; question: string; answer: string; confirmed: boolean }
+export interface Option { id: string; name: string; stock: number }
+export interface Dimension { name: string; values: string }
+export interface Product {
+  id: string; sellerId: string; name: string; brand: string; category: string; description: string;
+  images: string[]; originalUrl: string; price: number; shipping: number; maxPerAccount: number;
+  dispatchDays: number; startsAt: number; endsAt: number; published: boolean; options: Option[];
+  dimensions: Dimension[]; extras: Extra[]; reason: string; faqs: Faq[]; rejectionReason?: string;
+  /** 택배사·반품/교환 배송비 안내문(서버 shippingNotice, ≤4000자) */ shippingNotice?: string;
+  /** 판매 시작 알림 신청 인원 — 백엔드 요청 필드 (docs/backend-api-requests.md) */ notifySubscribers?: number;
+  /** 선착순 마감(완판) 시각 — 백엔드 요청 필드 */ soldOutAt?: number;
+  /** 판매에 참여(구매 시도)한 인원 — 백엔드 요청 필드 */ participants?: number;
+  /** 타 플랫폼 판매가 확인 결과 — 백엔드 요청 필드 */ reference?: ReferenceListing;
+  /** 판매자 API 상품: 낙관적 잠금 version, 심사 상태, 서버 이미지 id(images와 같은 순서) */ version?: number; reviewStatus?: 'DRAFT' | 'IN_REVIEW' | 'REJECTED' | 'APPROVED'; imageIds?: string[]; /** 서버 이미지 바이트 수(imageIds와 같은 순서) */ imageSizes?: number[];
+  /** 서버(실제 API)에서 받은 상품의 재고 요약. 있으면 options[].stock은 서버의 남은 수량이고 로컬 주문·확보로 다시 빼지 않는다 */ live?: { initial: number; available: number };
+}
+export interface User { id: string; name: string; email: string; phone: string; seller: boolean; admin: boolean }
+export interface AuthData {
+  onboarded: boolean; userId: string | null;
+  credentials: Record<string, { salt: string; hash: string }>;
+  challenges: Record<string, { email: string; code: string; purpose: 'signup' | 'reset'; expiresAt: number; sentAt: number; attempts: number; verified: boolean; challengeId?: string; token?: string }>;
+  loginFailures: Record<string, { count: number; until: number }>;
+  consents: Record<string, { acceptedAt: number; marketing: boolean }>;
+  /** 데모 로그인(VITE_DEMO_LOGIN)으로 시작한 세션 */ demo?: boolean;
+}
+export const initialAuth = (): AuthData => ({ onboarded: false, userId: null, credentials: {}, challenges: {}, loginFailures: {}, consents: {} });
+export interface Address { name: string; phone: string; address: string; detail: string; request: string; postalCode?: string }
+export interface DocumentFile { id: string; name: string; size: number; uploadedAt: number }
+export interface Application {
+  id: string; userId: string; displayName: string; name: string; email: string; phone: string;
+  document: DocumentFile; bank: string; account: string; shippingAddress: string; returnAddress: string;
+  status: 'pending' | 'approved' | 'rejected'; submittedAt: number; approvedAt?: number; approvedBy?: string;
+  rejectedAt?: number; reviewedAt?: number; deadlineAt?: number;
+  /** 사업자 정보(상호·대표자·등록번호·업태) — 백엔드 요청 필드 (docs/backend-api-requests.md) */ business?: BusinessInfo;
+  rejectionItems?: { field: string; reason: string; fixed?: boolean }[];
+  /** 타 플랫폼 판매 URL — 신청 API 필드 확인 필요 (docs/backend-api-requests.md) */ salesUrl?: string;
+}
+export interface Line { optionId: string; name: string; quantity: number }
+/** expiresAt이 없으면 서버가 아직 만료 시각을 주지 않은 것(다시 조회). failureCode가 있으면 만료가 아니라 주문 실패(state FAILED) */
+export interface Hold { id: string; userId: string; productId: string; lines: Line[]; createdAt?: number; expiresAt?: number; status: 'reserved' | 'pending' | 'consumed' | 'released'; orderId?: string; failureCode?: string }
+export type OrderStatus = 'paid' | 'preparing' | 'shipping' | 'delivered' | 'cancelled' | 'refunded';
+export interface Order {
+  id: string; userId: string; sellerId: string; productId: string; holdId: string; lines: Line[];
+  product: { name: string; brand: string; image: string; category: string; originalUrl: string; price: number };
+  shipping: number; total: number; address: Address; status: OrderStatus; createdAt: number;
+  carrier?: string; tracking?: string; shippedAt?: number; deliveredAt?: number; deliveredPlace?: string;
+  deliveredMemo?: string; processedBy?: string; processedAt?: number;
+}
+export interface Inquiry { id: string; userId: string; sellerId: string; productId: string; orderId?: string; productName: string; kind: string; question: string; answer?: string; public: boolean; createdAt: number;
+  /** 문의한 주문 수량 — 백엔드 요청 필드 (docs/backend-api-requests.md) */ quantity?: number; images?: string[]
+  /** 판매자 상품 문의 답변용 낙관적 잠금 version */ version?: number
+  /** 실제 API 주문 문의: 메시지 전체(seller=true는 판매자)와 첨부 imageId (열람은 download API) */ messages?: { seller: boolean; body: string; createdAt: number }[]; imageIds?: string[] }
+export type AiStatus = 'before' | 'analyzing' | 'recommended' | 'uncertain' | 'failed' | 'unsupported' | 'stale';
+export interface Draft {
+  editingId?: string; step: number; name: string; brand: string; description: string; images: string[];
+  category: string; originalUrl: string; extras: Extra[]; reason: string; dimensions: Dimension[];
+  noOptions: boolean; options: Option[]; price: number; shipping: number; dispatchDays: number;
+  maxPerAccount: number; startsAt: string; faqs: Faq[];
+  /** 택배사·반품 배송비·교환 배송비 입력(숫자는 문자열, 빈 값 = 미입력)과 이 값으로 만든 shippingNotice(판매자가 직접 고칠 수 있다) */ carrier?: string; returnFee?: string; exchangeFee?: string; shippingNotice?: string;
+  ai: { status: AiStatus; signature: string; category: string; reason: string; result?: AiAnalysis; /** 분석 전 단계에서 막힌 칸별 문구(등록 화면 칸 아래 표시) */ fields?: Record<string, string> };
+  /** 단일 화면 등록(Figma 판매 상품 등록): 옵션 축, 색상·사이즈, 조합별 수량, 추가 URL, 타 플랫폼 확인 결과 */
+  /** 실제 API: 서버에 만든 초안 상품 id·서버 이미지 id(images와 같은 순서) */ serverId?: string; imageIds?: string[];
+  /** 사진 바이트 수(images와 같은 순서) — AI 분석 30MB 한도 확인용 */ imageSizes?: number[];
+  /** 실제 API: 판매자 주소록에서 고른 출고지·반품지 id(없으면 서버가 기본 주소를 쓴다) */ dispatchAddressId?: string; returnAddressId?: string;
+  axes?: { size: boolean; color: boolean }; colors?: string[]; sizes?: string[]; stock?: Record<string, number>; extraUrls?: string[]; reference?: ReferenceListing;
+}
+export interface ReferenceListing { platform: string; title: string; price: number; image?: string }
+/** AI 분석 결과(RECOMMENDED). 서버는 outcome·추천 카테고리 코드·점검 질문만 준다 — 신뢰도·대안·속성은 없다 */
+export interface AiAnalysis { /** 점검 기준 코드(예 CLOTHING) */ code: string; /** 기본 선택할 등록 카테고리 이름 */ category: string; photos: number; questions: AiQuestion[] }
+/** AI 점검 질문. checkCode는 registration-metadata 점검 기준 항목 코드 */
+export interface AiQuestion { checkCode?: string; question: string; reason: string }
+/** 사업자 정보 — 사업자등록증 기준. 값이 없으면 화면에서 해당 행을 숨긴다 */
+export interface BusinessInfo { name?: string; representative?: string; registrationNumber?: string; businessType?: string; openedAt?: string; address?: string }
+export interface SellerSettings { business?: BusinessInfo; displayName: string; bank: string; account: string; holder: string; shippingAddress: string; returnAddress: string; shippingPostal?: string; returnPostal?: string; shippingDetail?: string; returnDetail?: string; notifications: Record<string, boolean> }
+export interface State {
+  version: 1; auth?: AuthData; activeUserId: string; mode: 'buyer' | 'seller' | 'admin'; users: User[]; products: Product[];
+  applications: Application[]; holds: Hold[]; orders: Order[]; inquiries: Inquiry[]; drafts: Record<string, Draft>;
+  addresses: Record<string, Address>; sellerSettings: Record<string, SellerSettings>; bookmarks: string[];
+  clockOffset: number; paymentOutcome: 'success' | 'failure' | 'pending'; aiOutcome: 'auto' | 'uncertain' | 'failed' | 'unsupported';
+}
+export class DomainError extends Error { constructor(message: string, public code = 'invalid') { super(message); } }
+export const money = (n: number) => `${n.toLocaleString('ko-KR')}원`;
+export const uid = (prefix = '') => `${prefix}${globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)}`;
+export const localDateTime = (n: number) => { const d = new Date(n); return new Date(n - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 16); };
+export const nowOf = (s: State) => Date.now() + s.clockOffset;
+export const activeUser = (s: State) => s.users.find(u => u.id === s.activeUserId)!;
+/** 구매할 수 없는 계정: 운영자, 또는 이 상품의 판매자 본인. 서버가 403(COMMON_FORBIDDEN)으로 거절할 때도 같은 안내를 쓴다 */
+export function purchaseBlock(s: State, p: Pick<Product, 'sellerId'>): 'admin' | 'own' | null {
+  const u = s.users.find(x => x.id === s.activeUserId);
+  return u?.admin ? 'admin' : p.sellerId && p.sellerId === s.activeUserId ? 'own' : null;
+}
+/** 판매 심사 반려 사유 — 운영자 화면은 항목별로 `[항목] 사유`를 줄마다 보낸다. 물품 확인(검수) 항목은 `[물품 확인 · 상품 상태]`처럼 보낸다.
+ * 서버는 사유 텍스트 하나만 주므로(검수 항목 필드 없음) 이 형식을 풀어 보여 주고, 형식이 아니면 통째로 '심사 의견' 한 항목 */
+export const INSPECTION_PREFIX = '물품 확인 · ';
+export function parseRejection(reason: string | undefined): { field: string; reason: string; inspection: boolean }[] {
+  const text = (reason ?? '').trim(); if (!text) return [];
+  const items = text.split('\n').map(l => /^\[(.+?)\]\s*(.*)$/.exec(l.trim())).filter((m): m is RegExpExecArray => !!m).map(m => ({ field: m[1].replace(INSPECTION_PREFIX, ''), reason: m[2], inspection: m[1].startsWith(INSPECTION_PREFIX) }));
+  return items.length ? items : [{ field: '심사 의견', reason: text, inspection: false }];
+}
+export const PURCHASE_BLOCK_TEXT = { admin: '운영자 계정은 구매할 수 없어요', own: '내가 판매하는 상품이에요' } as const;
+export const defaultAddress: Address = { name: '김서윤', phone: '010-1234-5678', address: '서울시 성동구 연무장길 00', detail: '501호', request: '문 앞에 놓아 주세요.' };
+export function blankDraft(now = Date.now()): Draft {
+  return { step: 1, name: '', brand: '', description: '', images: [], category: '', originalUrl: '', extras: [{ key: '', value: '' }], reason: '', dimensions: [{ name: '색상', values: '' }], noOptions: false, options: [], price: 0, shipping: 3000, dispatchDays: 2, maxPerAccount: 2, startsAt: localDateTime(now + 3_600_000), faqs: [], ai: { status: 'before', signature: '', category: '', reason: '' } };
+}
+export function inputSignature(d: Pick<Draft, 'name' | 'description' | 'images'>) { return JSON.stringify([d.name.trim(), d.description.trim(), d.images]); }
+export function unsupportedInput(name: string, description: string): boolean {
+  const value = `${name} ${description}`.toLowerCase().replace(/화장품\s*(파우치|가방)/g, '파우치');
+  return /건강기능식품|비타민|영양제|식품|간식|음료|화장품|스킨케어|립스틱|전기제품|전기포트|충전기|무선이어폰|중고품|전시품|하자\s*상품/.test(value);
+}
+export function recommendCategory(d: Draft): { status: AiStatus; category: string; reason: string; signature: string } {
+  const signature = inputSignature(d);
+  if (unsupportedInput(d.name, d.description)) return { status: 'unsupported', category: '', reason: '지원하는 상품군의 미판매 새 상품만 등록할 수 있습니다.', signature };
+  const text = `${d.name} ${d.description}`;
+  const matches: [RegExp, string, string][] = [[/노트|공책/, '문구 › 노트', '상품명과 설명의 노트·구성 정보를 참고했어요.'], [/에코백|가방|파우치/, '패션 › 잡화 › 가방', '상품명과 설명의 가방 정보를 참고했어요.'], [/바구니|수납/, '생활잡화 › 수납용품', '수납 용도와 규격 정보를 참고했어요.'], [/가디건/, '패션 › 아우터 › 가디건', '상품명과 설명의 가디건 정보를 참고했어요.'], [/티셔츠|반팔/, '패션 › 상의 › 티셔츠', '상품명과 설명의 상의 정보를 참고했어요.']];
+  const match = matches.find(([re]) => re.test(text));
+  return match ? { status: 'recommended', category: match[1], reason: match[2], signature } : { status: 'uncertain', category: '', reason: '판단하기 어려워요. 상품 설명을 보완하거나 지원 목록에서 직접 선택해 주세요.', signature };
+}
+export function saleState(p: Product, now: number): '판매 예정' | '판매 중' | '판매 종료' | '게시 전' {
+  if (!p.published) return '게시 전';
+  if (now < p.startsAt) return '판매 예정';
+  return now >= p.endsAt ? '판매 종료' : '판매 중';
+}
+export function available(s: State, p: Product, optionId: string, now: number): number {
+  if (p.live) return p.options.find(o => o.id === optionId)?.stock ?? 0;
+  const initial = p.options.find(o => o.id === optionId)?.stock ?? 0;
+  const sold = s.orders.filter(o => o.productId === p.id && !['cancelled', 'refunded'].includes(o.status)).reduce((sum, o) => sum + o.lines.filter(l => l.optionId === optionId).reduce((a, l) => a + l.quantity, 0), 0);
+  const held = s.holds.filter(h => h.productId === p.id && (h.status === 'pending' || h.status === 'reserved' && (h.expiresAt ?? Infinity) > now)).reduce((sum, h) => sum + h.lines.filter(l => l.optionId === optionId).reduce((a, l) => a + l.quantity, 0), 0);
+  return Math.max(0, initial - sold - held);
+}
+/** 상품 전체 최초 수량 */
+export const stockTotal = (p: Product) => p.live?.initial ?? p.options.reduce((n, o) => n + o.stock, 0);
+/** 상품 전체 남은 수량 (서버 목록 응답처럼 옵션 없이 요약만 있으면 요약값) */
+export const stockLeft = (s: State, p: Product, now: number) => p.live && !p.options.length ? p.live.available : p.options.reduce((n, o) => n + available(s, p, o.id, now), 0);
+export function expireHolds(s: State, now: number): boolean {
+  let changed = false;
+  for (const h of s.holds) if (h.status === 'reserved' && h.expiresAt !== undefined && h.expiresAt <= now) { h.status = 'released'; changed = true; }
+  return changed;
+}
+export function reserve(s: State, userId: string, productId: string, quantities: Record<string, number>, now: number): Hold {
+  if (!s.users.some(u => u.id === userId)) throw new DomainError('로그인이 필요합니다.');
+  const p = s.products.find(p => p.id === productId);
+  if (!p || saleState(p, now) !== '판매 중') throw new DomainError('판매 시간에만 구매할 수 있습니다.', 'sale-closed');
+  expireHolds(s, now);
+  const existing = s.holds.find(h => h.userId === userId && h.productId === p.id && (h.status === 'pending' || h.status === 'reserved' && (h.expiresAt ?? Infinity) > now));
+  if (existing) throw new DomainError(`진행 중인 주문이 있습니다.`, `existing:${existing.id}`);
+  const pairs = Object.entries(quantities).filter(([, quantity]) => quantity > 0);
+  if (!pairs.length) throw new DomainError('옵션과 수량을 선택해 주세요.');
+  const lines = pairs.map(([id, quantity]) => { const option = p.options.find(o => o.id === id); if (!option || !Number.isInteger(quantity) || quantity < 1) throw new DomainError('올바른 옵션과 수량을 선택해 주세요.'); return { optionId: id, name: option.name, quantity }; });
+  const count = lines.reduce((n, l) => n + l.quantity, 0);
+  const already = s.orders.filter(o => o.userId === userId && o.productId === p.id && !['cancelled', 'refunded'].includes(o.status)).reduce((n, o) => n + o.lines.reduce((a, l) => a + l.quantity, 0), 0);
+  if (count + already > p.maxPerAccount) throw new DomainError(`계정당 최대 ${p.maxPerAccount}개까지 구매할 수 있습니다.`, 'limit');
+  for (const l of lines) if (available(s, p, l.optionId, now) < l.quantity) throw new DomainError(`${l.name} 재고가 부족합니다. 다른 옵션도 확보되지 않았습니다.`, 'stock');
+  const hold: Hold = { id: uid('hold-'), userId, productId, lines, createdAt: now, expiresAt: now + 300_000, status: 'reserved' };
+  s.holds.push(hold); return hold;
+}
+export function beginPayment(s: State, userId: string, holdId: string, now: number) {
+  const hold = s.holds.find(h => h.id === holdId && h.userId === userId);
+  if (!hold) throw new DomainError('주문을 찾을 수 없습니다.');
+  if (hold.status === 'consumed') return hold;
+  if (hold.status !== 'pending' && (hold.status !== 'reserved' || (hold.expiresAt ?? Infinity) <= now)) { hold.status = 'released'; throw new DomainError('확보 시간이 만료되었습니다.', 'expired'); }
+  hold.status = 'pending'; return hold;
+}
+export function resolvePayment(s: State, userId: string, holdId: string, outcome: 'success' | 'failure' | 'pending', address: Address, now: number): Order | undefined {
+  const hold = s.holds.find(h => h.id === holdId && h.userId === userId);
+  if (!hold) throw new DomainError('주문을 찾을 수 없습니다.');
+  if (hold.orderId) return s.orders.find(o => o.id === hold.orderId);
+  if (hold.status !== 'pending') throw new DomainError('결제 진행 상태를 확인해 주세요.');
+  if (outcome === 'pending') return undefined;
+  if (outcome === 'failure') { hold.status = now < (hold.expiresAt ?? Infinity) ? 'reserved' : 'released'; return undefined; }
+  const p = s.products.find(p => p.id === hold.productId)!;
+  const subtotal = hold.lines.reduce((sum, l) => sum + l.quantity * p.price, 0);
+  const order: Order = { id: uid('SD-'), holdId: hold.id, userId, sellerId: p.sellerId, productId: p.id, lines: structuredClone(hold.lines), product: { name: p.name, brand: p.brand, image: p.images[0], category: p.category, originalUrl: p.originalUrl, price: p.price }, shipping: p.shipping, total: subtotal + p.shipping, address: { ...address }, status: 'paid', createdAt: now };
+  s.orders.unshift(order); hold.status = 'consumed'; hold.orderId = order.id; return order;
+}
+export function approveApplication(s: State, actorId: string, requestId: string, now: number) {
+  if (!s.users.find(u => u.id === actorId)?.admin) throw new DomainError('운영자만 승인할 수 있습니다.', 'forbidden');
+  const app = s.applications.find(a => a.id === requestId);
+  if (!app || app.status !== 'pending') throw new DomainError('이미 승인되었거나 존재하지 않는 신청입니다.');
+  if (!app.document.id) throw new DomainError('사업자등록증을 확인해 주세요.');
+  const user = s.users.find(u => u.id === app.userId)!;
+  app.status = 'approved'; app.approvedAt = now; app.approvedBy = actorId; user.seller = true;
+  s.sellerSettings[user.id] = { displayName: app.displayName || `${user.name}의 스토어`, bank: app.bank, account: app.account, holder: app.name, shippingAddress: app.shippingAddress, returnAddress: app.returnAddress, notifications: { 신규주문: true, 문의: true, 판매일정: true, 마케팅: false } };
+}
+export function markDelivered(s: State, sellerId: string, orderId: string, deliveredAt: number, place: string, memo: string, checked: boolean, now: number) {
+  const o = s.orders.find(o => o.id === orderId && o.sellerId === sellerId);
+  if (!s.users.find(u => u.id === sellerId)?.seller || !o) throw new DomainError('판매자 주문을 찾을 수 없습니다.', 'forbidden');
+  if (o.status !== 'shipping' || !o.tracking) throw new DomainError('운송장이 등록된 배송 중 주문만 처리할 수 있습니다.');
+  if (!checked || !place.trim() || !Number.isFinite(deliveredAt)) throw new DomainError('배송완료 일시·수령 장소·확인 항목을 입력해 주세요.');
+  if (deliveredAt > now || deliveredAt < Math.floor((o.shippedAt ?? o.createdAt) / 60_000) * 60_000) throw new DomainError('출고 이후부터 현재까지의 일시를 선택해 주세요.');
+  o.status = 'delivered'; o.deliveredAt = deliveredAt; o.deliveredPlace = place.trim(); o.deliveredMemo = memo.trim(); o.processedBy = sellerId; o.processedAt = now;
+}
+export function feeFor(s: State, p: Product) {
+  const initial = p.options.reduce((n, o) => n + o.stock, 0);
+  const orders = s.orders.filter(o => o.productId === p.id && !['cancelled', 'refunded'].includes(o.status));
+  const sold = orders.reduce((n, o) => n + o.lines.reduce((a, l) => a + l.quantity, 0), 0);
+  const revenue = orders.reduce((n, o) => n + o.total - o.shipping, 0);
+  const fee = initial > 0 && sold * 10 > initial * 9 ? Math.round(revenue * .1) : 0;
+  return { initial, sold, revenue, rate: initial ? sold / initial : 0, fee, net: revenue - fee };
+}
+export function publishDraft(s: State, userId: string, d: Draft, now: number): Product {
+  if (!s.users.find(u => u.id === userId)?.seller) throw new DomainError('승인된 판매자만 게시할 수 있습니다.', 'forbidden');
+  validateListing(d, now);
+  const existing = d.editingId ? s.products.find(p => p.id === d.editingId && p.sellerId === userId) : undefined;
+  if (d.editingId && (!existing || now >= existing.startsAt)) throw new DomainError('판매 시작 후에는 핵심 상품 정보를 변경할 수 없습니다.');
+  const p: Product = { id: existing?.id ?? uid('product-'), sellerId: userId, name: d.name.trim(), brand: s.sellerSettings[userId]?.displayName || d.brand.trim() || '나의 스토어', category: d.category, description: d.description.trim(), images: [...d.images], originalUrl: d.originalUrl.trim(), price: d.price, shipping: d.shipping, maxPerAccount: d.maxPerAccount, dispatchDays: d.dispatchDays, startsAt: new Date(d.startsAt).getTime(), endsAt: new Date(d.startsAt).getTime() + 10_800_000, published: false, options: structuredClone(d.options), dimensions: structuredClone(d.dimensions), extras: d.extras.filter(e => e.key.trim() && e.value.trim()).map(e => ({ ...e })), reason: d.reason.trim(), faqs: structuredClone(d.faqs), shippingNotice: d.shippingNotice?.trim() || undefined };
+  if (existing) s.products[s.products.indexOf(existing)] = p; else s.products.unshift(p);
+  delete s.drafts[userId]; return p;
+}
+/** 실제 API 모드(mock 꺼짐)의 첫 상태 — 목업 계정·상품·주문 없이 시작한다. 데이터는 서버에서 받아 채운다 */
+export function emptyState(): State {
+  return { version: 1, auth: initialAuth(), activeUserId: '', mode: 'buyer', users: [], products: [], applications: [], holds: [], orders: [], inquiries: [], drafts: {}, addresses: {}, sellerSettings: {}, bookmarks: [], clockOffset: 0, paymentOutcome: 'success', aiOutcome: 'auto' };
+}
+/** demoSales: 화면 목업용 판매 이력(다른 구매자 주문)을 넣는다. 단위 테스트는 기본값(false)으로 빈 이력에서 시작 */
+export function seedState(now = Date.now(), demoSales = false, mockSignedIn = true): State {
+  const nextNine = (() => { const t = new Date(now); t.setHours(21, 0, 0, 0); if (t.getTime() <= now) t.setDate(t.getDate() + 1); return t.getTime(); })();
+  const base = { sellerId: 'seller', shipping: 3000, maxPerAccount: 2, dispatchDays: 2, published: true, reason: '시즌 종료 후 남은 미판매 새 상품', startsAt: now - 2_400_000, endsAt: now + 8_400_000 };
+  const faq = (question: string, answer: string): Faq => ({ id: uid('faq-'), question, answer, confirmed: true });
+  const products: Product[] = [
+    { ...base, id: 'cardigan', name: '소프트 코튼 가디건', brand: 'OUI STUDIO', category: '패션 › 아우터 › 가디건', price: 42000, images: ['./images/generated.png'], description: '부드러운 코튼 소재의 데일리 가디건입니다. 크림·네이비 두 가지 색상으로 준비했어요.', originalUrl: 'https://oui-studio.example/products/cardigan-01', dimensions: [{ name: '색상', values: '크림, 네이비' }, { name: '사이즈', values: 'S, M, L' }], options: [{ id: 'cs', name: '크림 / S', stock: 12 }, { id: 'cm', name: '크림 / M', stock: 14 }, { id: 'nm', name: '네이비 / M', stock: 11 }, { id: 'nl', name: '네이비 / L', stock: 13 }], extras: [{ key: '소재', value: '면 100%' }, { key: '크기·규격', value: 'S 총장52·가슴46cm / M 총장54·가슴48cm' }, { key: '관리·사용 안내', value: '찬물 단독 손세탁 권장' }, { key: '기타 특징', value: '안감 없음 · 크림 약간 비침 · 약간의 신축성' }], faqs: [faq('실측은 단면 기준인가요?', '네, 단면 기준입니다. S 총장 52cm / M 총장 54cm입니다.'), faq('비침이 있나요?', '크림 색상은 약간 비칠 수 있습니다.'), faq('세탁기 사용이 가능한가요?', '찬물 단독 손세탁을 권장합니다.')] },
+    { ...base, id: 'ecobag', endsAt: now + 2_520_000, name: '데일리 코튼 에코백', brand: '아틀리에 노트', category: '패션 › 잡화 › 가방', price: 19000, images: ['./images/generated-4.png'], description: '면 100%의 오픈형 에코백입니다. 내부 포켓 1개가 있습니다.', originalUrl: 'https://atelier-note.example/products/ecobag-01', dimensions: [{ name: '색상', values: '내추럴, 블랙' }], options: [{ id: 'natural', name: '내추럴', stock: 12 }, { id: 'black', name: '블랙', stock: 8 }], extras: [{ key: '소재', value: '면 100%' }, { key: '크기', value: '가로36 × 세로40 · 손잡이26cm' }, { key: '구성품', value: '에코백 1개 · 내부 포켓 1개' }, { key: '관리방법', value: '찬물 단독 손세탁' }], faqs: [faq('지퍼로 입구를 닫을 수 있나요?', '지퍼가 없는 오픈형입니다. 내부 포켓 1개가 있습니다.'), faq('구성품은 무엇인가요?', '에코백 1개이며 내부 포켓 1개가 있습니다.'), faq('어떻게 관리하나요?', '찬물 단독 손세탁을 권장합니다.')] },
+    { ...base, id: 'notebook', startsAt: nextNine, endsAt: nextNine + 10_800_000, name: 'A5 데일리 노트', brand: '아틀리에 노트', category: '문구 › 노트', price: 6000, images: ['./images/generated-5.png'], description: 'A5 규격의 종이 노트입니다. 한 권당 80페이지이며 2권 구성입니다.', originalUrl: 'https://atelier-note.example/products/notebook-01', dimensions: [{ name: '종류', values: '무지, 도트' }, { name: '구성', values: '2권 세트' }], options: [{ id: 'plain', name: '무지 / 2권 세트', stock: 18 }, { id: 'dot', name: '도트 / 2권 세트', stock: 12 }], extras: [{ key: '규격', value: 'A5 · 148 × 210mm' }, { key: '페이지 수', value: '권당 80페이지(40매)' }, { key: '재질', value: '종이 · 내지 80g/㎡' }, { key: '구성 수량', value: '옵션당 노트 2권' }], faqs: [faq('한 권당 몇 페이지인가요?', '한 권당 80페이지(40매)이며, 한 옵션은 노트 2권 세트입니다.'), faq('한 옵션은 몇 권 구성인가요?', '한 옵션은 같은 종류의 노트 2권 세트입니다.'), faq('규격과 재질은 무엇인가요?', 'A5(148×210mm)이며 내지는 종이 80g/㎡입니다.')] },
+    { ...base, id: 'basket', soldOutAt: base.startsAt + 23 * 60_000, participants: 894, name: '모듈 수납 바구니', brand: '아틀리에 노트', category: '생활잡화 › 수납용품', price: 12000, images: ['./images/generated-3.png'], description: 'PP 재질의 수납 바구니입니다. 소형·대형 두 크기이며 각 1개 구성입니다.', originalUrl: 'https://atelier-note.example/products/basket-01', dimensions: [{ name: '크기', values: '소형, 대형' }, { name: '색상', values: '화이트' }], options: [{ id: 'small', name: '소형 / 화이트', stock: 14 }, { id: 'large', name: '대형 / 화이트', stock: 10 }], extras: [{ key: '크기', value: '소형 25×18×12 / 대형 35×25×18cm' }, { key: '재질', value: 'PP' }, { key: '용도', value: '일반 생활용품 수납' }, { key: '구성품', value: '옵션당 바구니 1개' }, { key: '사용 시 주의', value: '화기·고온을 피하세요. 식품용 아님' }], faqs: [faq('표시된 크기는 외부 치수인가요?', '네, 외부 치수입니다. 소형 25×18×12cm, 대형 35×25×18cm입니다.'), faq('무엇으로 만들었나요?', 'PP 재질이며 옵션당 바구니 1개입니다.'), faq('사용 시 주의사항이 있나요?', '화기·고온을 피하고 일반 생활용품 수납에 사용해 주세요. 식품용 제품이 아닙니다.')] }
+  ];
+  const users: User[] = [{ id: 'buyer', name: '김서윤', email: 'buyer@example.com', phone: '010-1234-5678', seller: false, admin: false }, { id: 'seller', name: '김민지', email: 'seller@example.com', phone: '010-9876-5432', seller: true, admin: false }, { id: 'admin', name: '운영자', email: 'admin@example.com', phone: '', seller: false, admin: true }, { id: 'applicant', name: '이수진', email: 'paper@example.com', phone: '010-2222-3333', seller: false, admin: false }];
+  // 화면 목업용 판매 이력: 가디건 50개 중 32개, 에코백 20개 중 17개, 수납 바구니 완판 (판매자 주문 목록에는 보이지 않도록 sellerId 'archive')
+  const demo = (ps: Product[]): Order[] => ([['cardigan', [['cs', 8], ['cm', 9], ['nm', 7], ['nl', 8]]], ['ecobag', [['natural', 9], ['black', 8]]], ['basket', [['small', 14], ['large', 10]]]] as [string, [string, number][]][]).map(([id, lines], i) => { const p = ps.find(p => p.id === id)!; const qty = lines.reduce((n, [, q]) => n + q, 0); return { id: `demo-${id}`, userId: 'crowd', sellerId: 'archive', productId: id, holdId: `demo-hold-${i}`, lines: lines.map(([optionId, quantity]) => ({ optionId, name: p.options.find(o => o.id === optionId)!.name, quantity })), product: { name: p.name, brand: p.brand, image: p.images[0], category: p.category, originalUrl: p.originalUrl, price: p.price }, shipping: 0, total: p.price * qty, address: { ...defaultAddress }, status: 'paid', createdAt: p.startsAt + 60_000 }; });
+  const order = (i: number, p: Product, status: OrderStatus): Order => ({ id: `SD-${new Date(now).getFullYear()}-00${i + 1}`, userId: 'buyer', sellerId: 'seller', productId: `archive-${p.id}`, holdId: `archive-hold-${i}`, lines: [{ optionId: p.options[0].id, name: p.options[0].name, quantity: 1 }], product: { name: p.name, brand: p.brand, image: p.images[0], category: p.category, originalUrl: p.originalUrl, price: p.price }, shipping: 3000, total: p.price + 3000, address: { ...defaultAddress }, status, createdAt: now - 172_800_000, ...(status === 'shipping' || status === 'delivered' ? { carrier: 'CJ대한통운', tracking: '1234-5678-9012', shippedAt: now - 86_400_000 } : {}), ...(status === 'delivered' ? { deliveredAt: now - 3_600_000, deliveredPlace: '문 앞', processedAt: now - 3_500_000, processedBy: 'seller' } : {}) });
+  return { version: 1, auth: mockSignedIn ? { ...initialAuth(), onboarded: true, userId: 'buyer' } : initialAuth(), activeUserId: mockSignedIn ? 'buyer' : '', mode: 'buyer', users, products, applications: [{ id: 'SD-P-002', userId: 'applicant', displayName: '종이상점', name: '이수진', email: 'paper@example.com', phone: '010-2222-3333', document: { id: 'sample', name: '사업자등록증_종이상점.pdf', size: 1024, uploadedAt: now - 3_600_000 }, bank: '신한은행', account: '000-1234-5678', shippingAddress: '서울시 성동구 성수이로 00', returnAddress: '서울시 성동구 성수이로 00', status: 'pending', submittedAt: now - 3_600_000, business: { name: '나의 상점', representative: '김서윤', registrationNumber: '214-86-12345', businessType: '소매업 · 의류', openedAt: '2023년 04월 12일', address: '서울 성동구 성수이로 118' } }], holds: [], orders: [order(0, products[0], 'preparing'), order(1, products[1], 'shipping'), order(2, products[3], 'delivered'), ...(demoSales ? demo(products) : [])], inquiries: [{ id: 'q-figma', userId: 'buyer', sellerId: 'seller', productId: 'archive-cardigan', orderId: `SD-${new Date(now).getFullYear()}-001`, productName: 'LOWFIELD · 소프트 코튼 가디건', quantity: 1, kind: '하자·파손', question: '오른쪽 소매 쪽에 올이 풀린 부분이 있어요.\n교환이나 반품이 가능할까요?', answer: "불편을 드려 죄송합니다.\n보내주신 사진으로 하자가 확인되어 무료 반품을\n도와드릴게요. 아래 '반품 신청하기'를 눌러주시면\n택배 기사님이 2영업일 안에 방문 수거해요.", public: false, createdAt: now - 86_400_000 }, { id: 'q-seed', userId: 'buyer', sellerId: 'seller', productId: 'ecobag', productName: '데일리 코튼 에코백', kind: '상품 문의', question: '손잡이 길이를 포함한 높이도 알 수 있나요?', public: false, createdAt: now - 300_000 }], drafts: {}, addresses: { buyer: { ...defaultAddress }, seller: { ...defaultAddress, name: '김민지' } }, sellerSettings: { seller: { business: { name: '로엠필드 (LOMFIELD)', representative: '김서윤', registrationNumber: '214-87-*****' }, displayName: '아틀리에 노트', bank: '신한은행', account: '000-1234-5678', holder: '김민지', shippingAddress: '서울시 성동구 성수이로 00', returnAddress: '서울시 광진구 아차산로 00', notifications: { 신규주문: true, 문의: true, 판매일정: true, 마케팅: false } } }, bookmarks: [], clockOffset: 0, paymentOutcome: 'success', aiOutcome: 'auto' };
+}
+
+/* ── 단일 화면 상품 등록 (Figma 판매 상품 등록 / 판매 정보 수정) ───────────────────────── */
+export const optionKey = (color: string, size: string) => `${color}|${size}`;
+/** 옵션 축·색상·사이즈·수량에서 판매 옵션(이름·재고)을 만든다. 같은 이름의 옵션은 id를 유지한다. */
+export function listingOptions(d: Draft): Option[] {
+  const axes = d.axes ?? { size: false, color: false }, colors = d.colors ?? [], sizes = d.sizes ?? [], stock = d.stock ?? {};
+  const pairs: [string, string, string][] = axes.color && axes.size ? colors.flatMap(c => sizes.map(s => [`${c} / ${s}`, c, s] as [string, string, string]))
+    : axes.color ? colors.map(c => [c, c, ''] as [string, string, string])
+    : axes.size ? sizes.map(s => [s, '', s] as [string, string, string])
+    : [['기본', '', '']];
+  return pairs.map(([name, c, s]) => ({ id: d.options.find(o => o.name === name)?.id ?? `opt-${name}`, name, stock: stock[optionKey(c, s)] ?? 0 }));
+}
+export function listingDimensions(d: Draft): Dimension[] {
+  const axes = d.axes ?? { size: false, color: false };
+  return [...(axes.color ? [{ name: '색상', values: (d.colors ?? []).join(', ') }] : []), ...(axes.size ? [{ name: '사이즈', values: (d.sizes ?? []).join(', ') }] : [])];
+}
+export function validateListing(d: Draft, now: number) {
+  if (unsupportedInput(d.name, d.description) || d.ai.status === 'unsupported') throw new DomainError('지원하지 않는 상품은 등록할 수 없습니다.');
+  if (!d.images.length || !d.name.trim()) throw new DomainError('상품 사진과 상품명을 입력해 주세요.');
+  if (!CATEGORY_PATHS.includes(d.category)) throw new DomainError('카테고리를 선택해 주세요.');
+  try { const url = new URL(/^https?:\/\//.test(d.originalUrl) ? d.originalUrl : `https://${d.originalUrl}`); if (!['https:', 'http:'].includes(url.protocol) || !url.hostname.includes('.')) throw new Error(); } catch { throw new DomainError('타 플랫폼 판매 URL을 올바르게 입력해 주세요.'); }
+  if (!Number.isInteger(d.price) || d.price <= 0) throw new DomainError('한정 판매가를 입력해 주세요.');
+  if (d.reference && d.price >= d.reference.price) throw new DomainError('등록한 URL의 판매가보다 낮아야 심사를 요청할 수 있어요');
+  if (!d.options.length || d.options.some(o => !Number.isInteger(o.stock) || o.stock < 0) || !d.options.some(o => o.stock > 0)) throw new DomainError('옵션별 한정 수량을 입력해 주세요.');
+  const start = new Date(d.startsAt).getTime();
+  if (!Number.isFinite(start) || start <= now) throw new DomainError('판매 일정은 현재 이후로 설정해 주세요.');
+  if (start > now + 7 * 86_400_000) throw new DomainError('판매 시작은 현재부터 최대 7일 이내로 설정해 주세요.');
+  if (!Number.isInteger(d.dispatchDays) || d.dispatchDays < 1) throw new DomainError('출고 기한을 선택해 주세요.');
+}
+/** 타 플랫폼 URL 확인 — API 연동 전 목업 (Figma 예시 값) */
+const REFERENCE_MOCK: Record<string, ReferenceListing> = { 'coupang.com/vp/products/7348215906': { platform: '쿠팡', title: '울 블렌드 오버핏 라운드 니트 차콜', price: 89000, image: './images/seller-register-3.jpg' } };
+export function lookupReference(url: string): ReferenceListing | undefined {
+  const key = url.trim().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/$/, '');
+  return REFERENCE_MOCK[key];
+}
+/** AI 상품 분석 목업 — 서버 결과와 같은 모양(코드 + 점검 질문) */
+export function mockAiAnalysis(d: Draft): AiAnalysis {
+  return { code: 'CLOTHING_MOCK_01', category: '패션 › 상의 › 니트/스웨터', photos: d.images.length, questions: [{ checkCode: 'CLOTHING_MOCK_01__CLOTHING_MEASUREMENTS', question: '실측 사이즈(총장·가슴 단면)를 알려 주세요', reason: '사진만으로는 사이즈를 확인할 수 없어요' }] };
+}

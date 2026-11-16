@@ -1,0 +1,60 @@
+import { describe, expect, it } from 'vitest';
+import { categoryGroup, listingOptions, validateListing, approveApplication, available, beginPayment, blankDraft, defaultAddress, expireHolds, feeFor, localDateTime, markDelivered, publishDraft, recommendCategory, reserve, resolvePayment, saleState, seedState, purchaseBlock, parseRejection } from './domain';
+import type { Draft } from './domain';
+const NOW = new Date('2026-10-23T14:00:00+09:00').getTime();
+function draft(): Draft { return { ...blankDraft(NOW), images: ['/images/generated-5.png'], name: 'A5 공책', description: '한 권당 80페이지 노트입니다.', category: '문구 › 노트', originalUrl: 'https://shop.example/notebook', reason: '과잉 발주', noOptions: true, options: [{ id: 'base', name: '기본', stock: 10 }], price: 6000, shipping: 3000, faqs: [] }; }
+describe('선착순 재고 확보', () => {
+  it('선택 옵션 전체를 확인하며 하나라도 부족하면 아무 재고도 확보하지 않는다', () => { const s = seedState(NOW); expect(() => reserve(s, 'buyer', 'ecobag', { natural: 1, black: 100 }, NOW)).toThrow(); expect(s.holds).toHaveLength(0); expect(available(s, s.products[1], 'natural', NOW)).toBe(12); });
+  it('판매 시작 전과 종료 후에는 확보하지 않는다', () => { const s = seedState(NOW); expect(() => reserve(s, 'buyer', 'notebook', { plain: 1 }, NOW)).toThrow('판매 시간'); expect(() => reserve(s, 'buyer', 'ecobag', { natural: 1 }, s.products[1].endsAt)).toThrow(); });
+  it('한 상품 안의 존재하는 옵션만 허용한다', () => { const s = seedState(NOW); expect(() => reserve(s, 'buyer', 'ecobag', { natural: 1, small: 1 }, NOW)).toThrow(); expect(s.holds).toHaveLength(0); });
+  it('계정당 상한을 과거 확정 주문까지 합산한다', () => { const s = seedState(NOW); const hold = reserve(s, 'buyer', 'ecobag', { natural: 1 }, NOW); beginPayment(s, 'buyer', hold.id, NOW); resolvePayment(s, 'buyer', hold.id, 'success', defaultAddress, NOW); expect(() => reserve(s, 'buyer', 'ecobag', { black: 2 }, NOW)).toThrow('최대 2개'); });
+  it('같은 계정·상품은 확보 1건이며 재시도로 만료 시각이 바뀌지 않는다', () => { const s = seedState(NOW); const h = reserve(s, 'buyer', 'ecobag', { natural: 2 }, NOW); expect(() => reserve(s, 'buyer', 'ecobag', { black: 1 }, NOW + 1000)).toThrow('진행 중'); expect(h.expiresAt).toBe(NOW + 300_000); expect(s.holds).toHaveLength(1); });
+  it('새로고침을 거친 데이터의 만료 시각을 그대로 유지한다', () => { const s = seedState(NOW); const h = reserve(s, 'buyer', 'ecobag', { natural: 2 }, NOW); const restored = JSON.parse(JSON.stringify(s)); expect(restored.holds[0].expiresAt).toBe(h.expiresAt); expect(available(restored, restored.products[1], 'natural', NOW + 1000)).toBe(10); });
+  it('5분 만료 후 재고가 반환되며 종료된 판매는 재오픈하지 않는다', () => { const s = seedState(NOW); reserve(s, 'buyer', 'ecobag', { natural: 2 }, NOW); expireHolds(s, NOW + 300_001); expect(available(s, s.products[1], 'natural', NOW + 300_001)).toBe(12); expect(saleState(s.products[1], s.products[1].endsAt + 1)).toBe('판매 종료'); });
+});
+describe('결제 확정과 결과 확인', () => {
+  it('결제 확인 중에는 만료되어도 재고를 먼저 반환하지 않는다', () => { const s = seedState(NOW); const h = reserve(s, 'buyer', 'ecobag', { natural: 2 }, NOW); beginPayment(s, 'buyer', h.id, NOW + 1); expireHolds(s, NOW + 900_000); expect(h.status).toBe('pending'); expect(available(s, s.products[1], 'natural', NOW + 900_000)).toBe(10); const order = resolvePayment(s, 'buyer', h.id, 'success', defaultAddress, NOW + 900_000); expect(order?.total).toBe(41000); expect(s.orders.filter(o => o.holdId === h.id)).toHaveLength(1); });
+  it('동일 결제를 다시 확인해도 주문은 한 번만 생성한다', () => { const s = seedState(NOW); const h = reserve(s, 'buyer', 'ecobag', { natural: 1, black: 1 }, NOW); beginPayment(s, 'buyer', h.id, NOW); const first = resolvePayment(s, 'buyer', h.id, 'success', defaultAddress, NOW); const second = resolvePayment(s, 'buyer', h.id, 'success', defaultAddress, NOW + 1); expect(first?.id).toBe(second?.id); expect(s.orders.filter(o => o.holdId === h.id)).toHaveLength(1); });
+  it('실패 후 재시도에도 확보 만료를 연장하지 않는다', () => { const s = seedState(NOW); const h = reserve(s, 'buyer', 'ecobag', { natural: 1 }, NOW); beginPayment(s, 'buyer', h.id, NOW + 1000); resolvePayment(s, 'buyer', h.id, 'failure', defaultAddress, NOW + 2000); expect(h.status).toBe('reserved'); expect(h.expiresAt).toBe(NOW + 300_000); expect(() => beginPayment(s, 'buyer', h.id, NOW + 300_000)).toThrow('만료'); });
+  it('다른 계정의 확보로는 결제할 수 없다', () => { const s = seedState(NOW); const h = reserve(s, 'buyer', 'ecobag', { natural: 1 }, NOW); expect(() => beginPayment(s, 'seller', h.id, NOW)).toThrow('찾을 수'); });
+  it.each(['cardigan', 'ecobag', 'notebook', 'basket'])('%s의 옵션명·가격·배송비를 주문 스냅샷에 보존한다', id => { const s = seedState(NOW), p = s.products.find(p => p.id === id)!; const time = Math.max(NOW, p.startsAt + 1); const h = reserve(s, 'buyer', id, { [p.options[0].id]: 1, [p.options[1].id]: 1 }, time); beginPayment(s, 'buyer', h.id, time); const o = resolvePayment(s, 'buyer', h.id, 'success', defaultAddress, time)!; expect(o.lines.map(l => l.name)).toEqual(p.options.slice(0, 2).map(o => o.name)); expect(o.total).toBe(p.price * 2 + p.shipping); expect(o.product.originalUrl).toBe(p.originalUrl); });
+});
+describe('판매자 신청과 승인', () => {
+  it('운영자 승인으로 판매자 권한만 추가하고 구매 내역을 보존한다', () => { const s = seedState(NOW); s.applications[0].userId = 'buyer'; const count = s.orders.length; approveApplication(s, 'admin', s.applications[0].id, NOW); expect(s.users.find(u => u.id === 'buyer')?.seller).toBe(true); expect(s.users.find(u => u.id === 'buyer')?.admin).toBe(false); expect(s.orders).toHaveLength(count); expect(s.applications[0].status).toBe('approved'); });
+  it('비운영자와 중복 승인을 차단한다', () => { const s = seedState(NOW), id = s.applications[0].id; expect(() => approveApplication(s, 'seller', id, NOW)).toThrow('운영자'); approveApplication(s, 'admin', id, NOW); expect(() => approveApplication(s, 'admin', id, NOW)).toThrow('이미 승인'); });
+});
+describe('판매자 배송완료', () => {
+  it('운송장이 등록된 배송 중 주문만 수동 완료할 수 있다', () => { const s = seedState(NOW); expect(() => markDelivered(s, 'seller', s.orders[0].id, NOW - 1000, '문 앞', '', true, NOW)).toThrow('배송 중'); const o = s.orders[1]; markDelivered(s, 'seller', o.id, NOW - 1000, '문 앞', '요청 장소에 전달', true, NOW); expect(o.status).toBe('delivered'); expect(o.processedBy).toBe('seller'); expect(o.processedAt).toBe(NOW); expect(o.deliveredPlace).toBe('문 앞'); expect(() => markDelivered(s, 'seller', o.id, NOW, '문 앞', '', true, NOW)).toThrow(); });
+  it('다른 판매자·미확인·미래 일시를 차단한다', () => { const s = seedState(NOW), o = s.orders[1]; expect(() => markDelivered(s, 'buyer', o.id, NOW, '문 앞', '', true, NOW)).toThrow(); expect(() => markDelivered(s, 'seller', o.id, NOW, '문 앞', '', false, NOW)).toThrow('확인'); expect(() => markDelivered(s, 'seller', o.id, NOW + 1000, '문 앞', '', true, NOW)).toThrow('현재'); });
+});
+describe('성공 수수료', () => {
+  it('정확히 90%는 0원, 90% 초과는 전체 상품금액의 10%이다', () => { const s = seedState(NOW), p = s.products[1]; p.options = [{ id: 'n', name: '기본', stock: 10 }]; const template = s.orders[0]; s.orders.push({ ...structuredClone(template), id: 'fee', productId: p.id, lines: [{ optionId: 'n', name: '기본', quantity: 9 }], total: 174000, shipping: 3000, status: 'delivered' }); expect(feeFor(s, p).fee).toBe(0); const o = s.orders.at(-1)!; o.lines[0].quantity = 10; o.total = 193000; expect(feeFor(s, p).fee).toBe(19000); o.status = 'refunded'; expect(feeFor(s, p).sold).toBe(0); expect(feeFor(s, p).fee).toBe(0); });
+});
+describe('공통 상품 등록', () => {
+  it('의류 전용 항목 없이도 동일 구조로 문구를 등록한다', () => { const s = seedState(NOW), d = draft(); expect(() => validateListing(d, NOW)).not.toThrow(); const p = publishDraft(s, 'seller', d, NOW); expect(p.category).toBe('문구 › 노트'); expect(categoryGroup(p.category)).toBe('문구'); expect(p.endsAt - p.startsAt).toBe(10_800_000); expect(saleState(p, NOW)).toBe('게시 전'); expect(p.brand).toBe('아틀리에 노트'); });
+  it('승인 전 판매·미지원 카테고리·기존 URL 누락을 차단한다', () => { const s = seedState(NOW), d = draft(); expect(() => publishDraft(s, 'buyer', d, NOW)).toThrow('승인된'); d.originalUrl = ''; expect(() => validateListing(d, NOW)).toThrow('URL'); d.originalUrl = 'javascript:alert(1)'; expect(() => validateListing(d, NOW)).toThrow('URL'); d.originalUrl = 'https://shop.example/item'; d.category = '의류 / 상의 / 가디건'; expect(() => validateListing(d, NOW)).toThrow('카테고리'); });
+  it('지원하지 않는 상품은 직접 선택으로도 우회 등록하지 못한다', () => { const d = draft(); d.name = '비타민 건강기능식품'; d.category = '생활잡화 › 생활소품'; expect(() => validateListing(d, NOW)).toThrow('지원하지'); expect(recommendCategory(d).status).toBe('unsupported'); });
+  it('판매 시작 후 가격·옵션 등 핵심 정보 수정은 차단한다', () => { const s = seedState(NOW), d = draft(); d.editingId = 'ecobag'; expect(() => publishDraft(s, 'seller', d, NOW)).toThrow('판매 시작 후'); });
+  it('판매 시작은 현재부터 최대 7일 이내로만 예약한다', () => { const d = draft(); d.startsAt = localDateTime(NOW + 7 * 86_400_000 + 60_000); expect(() => validateListing(d, NOW)).toThrow('최대 7일'); d.startsAt = localDateTime(NOW + 7 * 86_400_000); expect(() => validateListing(d, NOW)).not.toThrow(); });
+});
+
+describe('단일 화면 상품 등록', () => {
+  const base = (): Draft => ({ ...draft(), noOptions: false, axes: { size: true, color: true }, colors: ['차콜', '오트밀'], sizes: ['S', 'M'], stock: { '차콜|S': 5, '차콜|M': 0, '오트밀|S': 2, '오트밀|M': 3 }, options: [], originalUrl: 'coupang.com/vp/products/7348215906', reference: { platform: '쿠팡', title: '니트', price: 89000 }, price: 49000 });
+  it('색상 × 사이즈 조합으로 옵션과 수량을 만든다', () => { const d = base(); const options = listingOptions(d); expect(options.map(o => o.name)).toEqual(['차콜 / S', '차콜 / M', '오트밀 / S', '오트밀 / M']); expect(options.reduce((n, o) => n + o.stock, 0)).toBe(10); d.axes = { size: false, color: false }; d.stock = { '|': 7 }; expect(listingOptions(d)).toEqual([{ id: 'opt-기본', name: '기본', stock: 7 }]); });
+  it('타 플랫폼 판매가보다 낮아야 하고 수량이 있어야 심사를 요청할 수 있다', () => { const d = base(); d.options = listingOptions(d); expect(() => validateListing(d, NOW)).not.toThrow(); d.price = 89000; expect(() => validateListing(d, NOW)).toThrow('낮아야'); d.price = 49000; d.stock = {}; d.options = listingOptions(d); expect(() => validateListing(d, NOW)).toThrow('수량'); });
+});
+describe('구매 제한', () => {
+  it('운영자와 판매자 본인 상품은 구매할 수 없고, 다른 판매자 상품은 구매할 수 있다', () => {
+    const s = seedState(NOW);
+    s.activeUserId = 'admin'; expect(purchaseBlock(s, { sellerId: 'seller' })).toBe('admin');
+    s.activeUserId = 'seller'; expect(purchaseBlock(s, { sellerId: 'seller' })).toBe('own'); expect(purchaseBlock(s, { sellerId: 'other' })).toBeNull();
+    s.activeUserId = 'buyer'; expect(purchaseBlock(s, { sellerId: 'seller' })).toBeNull(); expect(purchaseBlock(s, { sellerId: '' })).toBeNull();
+  });
+});
+describe('판매 심사 반려 사유', () => {
+  it('항목별 사유와 물품 확인(검수) 항목을 나누고, 형식이 아니면 통째로 한 항목', () => {
+    expect(parseRejection('[한정 판매가] 더 낮춰 주세요\n[물품 확인 · 구성품] 설명서가 빠졌어요')).toEqual([{ field: '한정 판매가', reason: '더 낮춰 주세요', inspection: false }, { field: '구성품', reason: '설명서가 빠졌어요', inspection: true }]);
+    expect(parseRejection('사진이 흐려요')).toEqual([{ field: '심사 의견', reason: '사진이 흐려요', inspection: false }]);
+    expect(parseRejection(undefined)).toEqual([]);
+  });
+});
