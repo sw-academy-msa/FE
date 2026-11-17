@@ -8,6 +8,7 @@ import { atomic, getState, mutate, useStore } from '../store';
 import { externalHref, imageData } from '../files';
 import { countdown, dateTime, shortDate, useClock } from '../hooks';
 import { loginHref, signedIn } from '../auth';
+import { trackViewItem } from '../analytics';
 import { addressLine, listAddresses, toAddress } from './address';
 import { ExpiredCheckout } from './checkoutExpired';
 import { changeShippingAddress, confirmPayment, createOrder, createOrderInquiry, retryWhileUnavailable, errorMessage, getCheckout, getCheckoutTerms, getOrder, getProduct, isApiError, fetchUnreadCount, listNotifications, listOrders, markAllNotificationsRead, markNotificationRead, notificationPath, useApi, listProducts, mergeCheckout, mergeInquiries, mergeOrderList, mergeOrders, mergeProducts, openTossPayment, uploadInquiryImage, deleteInquiryImage, useLive } from '../api';
@@ -15,7 +16,7 @@ import type { CheckoutTermsDto, InboxItem } from '../api';
 import { USE_MOCK } from '../config';
 import type { SavedAddress } from './address';
 
-/** 구매자 홈 / 판매자 홈 — Figma "구매자 홈", "판매자 홈"(판매 등록 버튼) */
+/** 홈 — 구매자 홈. 판매자 권한이 있으면 Figma "판매자 홈"처럼 판매 등록 버튼이 함께 보인다 */
 export function HomePage() {
   const s = useStore(), now = useClock(); const [params, setParams] = useSearchParams(); const [notified, toggleNotify] = useNotified();
   // shortcut: 공개 상품을 한 번에 100개까지만 받아 기존처럼 화면에서 거른다. 상품이 많아지면 keyword·status·page를 서버 쿼리로 넘긴다
@@ -41,7 +42,7 @@ export function HomePage() {
     <div className="flex items-end justify-between pt-6"><div><h2 className="text-[18px] font-bold">{query ? `검색 결과 ${products.length}개` : '새로 올라온 상품'}</h2><p className="mt-1 text-[12px] text-[var(--meta)]">의류 · 패션잡화 · 문구 · 생활잡화</p></div>{showHero && <button className="text-[12px] text-[var(--aux)]" onClick={() => setParam('state', '판매 예정')}>더보기</button>}</div>
     {products.length ? <div className="grid grid-cols-2 gap-x-3 gap-y-6">{products.map(p => <ProductCard key={p.id} product={p} now={now} availableCount={left(p)} notified={notified.includes(p.id)} onNotify={() => toggleNotify(p.id)}/>)}</div> : live.loading || live.error ? <LiveStatus state={live}/> : <Empty title="검색 결과가 없어요" message="검색어나 카테고리를 바꿔 보세요."><Button outline onClick={() => setParams({})}>필터 초기화</Button></Empty>}
     <p className="py-4 text-[11px] text-[var(--meta)]">미판매 새 상품만 판매합니다. 중고·전시·하자 상품은 제외돼요.</p>
-    {seller && <Link to="/seller/new" className="fixed bottom-[88px] right-[max(16px,calc(50%-179px))] z-30 flex h-12 items-center gap-2 rounded-full bg-[var(--ink)] pl-3 pr-5 text-[15px] font-bold text-white shadow-lg"><span className="grid h-6 w-6 place-items-center rounded-full bg-[var(--positive)]"><Plus size={16} strokeWidth={2.5}/></span>판매 등록</Link>}
+    {seller && <Link to="/seller/new" className="fixed bottom-[calc(88px+env(safe-area-inset-bottom,0px))] right-[max(16px,calc(50%-179px))] z-30 flex h-12 items-center gap-2 rounded-full bg-[var(--ink)] pl-3 pr-5 text-[15px] font-bold text-white shadow-lg"><span className="grid h-6 w-6 place-items-center rounded-full bg-[var(--positive)]"><Plus size={16} strokeWidth={2.5}/></span>판매 등록</Link>}
   </div>;
 }
 
@@ -91,7 +92,8 @@ export function SchedulePage() {
 
 export function ProductPage() {
   const { id } = useParams(); const s = useStore(), now = useClock(), toast = useToast(); const p = s.products.find(p => p.id === id);
-  const live = useLive(signal => getProduct(id ?? '', signal), (state, d) => mergeProducts(state, [d]), [id]); const navigate = useNavigate(); const loc = useLocation(); const [rebuy] = useState<RebuyFailure | undefined>(() => (loc.state as { rebuy?: RebuyFailure } | null)?.rebuy); const [optionsOpen, setOptionsOpen] = useState(!!rebuy); const [extPopup, setExtPopup] = useState(false); const [selectedFaq, setSelectedFaq] = useState<string | null>(null);
+  const viewed = useRef(''); // 상세 응답을 받은 뒤 상품당 1회 (사진 주소 만료로 다시 받아도 중복 전송 없음)
+  const live = useLive(async signal => { const d = await getProduct(id ?? '', signal); if (viewed.current !== d.id) { viewed.current = d.id; trackViewItem(d); } return d; }, (state, d) => mergeProducts(state, [d]), [id]); const navigate = useNavigate(); const loc = useLocation(); const [rebuy] = useState<RebuyFailure | undefined>(() => (loc.state as { rebuy?: RebuyFailure } | null)?.rebuy); const [optionsOpen, setOptionsOpen] = useState(!!rebuy); const [extPopup, setExtPopup] = useState(false); const [selectedFaq, setSelectedFaq] = useState<string | null>(null);
   useEffect(() => { if (rebuy) navigate(loc.pathname, { replace: true, state: null }); }, []);
   const [resume] = useState<Record<string, number> | undefined>(() => { try { const v = JSON.parse(sessionStorage.getItem(PENDING_BUY) || 'null'); sessionStorage.removeItem(PENDING_BUY); return v?.productId === id ? v.quantities : undefined; } catch { return undefined; } });
   useEffect(() => { if (resume) setOptionsOpen(true); }, []);
