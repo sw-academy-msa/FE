@@ -84,7 +84,7 @@ export async function decideProductReview(id: string, expectedVersion: number, a
   return sellerProductFromApi(await api.post<SellerProductDto>(`${REVIEWS}/${enc(id)}/decisions`, { expectedVersion, approved, reason: approved ? undefined : reason!.trim() }, { service: purchase }));
 }
 
-/* ── 상품 수정 심사 (TODO(api-gap): 화면 없음 — 승인 상품 수정 심사 목록·상세 화면이 없어 함수만 둔다) ── */
+/* ── 상품 수정 심사 (화면: pages/revisions.tsx, 판매 심사 목록의 「수정」 탭). 수정 심사에는 사진이 없어 사진 조회 API도 없다 ── */
 /** GET …/revisions — data 자체가 배열(페이징 메타 없음) */
 export const listAdminRevisions = (status: 'IN_REVIEW' | 'APPROVED' | 'REJECTED' = 'IN_REVIEW', signal?: AbortSignal) =>
   api.get<ProductRevisionDto[]>(`${REVIEWS}/revisions`, { service: purchase, signal, query: { status } });
@@ -93,6 +93,3 @@ export const getAdminRevision = (productId: string, revisionId: string, signal?:
 /** expectedVersion=수정 심사 회차(revision) version, 상품 version이 아니다 */
 export const decideRevision = (productId: string, revisionId: string, expectedVersion: number, approved: boolean, reason?: string) =>
   api.post<ProductRevisionDto>(`${REVIEWS}/${enc(productId)}/revisions/${enc(revisionId)}/decisions`, { expectedVersion, approved, reason: approved ? undefined : reason?.trim() }, { service: purchase });
-export async function getAdminRevisionImageUrl(productId: string, revisionId: string, imageId: string, signal?: AbortSignal): Promise<string> {
-  return (await api.get<{ downloadUrl: string }>(`${REVIEWS}/${enc(productId)}/revisions/${enc(revisionId)}/images/${enc(imageId)}/download-url`, { service: purchase, signal })).downloadUrl;
-}

@@ -36,15 +36,6 @@ export function ProductImage({ src, alt, className = '' }: { src: string; alt: s
   return <img src={typeof src === 'string' && src.startsWith('/images/') ? `.${src}` : src || './images/generated.png'} alt={alt} onError={onError} className={`block rounded-[4px] bg-[var(--blue-soft)] object-cover ${className}`} loading="lazy"/>;
 }
 export function ProductSummary({ product, option, amount }: { product: { name: string; brand: string; image: string }; option?: ReactNode; amount?: number }) { return <div className="divider flex items-center gap-3 pb-4"><ProductImage src={product.image} alt={product.name} className="h-[86px] w-[76px] shrink-0"/><div className="min-w-0 flex-1 space-y-1.5"><p className="muted text-[10px]">{product.brand}</p><p className="text-[14px] font-semibold">{product.name}</p>{option && <div className="muted whitespace-pre-line text-[11px] leading-relaxed">{option}</div>}{amount !== undefined && <p className="font-number text-[14px] font-bold">{money(amount)}</p>}</div></div>; }
-/** 판매 시작 알림 신청 목록 — 로컬 저장(mock 유지).
- * TODO(api-gap): 상품별 판매 시작 알림 신청 API가 명세에 없다. 계정 단위 설정(PUT /v1/accounts/me/notification-settings saleStart)만 있음 */
-const NOTIFY_KEY = 'stockdrop:notified-products';
-export function readNotified(): string[] { try { const v = JSON.parse(localStorage.getItem(NOTIFY_KEY) || 'null'); return Array.isArray(v) ? v : ['basket']; } catch { return []; } }
-export function useNotified() {
-  const [ids, setIds] = useState<string[]>(readNotified);
-  const toggle = (id: string) => setIds(prev => { const next = prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]; try { localStorage.setItem(NOTIFY_KEY, JSON.stringify(next)); } catch { /* 저장 차단 시 화면 상태만 유지 */ } return next; });
-  return [ids, toggle] as const;
-}
 const pad = (n: number) => String(n).padStart(2, '0');
 export const clockLeft = (ms: number) => { const s = Math.max(0, Math.floor(ms / 1000)); return `${pad(Math.floor(s / 3600))}:${pad(Math.floor(s % 3600 / 60))}:${pad(s % 60)}`; };
 export const openLabel = (t: number, now: number) => { const d = new Date(t), n = new Date(now); const same = d.toDateString() === n.toDateString(); return `${same ? '오늘' : `${d.getMonth() + 1}월 ${d.getDate()}일`} ${pad(d.getHours())}:${pad(d.getMinutes())} 오픈`; };
@@ -68,6 +59,8 @@ export function ProductCard({ product: p, now, availableCount, notified, onNotif
     <p className={`mt-0.5 text-[16px] font-bold ${soldOut ? 'text-[var(--meta)]' : ''}`}>{money(p.price)}</p>
     {status === '판매 중' && !soldOut && <><div className="mt-2 h-1 w-full rounded-full bg-[var(--line)]"><div className={`h-1 rounded-full ${urgent ? 'bg-[var(--urgent)]' : 'bg-[var(--ink)]'}`} style={{ width: `${pct}%` }}/></div><p className={`mt-1.5 text-[12px] ${urgent ? 'font-bold text-[var(--urgent)]' : 'text-[var(--aux)]'}`}>{urgent ? `서두르세요! ${left}개 남음` : `${total}개 중 ${left}개 남음`}</p></>}
     {status === '판매 예정' && <><p className="mt-2 text-[12px] text-[var(--aux)]">{total}개 한정 · 1인 {p.maxPerAccount}개</p>{onNotify && <button type="button" onClick={e => { e.preventDefault(); onNotify(); }} className={`mt-2 flex h-8 w-full items-center justify-center gap-1 rounded-[4px] text-[12px] font-bold ${notified ? 'bg-[var(--ink)] text-white' : 'border border-[var(--border)]'}`}><Bell size={13}/>{notified ? '알림 설정됨' : '오픈 알림 받기'}</button>}</>}
+    {/* 판매 중에도 신청한 상품은 가격 인하·수량 임박 알림을 받으므로 끌 수 있게 둔다 */}
+    {status === '판매 중' && notified && onNotify && <button type="button" onClick={e => { e.preventDefault(); onNotify(); }} className="mt-2 flex h-8 w-full items-center justify-center gap-1 rounded-[4px] border border-[var(--border)] text-[12px] font-bold"><Bell size={13}/>상품 알림 끄기</button>}
     {soldOut && <p className="mt-2 text-[12px] text-[var(--aux)]">{soldOutLabel(p)}</p>}
     {status === '판매 종료' && !soldOut && <p className="mt-2 text-[12px] text-[var(--aux)]">판매 종료</p>}
   </Link>;

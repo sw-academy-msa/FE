@@ -16,7 +16,7 @@ import { COLOR_AXIS, optionPresetFor } from '../optionPresets';
 import { IMAGE_EXPIRED, QUICK_SCHEDULE, USE_MOCK } from '../config';
 import { AiDelayedError } from '../api/sellerProducts';
 import { parseServerTime } from '../api';
-import { getProductImageUrl, FIELD_LABELS, StageError, sourceUrlProblem, MOCK_REGISTRATION_METADATA, PRODUCT_STATE_MESSAGE, SHIPPING_NOTICE_MAX, ATTRIBUTE_VALUE_MAX, attributeName, composeShippingNotice, warnCriteria, analysisProblems, analyzeDraft, criteriaFor, listAddressBook, listingProblems, createProductDraft, deleteProductImage, errorMessage, fieldErrors, isApiError, getRegistrationMetadata, getSellerProductWithImages, mergeProducts, reorderProductImages, submitListing, submitRevisionFromDraft, uploadProductImage, useApi, useLive } from '../api';
+import { getProductImageUrl, FIELD_LABELS, REVISION_FIELDS, StageError, sourceUrlProblem, MOCK_REGISTRATION_METADATA, PRODUCT_STATE_MESSAGE, SHIPPING_NOTICE_MAX, ATTRIBUTE_VALUE_MAX, attributeName, composeShippingNotice, warnCriteria, analysisProblems, analyzeDraft, criteriaFor, listAddressBook, listingProblems, createProductDraft, deleteProductImage, errorMessage, fieldErrors, isApiError, getRegistrationMetadata, getSellerProductWithImages, mergeProducts, reorderProductImages, submitListing, submitRevisionFromDraft, uploadProductImage, useApi, useLive } from '../api';
 
 /* ── 초안 ─────────────────────────────────────────────────────────────────────── */
 const SWATCH: Record<string, string> = { 차콜: '#3F3F3F', 오트밀: '#E6DCC6', 크림: '#F3EBDC', 네이비: '#2B3A55', 블랙: '#222222', 화이트: '#FFFFFF', 내추럴: '#E8DCC8', 그레이: '#9A9A9A', 베이지: '#E3D3B8' };
@@ -29,7 +29,7 @@ function fromProduct(p: Product): Draft {
   const colors = split(color?.values), sizes = size ? split(size.values) : !color && !basic ? p.options.map(o => o.name) : [];
   const stock: Record<string, number> = {};
   for (const o of p.options) { const parts = o.name.split(' / '); const c = axes.color ? parts[0] : '', s = axes.color && axes.size ? parts[1] : axes.size ? o.name : ''; stock[optionKey(basic ? '' : c, basic ? '' : s)] = o.stock; }
-  return { ...blankDraft(), editingId: p.id, name: p.name, brand: p.brand, description: p.description, images: [...p.images], imageIds: p.imageIds && [...p.imageIds], imageSizes: p.imageSizes && [...p.imageSizes], category: p.category, sizeName: size?.name, originalUrl: p.originalUrl, extras: structuredClone(p.extras), reason: p.reason, dimensions: structuredClone(p.dimensions), noOptions: basic, options: structuredClone(p.options), price: p.price, shipping: p.shipping, shippingNotice: p.shippingNotice ?? '', dispatchDays: p.dispatchDays, maxPerAccount: p.maxPerAccount, startsAt: p.startsAt ? localDateTime(p.startsAt) : blankDraft().startsAt, faqs: structuredClone(p.faqs), axes, colors, sizes, stock, reference: p.reference ?? lookupReference(p.originalUrl) };
+  return { ...blankDraft(), editingId: p.id, editingVersion: p.version, name: p.name, brand: p.brand, description: p.description, images: [...p.images], imageIds: p.imageIds && [...p.imageIds], imageSizes: p.imageSizes && [...p.imageSizes], category: p.category, sizeName: size?.name, originalUrl: p.originalUrl, extras: structuredClone(p.extras), reason: p.reason, dimensions: structuredClone(p.dimensions), noOptions: basic, options: structuredClone(p.options), price: p.price, shipping: p.shipping, shippingNotice: p.shippingNotice ?? '', dispatchDays: p.dispatchDays, maxPerAccount: p.maxPerAccount, startsAt: p.startsAt ? localDateTime(p.startsAt) : blankDraft().startsAt, faqs: structuredClone(p.faqs), axes, colors, sizes, stock, reference: p.reference ?? lookupReference(p.originalUrl) };
 }
 function freshDraft(now: number): Draft { const start = new Date(now + 3_600_000); start.setMinutes(0, 0, 0); return { ...blankDraft(now), startsAt: localDateTime(start.getTime()), axes: { size: true, color: true }, colors: [], sizes: [], stock: {} }; }
 /** 초안 변경 — options·dimensions를 항상 축·수량에서 다시 계산 */
@@ -175,6 +175,8 @@ export function WizardPage() {
   if (editId && (!editing || !canEdit(editing, now))) return <Empty title={editing ? editBlocker(editing, now)! : '상품을 찾을 수 없어요'}><Link to="/seller/products" className="btn">상품 관리로</Link></Empty>;
   if (!d || !d.axes || (editId && d.editingId !== editId)) return <LiveStatus state={live}/>;
   const axes = d.axes, colors = d.colors ?? [], sizes = d.sizes ?? [], stock = d.stock ?? {};
+  // 승인 상품 수정 심사: 설명·판매가·배송비·판매 시작·출고지·반품지만 바꾼다(REVISION_FIELDS). 상품명·사진은 읽기 전용, 나머지 칸은 숨긴다
+  const revision = editing?.reviewStatus === 'APPROVED';
   const rejected = editing?.reviewStatus === 'REJECTED', startPassed = rejected && !(new Date(d.startsAt).getTime() > now);
   const setStock = (key: string, n: number) => patch({ stock: { ...stock, [key]: n } });
   // 점검 항목 입력은 attributes로 저장한다. 항목명은 질문 문장이 아니라 고정 표시명(구매자 상품 상세에 그대로 보인다)
@@ -256,6 +258,7 @@ export function WizardPage() {
     const settings = s.sellerSettings[user.id];
     const problems = listingProblems(d, { categories: meta.data?.categories ?? [], now, dispatch: USE_MOCK ? !!settings?.shippingAddress : !!book.data?.[0].length, return: USE_MOCK ? !!settings?.returnAddress : !!book.data?.[1].length });
     if (!editId && (d.inspection?.length ?? 0) < INSPECTION_CHECKS.length) problems.inspection = '물품 검수 항목을 모두 확인해 주세요.';
+    if (revision) for (const k of Object.keys(problems)) if (!(REVISION_FIELDS as readonly string[]).includes(k)) delete problems[k];
     if (Object.keys(problems).length) { showProblems(problems); setError('빠진 정보를 확인해 주세요.'); return; }
     setBusy(true);
     try {
@@ -279,6 +282,9 @@ export function WizardPage() {
           mutate(st => { mergeProducts(st, [fresh]); const m = st.products.find(x => x.id === fresh.id)!; st.drafts[user.id] = { ...fromProduct(m), editingId: d.editingId, serverId: d.serverId, ai: d.ai }; });
         } catch { /* 다시 받기 실패: 안내만 */ }
         setError('그사이 정보가 바뀌었어요. 확인 후 다시 요청해 주세요');
+      } else if (revision && (isApiError(e, 'PRODUCT_STATE') || isApiError(e, 'COMMON_OPTIMISTIC_LOCK_CONFLICT'))) {
+        // 편집을 시작한 뒤 상품이 바뀌었거나(다른 수정 승인 등) 이미 심사 중인 수정 요청이 있다. 입력한 내용은 그대로 둔다
+        setError('편집하는 사이 상품 정보가 바뀌었거나 이미 심사 중인 수정 요청이 있어요. 상품 관리에서 최신 정보를 확인한 뒤 다시 수정해 주세요.');
       } else { showProblems(f); setError(errorMessage(e)); }
     } finally { setBusy(false); }
   }
@@ -298,26 +304,27 @@ export function WizardPage() {
         <div className="flex gap-2 rounded-[6px] bg-[var(--soft)] p-3.5"><Info size={15} className="mt-[2px] shrink-0 text-[var(--aux)]"/><p className="text-[12px] leading-[1.5] text-[var(--aux)]">고친 내용을 저장하면 작성 중 상태가 되고, 재심사를 요청하면 다시 심사해요.</p></div>
         {/* 반려 상품의 판매 시작이 지났으면 일정부터 미래 시각으로 바꿔야 재요청할 수 있다 */}
         {startPassed && <div role="alert" className="space-y-2 rounded-[6px] border border-[var(--red)] p-3.5"><p className="text-[13px] font-bold text-[var(--red)]">판매 시작 시각이 지났어요</p><p className="text-[12px] text-[var(--aux)]">판매 일정을 지금보다 뒤로 바꾼 뒤 재심사를 요청해 주세요.</p><Button outline className="w-full text-[13px]!" onClick={() => showProblems({ startsAt: '판매 시작 시각이 지났어요. 지금보다 뒤로 바꿔 주세요.' })}>판매 일정 바꾸기</Button></div>}
-      </> : <div className="flex gap-2 rounded-[6px] bg-[var(--soft)] p-3.5"><Info size={15} className="mt-[2px] shrink-0 text-[var(--aux)]"/><p className="text-[12px] leading-[1.5] text-[var(--aux)]">수정하면 판매 심사를 다시 받아요.<br/>심사 중에도 기존 정보로 오픈 일정은 유지돼요.</p></div>}
+      </> : <div className="flex gap-2 rounded-[6px] bg-[var(--soft)] p-3.5"><Info size={15} className="mt-[2px] shrink-0 text-[var(--aux)]"/><p className="text-[12px] leading-[1.5] text-[var(--aux)]">수정하면 판매 심사를 다시 받아요.<br/>심사 중에도 기존 정보로 오픈 일정은 유지돼요.{revision && <><br/>승인 후에는 설명·판매가·배송비·판매 일정·출고지·반품지만 바꿀 수 있어요. 상품명·사진·옵션·수량은 바꿀 수 없어요.</>}</p></div>}
     </div>}
 
     {/* 상품 사진 */}
     <section className="space-y-2.5" data-field="images">
-      <Label hint="· 필수 · 최대 10장">상품 사진</Label>
+      <Label hint={revision ? '· 승인 후 변경 불가' : '· 필수 · 최대 10장'}>상품 사진</Label>
       <div className="flex gap-2 overflow-x-auto">
-        {d.images.length < 10 && <label className="flex h-20 w-20 shrink-0 cursor-pointer flex-col items-center justify-center gap-1 rounded-[6px] border border-[var(--border)]"><Plus size={20} strokeWidth={1.5}/><span className="text-[11px] text-[var(--meta)]">{uploading ? '처리 중' : `${d.images.length}/10`}</span><input aria-label="상품 사진 업로드" type="file" accept="image/jpeg,image/png,image/webp" multiple className="sr-only" disabled={uploading} onChange={e => { const picked = Array.from(e.target.files ?? []); e.target.value = ''; void upload(picked); }}/></label>}
-        {d.images.map((src, i) => <button type="button" key={src.slice(-24) + i} onClick={() => setPhoto(i)} className="relative shrink-0"><ProductImage src={src} alt={`상품 사진 ${i + 1}`} className="h-20 w-20"/>{i === 0 && <span className="absolute bottom-1.5 left-1.5 rounded-[3px] bg-black/70 px-1.5 py-0.5 text-[10px] font-bold text-white">대표</span>}</button>)}
+        {!revision && d.images.length < 10 && <label className="flex h-20 w-20 shrink-0 cursor-pointer flex-col items-center justify-center gap-1 rounded-[6px] border border-[var(--border)]"><Plus size={20} strokeWidth={1.5}/><span className="text-[11px] text-[var(--meta)]">{uploading ? '처리 중' : `${d.images.length}/10`}</span><input aria-label="상품 사진 업로드" type="file" accept="image/jpeg,image/png,image/webp" multiple className="sr-only" disabled={uploading} onChange={e => { const picked = Array.from(e.target.files ?? []); e.target.value = ''; void upload(picked); }}/></label>}
+        {d.images.map((src, i) => <button type="button" key={src.slice(-24) + i} disabled={revision} onClick={() => setPhoto(i)} className="relative shrink-0"><ProductImage src={src} alt={`상품 사진 ${i + 1}`} className="h-20 w-20"/>{i === 0 && <span className="absolute bottom-1.5 left-1.5 rounded-[3px] bg-black/70 px-1.5 py-0.5 text-[10px] font-bold text-white">대표</span>}</button>)}
       </div>
       {progress && <p role="status" className="text-[12px] text-[var(--aux)]">{progress}</p>}
-      <ErrorBox message={photoError}/>{retryFiles.length > 0 && !uploading && <button type="button" onClick={() => void upload(retryFiles)} className="h-9 rounded-[6px] border border-[var(--border)] px-3 text-[12px] font-bold">남은 사진 {retryFiles.length}장 다시 올리기</button>}
-      <p className="text-[11px] text-[var(--meta)]">JPG·PNG·WEBP · 장당 10MB 이하 · 첫 번째 사진이 대표예요</p>
+      <ErrorBox message={photoError}/>{!revision && retryFiles.length > 0 && !uploading && <button type="button" onClick={() => void upload(retryFiles)} className="h-9 rounded-[6px] border border-[var(--border)] px-3 text-[12px] font-bold">남은 사진 {retryFiles.length}장 다시 올리기</button>}
+      {!revision && <p className="text-[11px] text-[var(--meta)]">JPG·PNG·WEBP · 장당 10MB 이하 · 첫 번째 사진이 대표예요</p>}
       <FieldError name="images"/>
     </section>
 
-    <section data-field="name"><Label hint="· 필수">상품명</Label><input aria-label="상품명" className="field-line" value={d.name} maxLength={50} onChange={e => patch({ name: e.target.value })} placeholder="상품명을 입력해 주세요"/><FieldError name="name"/></section>
+    <section data-field="name"><Label hint={revision ? '· 승인 후 변경 불가' : '· 필수'}>상품명</Label><input aria-label="상품명" className="field-line" readOnly={revision} value={d.name} maxLength={50} onChange={e => patch({ name: e.target.value })} placeholder="상품명을 입력해 주세요"/><FieldError name="name"/></section>
 
     {/* AI 분석·심사 제출에 필요한 값(단계 저장 땐 선택). 비워 두면 보내지 않는다 — 임의 문구로 채우지 않는다. Figma에 추가할 칸 */}
     <section data-field="description"><Label hint="· 필수 · 한두 줄이면 돼요">짧은 설명</Label><textarea aria-label="짧은 설명" rows={2} className="field-line min-h-[64px] resize-y" value={d.description} maxLength={20000} onChange={e => patch({ description: e.target.value })} placeholder="예: 새 상품, 택 그대로, 박스 없음"/><FieldError name="description"/></section>
+    {!revision && <>
     <section data-field="disposalReason"><Label hint="· 필수 · 한두 줄이면 돼요">처분 사유</Label><input aria-label="처분 사유" className="field-line" value={d.reason} maxLength={500} onChange={e => patch({ reason: e.target.value })} placeholder="예: 시즌 종료 후 남은 미판매 새 상품"/><FieldError name="disposalReason"/></section>
 
     <section data-field="state" className="space-y-2">
@@ -367,13 +374,16 @@ export function WizardPage() {
       {fieldErr.sourceUrl ? <FieldError name="sourceUrl"/> : d.originalUrl.trim() && sourceUrlProblem(d.originalUrl) ? <p className="mt-1.5 text-[12px] text-[var(--red)]">{sourceUrlProblem(d.originalUrl)}</p> : null}
     </section>
 
+    </>}
+
     <section className="space-y-2.5" data-field="price"><Label hint="· 필수">한정 판매가</Label>
       <label className="flex h-12 items-center border-b border-[var(--line)]"><input aria-label="한정 판매가" inputMode="numeric" className="min-w-0 flex-1 bg-transparent text-[16px] outline-none placeholder:text-[var(--placeholder)]" value={d.price ? d.price.toLocaleString('ko-KR') : ''} placeholder="0" onChange={e => patch({ price: Number(e.target.value.replace(/\D/g, '')) || 0 })}/><span className="text-[14px] text-[var(--aux)]">원</span></label>
       {discount > 0 && reference && <p className="flex items-center gap-2 text-[12px] text-[var(--aux)]"><span className="rounded-[3px] bg-[var(--positive-soft)] px-1.5 py-0.5 text-[11px] font-bold text-[var(--positive)]">{Math.round(discount / reference.price * 100)}% 저렴</span>{`${reference.platform} 판매가보다 ${money(discount)} 저렴해요`}</p>}
-      <p className="text-[12px] text-[var(--meta)]">등록한 URL의 판매가보다 낮아야 심사를 요청할 수 있어요</p>
+      <p className="text-[12px] text-[var(--meta)]">{revision && reference ? `등록한 URL의 판매가(${money(reference.price)})보다 낮아야 심사를 요청할 수 있어요` : '등록한 URL의 판매가보다 낮아야 심사를 요청할 수 있어요'}</p>
       <FieldError name="price"/>
     </section>
 
+    {!revision && <>
     <section className="space-y-3" data-field="options"><Label hint="· 필수">옵션별 한정 수량</Label>
       <div className="flex flex-wrap items-center gap-2"><span className="mr-1 text-[12px] text-[var(--aux)]">옵션</span>{chip(axes.color, COLOR_AXIS, () => patch({ axes: { ...axes, color: !axes.color } }))}{secondNames.map(n => chip(axes.size && sizeName === n, n, () => patch(axes.size && sizeName === n ? { axes: { ...axes, size: false } } : { axes: { ...axes, size: true }, sizeName: n })))}<InlineAdd label="직접 추가" className="h-8 rounded-full border border-[var(--border)] px-3" onAdd={v => { if (v !== COLOR_AXIS) patch({ axes: { ...axes, size: true }, sizeName: v }); }}/>{chip(!axes.size && !axes.color, '옵션 없음', () => patch({ axes: { size: false, color: false } }))}</div>
       {axes.color && <div className="flex flex-wrap gap-2">{colors.map((c, i) => <button type="button" key={c} onClick={() => setActiveColor(i)} className={`flex h-10 items-center gap-1.5 rounded-[6px] px-3.5 border-[1.5px] ${c === color ? 'border-[var(--ink)]' : 'border-[var(--border)]'}`}><span className="h-3.5 w-3.5 rounded-full border border-black/10" style={{ background: SWATCH[c] ?? '#DEDEDE' }}/><span className={`text-[14px] ${c === color ? 'font-bold' : 'text-[var(--aux)]'}`}>{c}</span><span className="text-[12px] text-[var(--meta)]">{colorTotal(c)}개</span></button>)}<InlineAdd label="색상" className="h-10 rounded-[6px] border border-[var(--border)] px-3.5" onAdd={v => { if (!colors.includes(v)) { patch({ colors: [...colors, v] }); setActiveColor(colors.length); } }}/></div>}
@@ -390,6 +400,8 @@ export function WizardPage() {
       <FieldError name="options"/>
     </section>
 
+    </>}
+
     <section className="space-y-3" data-field="startsAt"><Label hint="· 필수">판매 일정</Label>
       <div className="flex gap-4">
         <label className="relative flex h-12 min-w-0 flex-[1.6] items-center justify-between border-b border-[var(--line)]"><span className="text-[16px]">{startOk ? dateLabel(d.startsAt) : '날짜 선택'}</span><Calendar size={18} className="text-[var(--aux)]"/><input aria-label="판매 날짜" type="date" className="absolute inset-0 opacity-0" min={localDateTime(now).slice(0, 10)} max={localDateTime(now + 7 * 86_400_000).slice(0, 10)} value={startOk ? localDateTime(start.getTime()).slice(0, 10) : ''} onChange={e => setDate(e.target.value)}/></label>
@@ -401,16 +413,19 @@ export function WizardPage() {
       <FieldError name="startsAt"/>
     </section>
 
+    {!revision && <>
     <section className="space-y-3" data-field="dispatchDays"><Label hint="· 필수">출고 기한</Label>
       <div className="grid grid-cols-3 gap-2">{[1, 2, 3].map(n => <button type="button" key={n} onClick={() => patch({ dispatchDays: n })} className={`h-10 rounded-[6px] text-[13px] ${d.dispatchDays === n ? 'bg-[var(--ink)] font-bold text-white' : 'border border-[var(--border)] text-[var(--aux)]'}`}>{n}영업일</button>)}</div>
       <FieldError name="dispatchDays"/>
     </section>
 
+    </>}
     {/* 배송비·1인 구매 한도: 서버 필수 값(배송비 ≥ 0, 한도 > 0). Figma에 추가할 칸 */}
     <section className="space-y-2.5" data-field="shipping"><Label hint="· 필수 · 무료면 0">배송비</Label>
       <label className="flex h-12 items-center border-b border-[var(--line)]"><input aria-label="배송비" inputMode="numeric" className="min-w-0 flex-1 bg-transparent text-[16px] outline-none" value={d.shipping.toLocaleString('ko-KR')} onChange={e => patch({ shipping: Number(e.target.value.replace(/\D/g, '')) || 0 })}/><span className="text-[14px] text-[var(--aux)]">원</span></label>
       <FieldError name="shipping"/>
     </section>
+    {!revision && <>
     {/* 택배사·반품/교환 배송비: 판매자 설정 API가 없어 상품의 shippingNotice 글로 저장한다. 칸을 고치면 아래 글이 다시 만들어지고, 글은 직접 고칠 수 있다 */}
     <section className="space-y-3" data-field="shippingNotice"><div><Label hint="· 구매자에게 안내돼요">택배사 · 반품·교환 배송비</Label></div>
       {(() => {
@@ -429,6 +444,8 @@ export function WizardPage() {
     <section className="space-y-2.5" data-field="maxPerAccount"><div className="flex items-center justify-between"><Label hint="· 필수">1인 구매 한도</Label><Stepper label="1인 구매 한도" value={d.maxPerAccount} onChange={n => patch({ maxPerAccount: n })}/></div>
       <FieldError name="maxPerAccount"/>
     </section>
+
+    </>}
 
     <section className="space-y-2.5" data-field="addresses"><Label hint="· 필수">출고지 · 반품지</Label>
       {USE_MOCK ? ([['출고지', s.sellerSettings[user.id]?.shippingAddress], ['반품지', s.sellerSettings[user.id]?.returnAddress]] as const).map(([k, v]) => <div key={k} className="flex justify-between gap-3 text-[13px]"><span className="shrink-0 text-[var(--aux)]">{k}</span><span className="text-right">{v || '등록된 주소가 없어요'}</span></div>)
@@ -460,7 +477,7 @@ export function WizardPage() {
       <Button className="w-full text-[15px]!" disabled={busy || uploading || blocked} onClick={submit}>{busy ? '요청 중…' : editId ? (editing?.reviewStatus === 'REJECTED' ? '수정하고 재심사 요청' : '수정 심사 요청') : '판매 심사 요청하기'}</Button>
     </div>
 
-    {photo !== null && d.images[photo] && <Modal title={`상품 사진 ${photo + 1}`} onClose={() => setPhoto(null)}><div className="space-y-3"><ProductImage src={d.images[photo]} alt="선택한 사진" className="aspect-square w-full"/>{photo > 0 && <Button className="w-full" onClick={() => void coverPhoto(photo)}>대표 사진으로 지정</Button>}<Button outline className="w-full" onClick={() => void removePhoto(photo)}>삭제</Button></div></Modal>}
+    {!revision && photo !== null && d.images[photo] && <Modal title={`상품 사진 ${photo + 1}`} onClose={() => setPhoto(null)}><div className="space-y-3"><ProductImage src={d.images[photo]} alt="선택한 사진" className="aspect-square w-full"/>{photo > 0 && <Button className="w-full" onClick={() => void coverPhoto(photo)}>대표 사진으로 지정</Button>}<Button outline className="w-full" onClick={() => void removePhoto(photo)}>삭제</Button></div></Modal>}
     {picking && <CategoryPicker value={d.category} recommended={d.ai.result?.category} onClose={closePicker} onSave={category => { patch({ category }); closePicker(); }}/>}
   </div>;
 }

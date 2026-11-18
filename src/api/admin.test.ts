@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { api } from './client';
-import { approveSellerApplication, decideProductReview, decideRevision, getAdminApplication, getAdminProductReviewWithImages, getAdminRevision, getAdminRevisionImageUrl, getCorrectionRequest, listAdminApplications, listAdminProductReviews, listAdminRevisions, markApplication, mergeAdminApplications, mergeAdminProductList, rejectSellerApplication, requestCorrection, reviewCertificate } from './admin';
+import { approveSellerApplication, decideProductReview, decideRevision, getAdminApplication, getAdminProductReviewWithImages, getAdminRevision, getCorrectionRequest, listAdminApplications, listAdminProductReviews, listAdminRevisions, markApplication, mergeAdminApplications, mergeAdminProductList, rejectSellerApplication, requestCorrection, reviewCertificate } from './admin';
 import type { State } from '../domain';
 
 type Call = { url: string; method: string; body: unknown };
@@ -64,6 +64,5 @@ describe('운영자 상품 심사', () => {
     expect(await listAdminRevisions()).toHaveLength(1); expect(calls[0].url).toContain('/admin/product-reviews/revisions?status=IN_REVIEW');
     calls = fake(() => ({ id: 'r1' })); await getAdminRevision('p1', 'r1'); await decideRevision('p1', 'r1', 2, false, '이유');
     expect(calls.map(path)).toEqual(['GET /admin/product-reviews/p1/revisions/r1', 'POST /admin/product-reviews/p1/revisions/r1/decisions']); expect(calls[1].body).toEqual({ expectedVersion: 2, approved: false, reason: '이유' });
-    calls = fake(() => ({ downloadUrl: 'u' })); expect(await getAdminRevisionImageUrl('p1', 'r1', 'i1')).toBe('u'); expect(path(calls[0])).toBe('GET /admin/product-reviews/p1/revisions/r1/images/i1/download-url');
   });
 });
