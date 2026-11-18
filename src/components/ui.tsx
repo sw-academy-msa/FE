@@ -22,9 +22,10 @@ export function LiveStatus({ state, label = '불러오는 중이에요…' }: { 
   return state.loading ? <p role="status" className="muted py-8 text-center text-[12px]">{label}</p> : null;
 }
 export function Empty({ title, message, children }: { title: string; message?: string; children?: ReactNode }) { return <div className="flex min-h-[260px] flex-col items-center justify-center gap-4 py-12 text-center"><Package size={32} className="muted" strokeWidth={1}/><h2 className="text-[16px] font-bold">{title}</h2>{message && <p className="muted max-w-[280px] text-[12px] leading-relaxed">{message}</p>}{children}</div>; }
-export function Header({ title, subtitle, back = true, action, bare = false }: { title: string; subtitle?: string; back?: boolean; action?: ReactNode; bare?: boolean }) {
+/** backTo: 뒤로 가기 버튼이 이전 기록 대신 갈 화면(탭 전환 기록이 쌓이는 화면 등) */
+export function Header({ title, subtitle, back = true, action, bare = false, backTo }: { title: string; subtitle?: string; back?: boolean; action?: ReactNode; bare?: boolean; backTo?: string }) {
   const navigate = useNavigate();
-  return <header className={bare ? 'mb-5 pb-3' : 'divider mb-5 pb-3'}><div className="flex min-h-[38px] items-center gap-3">{back && <button aria-label="이전 화면" onClick={() => window.history.state?.idx > 0 ? navigate(-1) : navigate('/')} className="-ml-1 grid h-9 w-9 shrink-0 place-items-center"><ArrowLeft size={20}/></button>}<h1 className="min-w-0 flex-1 text-[18px] font-bold tracking-[-.5px]">{title}</h1>{action}</div>{subtitle && <p className="muted mt-1 text-[11px] leading-relaxed">{subtitle}</p>}</header>;
+  return <header className={bare ? 'mb-5 pb-3' : 'divider mb-5 pb-3'}><div className="flex min-h-[38px] items-center gap-3">{back && <button type="button" aria-label="이전 화면" onClick={() => backTo ? navigate(backTo, { replace: true }) : window.history.state?.idx > 0 ? navigate(-1) : navigate('/')} className="-ml-1 grid h-9 w-9 shrink-0 place-items-center"><ArrowLeft size={20}/></button>}<h1 className="min-w-0 flex-1 text-[18px] font-bold tracking-[-.5px]">{title}</h1>{action}</div>{subtitle && <p className="muted mt-1 text-[11px] leading-relaxed">{subtitle}</p>}</header>;
 }
 export function Badge({ children, live = false, red = false }: { children: ReactNode; live?: boolean; red?: boolean }) { return <span className={`inline-flex w-fit items-center rounded-[3px] px-2 py-1 text-[10px] font-semibold ${live ? 'bg-[var(--green-soft)] text-[var(--green)]' : red ? 'bg-[var(--red-soft)] text-[var(--red)]' : 'bg-[var(--blue-soft)] text-[var(--ink)]'}`}>{children}</span>; }
 export function InfoRow({ label, value, strong = false }: { label: string; value: ReactNode; strong?: boolean }) { return <div className="flex items-start justify-between gap-4 py-1"><span className="muted shrink-0 text-[12px]">{label}</span><span className={`min-w-0 text-right text-[12px] leading-relaxed ${strong ? 'font-bold' : ''}`}>{value}</span></div>; }
@@ -33,7 +34,9 @@ const signedUrl = (u: string) => /[?&]X-Amz-(Expires|Signature)=/i.test(u);
 export function ProductImage({ src, alt, className = '' }: { src: string; alt: string; className?: string }) {
   const reported = useRef('');
   const onError = () => { if (typeof src === 'string' && signedUrl(src) && reported.current !== src) { reported.current = src; window.dispatchEvent(new Event(IMAGE_EXPIRED)); } };
-  return <img src={typeof src === 'string' && src.startsWith('/images/') ? `.${src}` : src || './images/generated.png'} alt={alt} onError={onError} className={`block rounded-[4px] bg-[var(--blue-soft)] object-cover ${className}`} loading="lazy"/>;
+  // 사진을 아직 못 받았으면 예시 상품 사진을 쓰지 않고 빈 자리만 보여 준다(내 상품 대신 다른 사진이 먼저 보이던 문제)
+  if (!src) return <div role="img" aria-label={alt} className={`block rounded-[4px] bg-[var(--soft)] ${className}`}/>;
+  return <img src={typeof src === 'string' && src.startsWith('/images/') ? `.${src}` : src} alt={alt} onError={onError} className={`block rounded-[4px] bg-[var(--blue-soft)] object-cover ${className}`} loading="lazy"/>;
 }
 export function ProductSummary({ product, option, amount }: { product: { name: string; brand: string; image: string }; option?: ReactNode; amount?: number }) { return <div className="divider flex items-center gap-3 pb-4"><ProductImage src={product.image} alt={product.name} className="h-[86px] w-[76px] shrink-0"/><div className="min-w-0 flex-1 space-y-1.5"><p className="muted text-[10px]">{product.brand}</p><p className="text-[14px] font-semibold">{product.name}</p>{option && <div className="muted whitespace-pre-line text-[11px] leading-relaxed">{option}</div>}{amount !== undefined && <p className="font-number text-[14px] font-bold">{money(amount)}</p>}</div></div>; }
 const pad = (n: number) => String(n).padStart(2, '0');
