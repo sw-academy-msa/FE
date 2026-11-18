@@ -34,9 +34,22 @@ async function subscribeAndRegister(): Promise<'granted' | 'disabled'> {
  * 서버 Web Push 구독. 반드시 사용자 동작(버튼) 안에서 부른다(iPhone 권한 요청 조건).
  * 결과: 'granted' 등록 완료 / 'denied'·'default' 권한 없음 / 'disabled' 서버 푸시 꺼짐 / 'unsupported' 브라우저 미지원
  */
-export async function enablePush(): Promise<NotificationPermission | 'disabled' | 'unsupported'> {
+/** 알림 권한 상태. 홈 화면에 추가한 iOS 앱이 아니면 unsupported */
+export const pushPermission = (): NotificationPermission | 'unsupported' => (canSubscribePush() ? Notification.permission : 'unsupported');
+/** iOS 권한을 거절한 뒤 안내 문구. 거절하면 웹앱이 다시 물을 수 없고 기기 설정에서만 바꿀 수 있다 */
+export const PUSH_DENIED_TEXT = '알림 권한이 꺼져 있어요. 아이폰 설정 > 알림 > STOCKDROP에서 알림 허용을 켜 주세요.';
+/**
+ * 권한 팝업을 띄운다. iOS는 버튼을 누른 그 순간(사용자 동작 안)에 불러야 팝업을 보여 주므로, 서버 통신 같은 await보다 먼저 부른다.
+ * 이미 허용·거절했으면 다시 묻지 않고 null
+ */
+export function requestPushPermission(): Promise<NotificationPermission> | null {
+  if (!canSubscribePush() || Notification.permission !== 'default') return null;
+  return Notification.requestPermission();
+}
+/** 권한 확인 후 구독 등록. asked: 클릭 순간에 미리 띄운 권한 요청(있으면 다시 묻지 않는다) */
+export async function enablePush(asked?: Promise<NotificationPermission> | null): Promise<NotificationPermission | 'disabled' | 'unsupported'> {
   if (!canSubscribePush()) return 'unsupported';
-  const permission = await Notification.requestPermission();
+  const permission = await (asked ?? (Notification.permission === 'default' ? Notification.requestPermission() : Promise.resolve(Notification.permission)));
   if (permission !== 'granted') return permission;
   return subscribeAndRegister();
 }
