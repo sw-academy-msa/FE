@@ -59,6 +59,8 @@ export function ProductCard({ product: p, now, availableCount, notified, onNotif
     <p className={`mt-0.5 text-[16px] font-bold ${soldOut ? 'text-[var(--meta)]' : ''}`}>{money(p.price)}</p>
     {status === '판매 중' && !soldOut && <><div className="mt-2 h-1 w-full rounded-full bg-[var(--line)]"><div className={`h-1 rounded-full ${urgent ? 'bg-[var(--urgent)]' : 'bg-[var(--ink)]'}`} style={{ width: `${pct}%` }}/></div><p className={`mt-1.5 text-[12px] ${urgent ? 'font-bold text-[var(--urgent)]' : 'text-[var(--aux)]'}`}>{urgent ? `서두르세요! ${left}개 남음` : `${total}개 중 ${left}개 남음`}</p></>}
     {status === '판매 예정' && <><p className="mt-2 text-[12px] text-[var(--aux)]">{total}개 한정 · 1인 {p.maxPerAccount}개</p>{onNotify && <button type="button" onClick={e => { e.preventDefault(); onNotify(); }} className={`mt-2 flex h-8 w-full items-center justify-center gap-1 rounded-[4px] text-[12px] font-bold ${notified ? 'bg-[var(--ink)] text-white' : 'border border-[var(--border)]'}`}><Bell size={13}/>{notified ? '알림 설정됨' : '오픈 알림 받기'}</button>}</>}
+    {/* 판매 중에도 신청한 상품은 가격 인하·수량 임박 알림을 받으므로 끌 수 있게 둔다 */}
+    {status === '판매 중' && notified && onNotify && <button type="button" onClick={e => { e.preventDefault(); onNotify(); }} className="mt-2 flex h-8 w-full items-center justify-center gap-1 rounded-[4px] border border-[var(--border)] text-[12px] font-bold"><Bell size={13}/>상품 알림 끄기</button>}
     {soldOut && <p className="mt-2 text-[12px] text-[var(--aux)]">{soldOutLabel(p)}</p>}
     {status === '판매 종료' && !soldOut && <p className="mt-2 text-[12px] text-[var(--aux)]">판매 종료</p>}
   </Link>;

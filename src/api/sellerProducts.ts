@@ -280,10 +280,13 @@ export async function submitListing(d: Draft, id: string): Promise<Product> {
   if (faqs.length) p = await withStage('FAQ 저장 실패', () => withFaqRetry(() => saveRegistrationFaqs(id, v(), faqs), faqs.some(f => f.suggestionId)));
   return withStage('심사 요청 실패', () => submitReview(id, v()));
 }
-/** 승인 상품 수정 제출(실제 모드): 설명·판매가·배송비·판매 시작·출고지·반품지만 보낸다(REVISION_FIELDS) */
+/**
+ * 승인 상품 수정 제출(실제 모드): 설명·판매가·배송비·판매 시작·출고지·반품지만 보낸다(REVISION_FIELDS).
+ * expectedVersion은 편집을 시작할 때의 version이다. 그사이 상품이 바뀌었으면 서버가 거절해(PRODUCT_STATE) 바뀐 값을 덮어쓰지 않는다
+ */
 export async function submitRevisionFromDraft(d: Draft, id: string): Promise<ProductRevisionDto> {
-  const p = await getSellerProduct(id);
-  return submitRevision(id, p.version ?? 0, { description: d.description.trim(), shippingFee: d.shipping, price: d.price, startsAt: startIso(d), dispatchAddressId: d.dispatchAddressId, returnAddressId: d.returnAddressId });
+  const version = d.editingVersion ?? (await getSellerProduct(id)).version ?? 0;
+  return submitRevision(id, version, { description: d.description.trim(), shippingFee: d.shipping, price: d.price, startsAt: startIso(d), dispatchAddressId: d.dispatchAddressId, returnAddressId: d.returnAddressId });
 }
 /** 수정 심사에서 입력할 수 있는 칸(wizard data-field). 나머지 칸은 화면에서 읽기 전용이고, 제출 전 검사도 이 칸만 본다 */
 export const REVISION_FIELDS = ['description', 'price', 'shipping', 'startsAt', 'addresses'] as const;

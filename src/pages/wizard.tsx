@@ -29,7 +29,7 @@ function fromProduct(p: Product): Draft {
   const colors = split(color?.values), sizes = size ? split(size.values) : !color && !basic ? p.options.map(o => o.name) : [];
   const stock: Record<string, number> = {};
   for (const o of p.options) { const parts = o.name.split(' / '); const c = axes.color ? parts[0] : '', s = axes.color && axes.size ? parts[1] : axes.size ? o.name : ''; stock[optionKey(basic ? '' : c, basic ? '' : s)] = o.stock; }
-  return { ...blankDraft(), editingId: p.id, name: p.name, brand: p.brand, description: p.description, images: [...p.images], imageIds: p.imageIds && [...p.imageIds], imageSizes: p.imageSizes && [...p.imageSizes], category: p.category, sizeName: size?.name, originalUrl: p.originalUrl, extras: structuredClone(p.extras), reason: p.reason, dimensions: structuredClone(p.dimensions), noOptions: basic, options: structuredClone(p.options), price: p.price, shipping: p.shipping, shippingNotice: p.shippingNotice ?? '', dispatchDays: p.dispatchDays, maxPerAccount: p.maxPerAccount, startsAt: p.startsAt ? localDateTime(p.startsAt) : blankDraft().startsAt, faqs: structuredClone(p.faqs), axes, colors, sizes, stock, reference: p.reference ?? lookupReference(p.originalUrl) };
+  return { ...blankDraft(), editingId: p.id, editingVersion: p.version, name: p.name, brand: p.brand, description: p.description, images: [...p.images], imageIds: p.imageIds && [...p.imageIds], imageSizes: p.imageSizes && [...p.imageSizes], category: p.category, sizeName: size?.name, originalUrl: p.originalUrl, extras: structuredClone(p.extras), reason: p.reason, dimensions: structuredClone(p.dimensions), noOptions: basic, options: structuredClone(p.options), price: p.price, shipping: p.shipping, shippingNotice: p.shippingNotice ?? '', dispatchDays: p.dispatchDays, maxPerAccount: p.maxPerAccount, startsAt: p.startsAt ? localDateTime(p.startsAt) : blankDraft().startsAt, faqs: structuredClone(p.faqs), axes, colors, sizes, stock, reference: p.reference ?? lookupReference(p.originalUrl) };
 }
 function freshDraft(now: number): Draft { const start = new Date(now + 3_600_000); start.setMinutes(0, 0, 0); return { ...blankDraft(now), startsAt: localDateTime(start.getTime()), axes: { size: true, color: true }, colors: [], sizes: [], stock: {} }; }
 /** 초안 변경 — options·dimensions를 항상 축·수량에서 다시 계산 */
@@ -282,6 +282,9 @@ export function WizardPage() {
           mutate(st => { mergeProducts(st, [fresh]); const m = st.products.find(x => x.id === fresh.id)!; st.drafts[user.id] = { ...fromProduct(m), editingId: d.editingId, serverId: d.serverId, ai: d.ai }; });
         } catch { /* 다시 받기 실패: 안내만 */ }
         setError('그사이 정보가 바뀌었어요. 확인 후 다시 요청해 주세요');
+      } else if (revision && (isApiError(e, 'PRODUCT_STATE') || isApiError(e, 'COMMON_OPTIMISTIC_LOCK_CONFLICT'))) {
+        // 편집을 시작한 뒤 상품이 바뀌었거나(다른 수정 승인 등) 이미 심사 중인 수정 요청이 있다. 입력한 내용은 그대로 둔다
+        setError('편집하는 사이 상품 정보가 바뀌었거나 이미 심사 중인 수정 요청이 있어요. 상품 관리에서 최신 정보를 확인한 뒤 다시 수정해 주세요.');
       } else { showProblems(f); setError(errorMessage(e)); }
     } finally { setBusy(false); }
   }
@@ -312,7 +315,7 @@ export function WizardPage() {
         {d.images.map((src, i) => <button type="button" key={src.slice(-24) + i} disabled={revision} onClick={() => setPhoto(i)} className="relative shrink-0"><ProductImage src={src} alt={`상품 사진 ${i + 1}`} className="h-20 w-20"/>{i === 0 && <span className="absolute bottom-1.5 left-1.5 rounded-[3px] bg-black/70 px-1.5 py-0.5 text-[10px] font-bold text-white">대표</span>}</button>)}
       </div>
       {progress && <p role="status" className="text-[12px] text-[var(--aux)]">{progress}</p>}
-      <ErrorBox message={photoError}/>{retryFiles.length > 0 && !uploading && <button type="button" onClick={() => void upload(retryFiles)} className="h-9 rounded-[6px] border border-[var(--border)] px-3 text-[12px] font-bold">남은 사진 {retryFiles.length}장 다시 올리기</button>}
+      <ErrorBox message={photoError}/>{!revision && retryFiles.length > 0 && !uploading && <button type="button" onClick={() => void upload(retryFiles)} className="h-9 rounded-[6px] border border-[var(--border)] px-3 text-[12px] font-bold">남은 사진 {retryFiles.length}장 다시 올리기</button>}
       {!revision && <p className="text-[11px] text-[var(--meta)]">JPG·PNG·WEBP · 장당 10MB 이하 · 첫 번째 사진이 대표예요</p>}
       <FieldError name="images"/>
     </section>
@@ -376,7 +379,7 @@ export function WizardPage() {
     <section className="space-y-2.5" data-field="price"><Label hint="· 필수">한정 판매가</Label>
       <label className="flex h-12 items-center border-b border-[var(--line)]"><input aria-label="한정 판매가" inputMode="numeric" className="min-w-0 flex-1 bg-transparent text-[16px] outline-none placeholder:text-[var(--placeholder)]" value={d.price ? d.price.toLocaleString('ko-KR') : ''} placeholder="0" onChange={e => patch({ price: Number(e.target.value.replace(/\D/g, '')) || 0 })}/><span className="text-[14px] text-[var(--aux)]">원</span></label>
       {discount > 0 && reference && <p className="flex items-center gap-2 text-[12px] text-[var(--aux)]"><span className="rounded-[3px] bg-[var(--positive-soft)] px-1.5 py-0.5 text-[11px] font-bold text-[var(--positive)]">{Math.round(discount / reference.price * 100)}% 저렴</span>{`${reference.platform} 판매가보다 ${money(discount)} 저렴해요`}</p>}
-      <p className="text-[12px] text-[var(--meta)]">등록한 URL의 판매가보다 낮아야 심사를 요청할 수 있어요</p>
+      <p className="text-[12px] text-[var(--meta)]">{revision && reference ? `등록한 URL의 판매가(${money(reference.price)})보다 낮아야 심사를 요청할 수 있어요` : '등록한 URL의 판매가보다 낮아야 심사를 요청할 수 있어요'}</p>
       <FieldError name="price"/>
     </section>
 
@@ -474,7 +477,7 @@ export function WizardPage() {
       <Button className="w-full text-[15px]!" disabled={busy || uploading || blocked} onClick={submit}>{busy ? '요청 중…' : editId ? (editing?.reviewStatus === 'REJECTED' ? '수정하고 재심사 요청' : '수정 심사 요청') : '판매 심사 요청하기'}</Button>
     </div>
 
-    {photo !== null && d.images[photo] && <Modal title={`상품 사진 ${photo + 1}`} onClose={() => setPhoto(null)}><div className="space-y-3"><ProductImage src={d.images[photo]} alt="선택한 사진" className="aspect-square w-full"/>{photo > 0 && <Button className="w-full" onClick={() => void coverPhoto(photo)}>대표 사진으로 지정</Button>}<Button outline className="w-full" onClick={() => void removePhoto(photo)}>삭제</Button></div></Modal>}
+    {!revision && photo !== null && d.images[photo] && <Modal title={`상품 사진 ${photo + 1}`} onClose={() => setPhoto(null)}><div className="space-y-3"><ProductImage src={d.images[photo]} alt="선택한 사진" className="aspect-square w-full"/>{photo > 0 && <Button className="w-full" onClick={() => void coverPhoto(photo)}>대표 사진으로 지정</Button>}<Button outline className="w-full" onClick={() => void removePhoto(photo)}>삭제</Button></div></Modal>}
     {picking && <CategoryPicker value={d.category} recommended={d.ai.result?.category} onClose={closePicker} onSave={category => { patch({ category }); closePicker(); }}/>}
   </div>;
 }

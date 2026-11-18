@@ -50,7 +50,8 @@ export function AdminRevisionDetailPage() {
   if (!user.admin) return <Unavailable message="운영자만 사용할 수 있습니다."/>;
   const d = data.data;
   if (!d) return data.loading || data.error ? <LiveStatus state={{ loading: data.loading, error: data.error, reload: data.reload }}/> : <Empty title="수정 심사를 찾을 수 없어요"><Link to="/admin/products?kind=revision" className="btn">심사 목록으로</Link></Empty>;
-  const { rev, product: p } = d, a = ch(rev), pending = rev.status === 'IN_REVIEW';
+  // 처리가 끝난 회차는 현재 상품이 이미 바뀐 뒤라 '변경 전'으로 쓸 수 없다(확인할 수 없음으로 표시). 심사 대기 회차만 현재 상품과 비교한다
+  const { rev } = d, p = rev.status === 'IN_REVIEW' ? d.product : null, a = ch(rev), pending = rev.status === 'IN_REVIEW';
   const decide = async (approved: boolean) => {
     if (busy) return; if (!approved && !reason.trim()) return setError('반려 사유를 입력해 주세요.');
     setBusy(true); setError('');
@@ -60,7 +61,7 @@ export function AdminRevisionDetailPage() {
   const start = (v?: string | number) => (v === undefined || v === '' ? '' : dateTime(typeof v === 'number' ? v : Date.parse(v)));
   return <div className="space-y-3">
     <Header title="수정 심사 상세" subtitle={pending ? '바뀐 항목을 확인하고 승인해 주세요.' : rev.status === 'APPROVED' ? '승인된 수정 심사예요.' : '반려된 수정 심사예요.'}/>
-    {!p && <Note title="변경 전 값을 불러오지 못했어요">현재 승인된 상품을 조회하지 못해 변경 후 값만 보여요.</Note>}
+    {pending && !p && <Note title="변경 전 값을 불러오지 못했어요">현재 승인된 상품을 조회하지 못해 변경 후 값만 보여요.</Note>}
     <div>
       <Row label="상품 설명" before={p?.description} after={a.description ?? ''}/>
       <Row label="판매가" before={p ? money(p.price) : undefined} after={a.price === undefined ? '' : money(a.price)}/>

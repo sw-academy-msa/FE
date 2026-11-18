@@ -90,13 +90,15 @@ describe('상품 관리 API', () => {
     await submitRevision('p1', 7, { description: 'd', shippingFee: 0, price: 9000, startsAt: 'x' });
     expect(calls.map(sig)).toEqual(['GET /seller/products/p1/revisions', 'POST /seller/products/p1/revisions']); expect(calls[1].body).toEqual({ expectedVersion: 7, description: 'd', shippingFee: 0, price: 9000, startsAt: 'x' });
   });
-  it('submitRevisionFromDraft: 최신 version으로, 수정 심사 계약 필드만(가격 포함) 보낸다', async () => {
-    const calls = fake(c => (c.method === 'GET' ? dto({ version: 9, status: 'APPROVED' }) : { id: 'r', status: 'IN_REVIEW' }));
-    await submitRevisionFromDraft({ ...blankDraft(), name: '이름', description: ' 설명 ', price: 12000, shipping: 3000, imageIds: ['a', 'b'], dispatchDays: 2, shippingNotice: '안내', startsAt: '2030-01-01T10:00', dispatchAddressId: 'd1' }, 'p1');
-    const body = calls[1].body as Record<string, unknown>;
-    expect(body).toMatchObject({ expectedVersion: 9, description: '설명', price: 12000, shippingFee: 3000, dispatchAddressId: 'd1' });
-    expect(typeof body.startsAt).toBe('string');
-    for (const k of ['name', 'imageIds', 'representativeId', 'dispatchBusinessDays', 'shippingNotice']) expect(body).not.toHaveProperty(k);
+  it('submitRevisionFromDraft: 편집 시작 때 version으로, 수정 심사 계약 필드만(가격 포함) 보낸다', async () => {
+    let calls = fake(() => ({ id: 'r', status: 'IN_REVIEW' }));
+    const d = { ...blankDraft(), editingVersion: 8, name: '이름', description: ' 설명 ', price: 12000, shipping: 3000, imageIds: ['a', 'b'], dispatchDays: 2, maxPerAccount: 3, shippingNotice: '안내', startsAt: '2030-01-01T10:00', dispatchAddressId: 'd1' };
+    await submitRevisionFromDraft(d, 'p1');
+    expect(calls.map(sig)).toEqual(['POST /seller/products/p1/revisions']); // 편집 시작 version이 있으면 다시 조회하지 않는다
+    expect(calls[0].body).toEqual({ expectedVersion: 8, description: '설명', shippingFee: 3000, price: 12000, startsAt: new Date('2030-01-01T10:00').toISOString(), dispatchAddressId: 'd1' });
+    calls = fake(c => (c.method === 'GET' ? dto({ version: 9, status: 'APPROVED' }) : { id: 'r', status: 'IN_REVIEW' }));
+    await submitRevisionFromDraft({ ...d, editingVersion: undefined }, 'p1');
+    expect(calls[1].body).toMatchObject({ expectedVersion: 9 }); // 예전 초안(version 없음)은 최신 version으로
   });
 });
 
