@@ -246,14 +246,23 @@ export function NotificationSettingsPage() {
   const pushReady = USE_MOCK || canSubscribePush(); // mock은 기존 화면 그대로. 실제 모드는 홈 화면에 추가된 iOS 앱에서만 구독 버튼
   // 알림 설정 조회 전용 API가 없어 GET /accounts/me로 읽는다. 가격 인하·수량 임박은 상품별 알림 신청(productAlerts.ts)에 포함되고, 이 설정(saleStart)이 전체 스위치다
   const logged = !USE_MOCK && signedIn(s);
+  // 로그인 상태면 현재 설정을 다 받은 뒤에만 바꾸고 저장한다. 받기 전·실패 시 저장하면 광고 동의 철회·상품 알림 꺼짐으로 덮어쓴다
+  const [load, setLoad] = useState<'loading' | 'ready' | 'failed'>(() => (logged ? 'loading' : 'ready'));
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
-    if (!logged) return;
+    if (!logged) { setLoad('ready'); return; }
+    let alive = true; setLoad('loading');
     Promise.all([fetchMySettings(), syncAnalyticsIdentity().catch(() => null)]).then(([m, id]) => {
+      if (!alive) return;
       const shown = recommendationOn(!!id, m.personalizedRecommendation); server.current = { recommend: m.personalizedRecommendation, shown };
-      setEnabled(e => ({ ...e, sale_start: m.saleStart, recommendation: shown })); setMarketing(m.marketing);
-    }).catch(() => {});
-  }, [logged]);
+      setEnabled(e => ({ ...e, sale_start: m.saleStart, recommendation: shown })); setMarketing(m.marketing); setLoad('ready');
+    }).catch(() => { if (alive) setLoad('failed'); });
+    return () => { alive = false; };
+  }, [logged, attempt]);
+  const ready = load === 'ready';
   const proceed = async (push = false) => {
+    // 설정을 받지 못한 채 건너뛰면 저장하지 않고 다음 화면으로만 간다
+    if (!ready) { navigate(next, { replace: true }); return; }
     setSaving(true); try { await save(push); } finally { setSaving(false); }
   };
   const save = async (push: boolean) => {
@@ -290,20 +299,22 @@ export function NotificationSettingsPage() {
         <p className="text-center text-[12px] text-[var(--muted)]">구매 이력을 분석해 꼭 필요한 판매 알림만 보내드려요.</p>
       </div>
       <div className="h-[1px] bg-[var(--line)]"/>
+      {load === 'loading' && <p role="status" className="muted text-center text-[12px]">현재 알림 설정을 불러오고 있어요.</p>}
+      {load === 'failed' && <div role="alert" className="space-y-2 rounded-[6px] bg-[var(--soft)] p-3.5 text-center"><p className="text-[13px] font-bold">알림 설정을 불러오지 못했어요.</p><p className="muted text-[12px]">지금 설정이 바뀌지 않도록 저장을 잠시 막아 두었어요. 다시 시도해 주세요.</p><Button outline className="w-full text-[13px]!" onClick={() => setAttempt(n => n + 1)}>다시 시도</Button></div>}
       <div>{NOTIFS.map(n => <div key={n.id} className="divider flex items-center justify-between gap-4 py-4">
         <div className="flex-1"><p className="text-[14px] font-bold">{n.title}</p><p className="muted mt-0.5 text-[12px]">{n.desc}</p></div>
-        <button role="switch" aria-label={n.title} aria-checked={!!enabled[n.id]} onClick={() => toggle(n.id)} className={`relative h-[28px] w-[48px] shrink-0 rounded-full transition-colors ${enabled[n.id] ? 'bg-[var(--ink)]' : 'bg-[var(--line)]'}`}><span className={`absolute top-[3px] h-[22px] w-[22px] rounded-full bg-white shadow-sm transition-all ${enabled[n.id] ? 'left-[23px]' : 'left-[3px]'}`}/></button>
+        <button role="switch" aria-label={n.title} aria-checked={!!enabled[n.id]} disabled={!ready} onClick={() => toggle(n.id)} className={`relative h-[28px] w-[48px] shrink-0 rounded-full transition-colors disabled:opacity-40 ${enabled[n.id] ? 'bg-[var(--ink)]' : 'bg-[var(--line)]'}`}><span className={`absolute top-[3px] h-[22px] w-[22px] rounded-full bg-white shadow-sm transition-all ${enabled[n.id] ? 'left-[23px]' : 'left-[3px]'}`}/></button>
       </div>)}</div>
       <div className="h-[1px] bg-[var(--line)]"/>
       <label className="flex items-start gap-3 rounded-[6px] bg-[#FBFBFB] p-4 text-[13px] font-bold">
-        <input type="checkbox" checked={marketing} onChange={e => setMarketing(e.target.checked)} className="mt-0.5 h-5 w-5 shrink-0 rounded-[4px]"/>
+        <input type="checkbox" checked={marketing} disabled={!ready} onChange={e => setMarketing(e.target.checked)} className="mt-0.5 h-5 w-5 shrink-0 rounded-[4px]"/>
         <div><p>광고성 정보 수신 동의 (선택)</p><p className="muted mt-1 text-[11px] font-normal leading-relaxed">개인 맞춤 알림 서비스를 위해 마케팅 정보 수신에 동의합니다.</p></div>
       </label>
       <p className="muted text-[12px]">맞춤 알림을 받으려면 위 두 가지 모두 동의가 필요해요</p>
       {!pushReady && <Note title="푸시 알림"><p>홈 화면에 추가하면 알림을 받을 수 있어요. 사파리 공유 버튼 → ‘홈 화면에 추가’ 후 홈 화면의 STOCKDROP 앱으로 열어 주세요.</p></Note>}
       {PUSH_DEBUG && <PushDebug/>}
     </div>
-    <div className="pb-6 pt-4"><Button className="w-full" disabled={saving} onClick={() => proceed(pushReady)}>{settingsMode ? (saving ? '저장 중…' : '저장') : pushReady ? '알림 받기 시작' : '설정 저장하고 시작'}</Button></div>
+    <div className="pb-6 pt-4"><Button className="w-full" disabled={saving || !ready} onClick={() => proceed(pushReady)}>{settingsMode ? (saving ? '저장 중…' : '저장') : pushReady ? '알림 받기 시작' : '설정 저장하고 시작'}</Button></div>
   </div>;
 }
 export function LogoutButton() { const [open, setOpen] = useState(false), [busy, setBusy] = useState(false), navigate = useNavigate(), toast = useToast(); return <><button className="muted py-4 text-[12px] underline underline-offset-4" onClick={() => setOpen(true)}>로그아웃</button>{open && <Modal title="로그아웃할까요?" onClose={() => setOpen(false)}><Note>주문과 신청 내역은 유지됩니다. 진행 중인 재고 확보 시간은 로그아웃해도 멈추거나 연장되지 않습니다.</Note><div className="mt-6 flex gap-3"><Button outline className="flex-1" onClick={() => setOpen(false)}>취소</Button><Button className="flex-1" disabled={busy} onClick={async () => { setBusy(true); await logout(); navigate('/', { replace: true }); toast('로그아웃했습니다.'); }}>로그아웃하기</Button></div></Modal>}</>; }
