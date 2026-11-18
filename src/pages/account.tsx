@@ -351,6 +351,14 @@ export function AdminListPage() {
 }
 export function AdminDetailPage() {
   const { id } = useParams(); const s = useStore(), user = activeUser(s); const app = s.applications.find(a => a.id === id); const [pdfViewed, setPdfViewed] = useState(false), [urlViewed, setUrlViewed] = useState(false), [confirm, setConfirm] = useState(false), [rejecting, setRejecting] = useState(false), [rejectReason, setRejectReason] = useState(''), [error, setError] = useState(''), [busy, setBusy] = useState(false); const toast = useToast(), navigate = useNavigate();
+  // 사업자등록증 미리보기(실제 모드). 서버가 열람 기록을 남기므로 미리보기가 뜨면 열람 완료로 본다
+  const [preview, setPreview] = useState<{ url?: string; failed?: boolean }>({});
+  useEffect(() => {
+    if (USE_MOCK || !app?.id || !user.admin) return;
+    let alive = true, url = '';
+    reviewCertificate(app.id).then(pdf => { if (!alive) return; url = URL.createObjectURL(pdf.type === 'application/pdf' ? pdf : new Blob([pdf], { type: 'application/pdf' })); setPreview({ url }); setPdfViewed(true); }).catch(() => { if (alive) setPreview({ failed: true }); });
+    return () => { alive = false; if (url) URL.revokeObjectURL(url); };
+  }, [app?.id, user.admin]);
   const live = useLive(sig => user.admin && id ? getAdminApplication(id, sig) : Promise.resolve(null), (st, a) => { if (a) mergeAdminApplications(st, [a]); }, [id, user.admin]);
   if (!user.admin) return <Unavailable message="운영자만 사용할 수 있습니다."/>;
   if (!app) return live.loading || live.error ? <LiveStatus state={live}/> : <Empty title="신청 정보를 찾을 수 없어요"/>;
@@ -377,7 +385,8 @@ export function AdminDetailPage() {
           <h2 className="text-[15px] font-bold">사업자등록증</h2>
           {pdfViewed && <span className="inline-flex h-[18px] items-center rounded-[4px] bg-[#EEF8F3] px-2 text-[11px] font-bold text-[#3FB181]">열람 완료</span>}
         </div>
-        {/* PDF preview mock */}
+        {/* 실제 모드: 제출된 PDF를 바로 보여 준다. 미리보기도 서버 열람 기록(certificate-review)을 남긴다. mock은 예시 카드 */}
+        {USE_MOCK ? <>
         <div className="flex items-center justify-center rounded-[6px] bg-[var(--soft)] py-6">
           <div className="w-[150px] rounded-[2px] bg-white p-3 shadow-sm space-y-1.5">
             <p className="text-center text-[10px] font-bold">사업자등록증</p>
@@ -391,11 +400,15 @@ export function AdminDetailPage() {
             <p className="mt-2 text-center text-[7px] font-bold text-[#7B7B7B]">성동세무서장</p>
           </div>
         </div>
+        </> : <div className="overflow-hidden rounded-[6px] border border-[var(--line)] bg-[var(--soft)]">
+          {preview.url ? <iframe title="사업자등록증 미리보기" src={`${preview.url}#view=FitH`} className="block h-[440px] w-full bg-white"/>
+            : <p className="py-10 text-center text-[12px] text-[#7B7B7B]">{preview.failed ? '미리보기를 불러오지 못했어요. 아래 ‘열람하기’로 열어 주세요.' : '사업자등록증을 불러오고 있어요.'}</p>}
+        </div>}
         {/* File row */}
         <div className="flex items-center gap-3">
           <FileText size={14} className="shrink-0 text-[#7B7B7B]"/>
           <span className="flex-1 text-[12px] text-[#7B7B7B]">{USE_MOCK ? '사업자등록증.pdf · 1쪽 · 1.2MB' : '사업자등록증.pdf'}</span>
-          <button className="text-[12px] font-bold text-[var(--ink)]" onClick={async () => { setError(''); const tab = USE_MOCK ? null : openPendingTab(); /* 클릭 직후 탭을 열어 모바일 사파리 팝업 차단을 피한다 */ try { if (USE_MOCK) { app.document && getPdf(app.document.id).catch(() => {}); } else { const pdf = await reviewCertificate(app.id); const url = URL.createObjectURL(pdf.type ? pdf : new Blob([pdf], { type: 'application/pdf' })); if (tab) tab.location.href = url; else window.open(url, '_blank'); } setPdfViewed(true); } catch (e) { const msg = e instanceof ApiError ? `${e.code}: ${e.message}` : errorMessage(e); failTab(tab, msg); setError(msg); } }}>열람하기</button>
+          <button className="text-[12px] font-bold text-[var(--ink)]" onClick={async () => { setError(''); const tab = USE_MOCK ? null : openPendingTab(); /* 클릭 직후 탭을 열어 모바일 사파리 팝업 차단을 피한다 */ try { if (USE_MOCK) { app.document && getPdf(app.document.id).catch(() => {}); } else { const pdf = await reviewCertificate(app.id); const url = URL.createObjectURL(pdf.type ? pdf : new Blob([pdf], { type: 'application/pdf' })); if (tab) tab.location.href = url; else window.open(url, '_blank'); } setPdfViewed(true); } catch (e) { const msg = `사업자등록증을 열지 못했어요. ${errorMessage(e)}`; failTab(tab, msg); setError(msg); } }}>열람하기</button>
         </div>
       </div>
       {/* URL Section */}
