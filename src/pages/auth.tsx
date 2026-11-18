@@ -13,7 +13,7 @@ import { errorMessage, fieldErrors, fetchMySettings, saveMarketingConsent, saveN
 import { SignupLoginError, ensureSession, flushPendingPrefs, setPendingPrefs, loginHref, homePath, login, logout, normalizeEmail, resetPassword, safeNext, sendCode, signedIn, signup, validEmail, validPassword, verifyCode, demoLogin } from '../auth';
 import { DEMO_ACCOUNTS, DEMO_LOGIN, PUSH_DEBUG, USE_MOCK } from '../config';
 import { PushDebug } from '../components/PushDebug';
-import { canSubscribePush, enablePush } from '../push';
+import { PUSH_DENIED_TEXT, canSubscribePush, enablePush, pushPermission, requestPushPermission } from '../push';
 const inputClass = 'w-full min-w-0 border-0 border-b border-[var(--line)] bg-transparent py-3 text-[14px] outline-none placeholder:text-[var(--muted)] focus:border-[var(--ink)] disabled:opacity-50';
 function useAuthNow() { const [now, setNow] = useState(Date.now()); useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, []); return now; }
 const DEMO_NEXT_KEY = 'stockdrop:demo-next';
@@ -242,7 +242,17 @@ export function NotificationSettingsPage() {
   const [marketing, setMarketing] = useState(false); const toast = useToast(); const s = useStore();
   // 맞춤 상품 알림 토글(recommendation) = 분석 참여 + personalizedRecommendation. 화면을 열 때의 서버 값과 표시값을 기억해 저장 때 바뀐 경우만 반영한다
   const server = useRef({ recommend: false, shown: false });
-  const toggle = (id: string) => setEnabled(e => ({ ...e, [id]: !e[id] }));
+  // 알림을 켜는 순간(사용자 동작 안) 권한을 묻는다. iOS는 이때만 팝업을 띄우고, 한 번 거절하면 기기 설정에서만 바꿀 수 있다
+  const asked = useRef<Promise<NotificationPermission> | null>(null);
+  const [permission, setPermission] = useState(() => (USE_MOCK ? 'unsupported' : pushPermission()));
+  const askPermission = () => {
+    if (USE_MOCK) return null;
+    const p = asked.current ?? requestPushPermission();
+    if (p) { asked.current = p; p.then(setPermission, () => {}); }
+    else if (pushPermission() === 'denied') toast(PUSH_DENIED_TEXT);
+    return p;
+  };
+  const toggle = (id: string) => { const on = !enabled[id]; setEnabled(e => ({ ...e, [id]: on })); if (on) askPermission(); };
   const pushReady = USE_MOCK || canSubscribePush(); // mock은 기존 화면 그대로. 실제 모드는 홈 화면에 추가된 iOS 앱에서만 구독 버튼
   // 알림 설정 조회 전용 API가 없어 GET /accounts/me로 읽는다. 가격 인하·수량 임박은 상품별 알림 신청(productAlerts.ts)에 포함되고, 이 설정(saleStart)이 전체 스위치다
   const logged = !USE_MOCK && signedIn(s);
@@ -261,11 +271,13 @@ export function NotificationSettingsPage() {
   }, [logged, attempt]);
   const ready = load === 'ready';
   const proceed = async (push = false) => {
+    // 서버 저장(await)보다 먼저 권한을 물어야 iOS가 팝업을 띄운다
+    const early = push ? askPermission() : null;
     // 설정을 받지 못한 채 건너뛰면 저장하지 않고 다음 화면으로만 간다
     if (!ready) { navigate(next, { replace: true }); return; }
-    setSaving(true); try { await save(push); } finally { setSaving(false); }
+    setSaving(true); try { await save(push, early); } finally { setSaving(false); }
   };
-  const save = async (push: boolean) => {
+  const save = async (push: boolean, early: Promise<NotificationPermission> | null = null) => {
     try { localStorage.setItem('stockdrop:notifications', JSON.stringify({ ...enabled, marketing })); } catch {}
     if (!USE_MOCK) {
       // personalizedRecommendation은 분석 참여와 함께 아래에서 바꾼다(여기서는 서버 값 그대로)
@@ -279,7 +291,7 @@ export function NotificationSettingsPage() {
       }
     }
     // 서버 Web Push 구독은 '알림 받기 시작'(사용자 동작)에서만. 실패해도 설정 저장은 끝났으니 다음 화면으로 간다
-    if (push && logged) { try { const r = await enablePush(); if (r === 'denied') toast('브라우저 알림이 차단되어 있어요. 설정에서 허용해 주세요.'); else if (r === 'unsupported') toast('이 브라우저는 푸시 알림을 지원하지 않아요. iPhone은 홈 화면에 추가한 뒤 이용해 주세요.'); } catch (e) { toast(errorMessage(e)); } }
+    if (push && logged) { try { const r = await enablePush(early); setPermission(pushPermission()); if (r === 'denied') toast(PUSH_DENIED_TEXT); else if (r === 'unsupported') toast('이 브라우저는 푸시 알림을 지원하지 않아요. iPhone은 홈 화면에 추가한 뒤 이용해 주세요.'); } catch (e) { toast(errorMessage(e)); } }
     if (settingsMode) toast('알림 설정을 저장했어요.');
     navigate(next, { replace: true });
   };
@@ -311,6 +323,7 @@ export function NotificationSettingsPage() {
         <div><p>광고성 정보 수신 동의 (선택)</p><p className="muted mt-1 text-[11px] font-normal leading-relaxed">개인 맞춤 알림 서비스를 위해 마케팅 정보 수신에 동의합니다.</p></div>
       </label>
       <p className="muted text-[12px]">맞춤 알림을 받으려면 위 두 가지 모두 동의가 필요해요</p>
+      {permission === 'denied' && <Note title="알림 권한이 꺼져 있어요"><p>{PUSH_DENIED_TEXT} 허용한 뒤 이 화면에서 다시 저장하면 알림을 받을 수 있어요.</p></Note>}
       {!pushReady && <Note title="푸시 알림"><p>홈 화면에 추가하면 알림을 받을 수 있어요. 사파리 공유 버튼 → ‘홈 화면에 추가’ 후 홈 화면의 STOCKDROP 앱으로 열어 주세요.</p></Note>}
       {PUSH_DEBUG && <PushDebug/>}
     </div>
