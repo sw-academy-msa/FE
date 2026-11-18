@@ -237,14 +237,14 @@ export const SETTINGS_HREF = (back: string) => `/notifications/settings?mode=set
 export function NotificationSettingsPage() {
   const navigate = useNavigate(); const [params] = useSearchParams(); const next = safeNext(params.get('next')); const settingsMode = params.get('mode') === 'settings';
   const [saving, setSaving] = useState(false);
-  const NOTIFS = [{ id: 'sale_start', title: '판매 시작 알림', desc: '관심 상품 판매 시작 즉시 알려드려요' }, { id: 'price_change', title: '관심 상품 가격 변동', desc: '찜한 상품 가격 변동 시 알려드려요' }, { id: 'low_stock', title: '한정 수량 임박 알림', desc: '재고가 5개 이하 남으면 알려드려요' }, { id: 'recommendation', title: '관심 상품 알림을 위한 조회 기록 분석', desc: '상품 조회 기록을 Google Analytics로 분석해, 관심 있을 만한 새 상품을 알려드려요' }];
+  const NOTIFS = [{ id: 'sale_start', title: '상품 알림', desc: '알림 받기를 누른 상품의 판매 시작·가격 인하·수량 임박을 알려드려요. 끄면 신청한 상품 알림도 오지 않아요' }, { id: 'recommendation', title: '관심 상품 알림을 위한 조회 기록 분석', desc: '상품 조회 기록을 Google Analytics로 분석해, 관심 있을 만한 새 상품을 알려드려요' }];
   const [enabled, setEnabled] = useState<Record<string, boolean>>(() => { try { return JSON.parse(localStorage.getItem('stockdrop:notifications') || '{}'); } catch { return {}; } });
   const [marketing, setMarketing] = useState(false); const toast = useToast(); const s = useStore();
   // 맞춤 상품 알림 토글(recommendation) = 분석 참여 + personalizedRecommendation. 화면을 열 때의 서버 값과 표시값을 기억해 저장 때 바뀐 경우만 반영한다
   const server = useRef({ recommend: false, shown: false });
   const toggle = (id: string) => setEnabled(e => ({ ...e, [id]: !e[id] }));
   const pushReady = USE_MOCK || canSubscribePush(); // mock은 기존 화면 그대로. 실제 모드는 홈 화면에 추가된 iOS 앱에서만 구독 버튼
-  // 알림 설정 조회 전용 API가 없어 GET /accounts/me로 읽는다. price_change·low_stock은 API가 없어 이 기기에만 저장 (TODO(api-gap))
+  // 알림 설정 조회 전용 API가 없어 GET /accounts/me로 읽는다. 가격 인하·수량 임박은 상품별 알림 신청(productAlerts.ts)에 포함되고, 이 설정(saleStart)이 전체 스위치다
   const logged = !USE_MOCK && signedIn(s);
   useEffect(() => {
     if (!logged) return;

@@ -184,7 +184,8 @@ export const updateProductFaq = async (id: string, faqId: string, expectedVersio
 export const deleteProductFaq = async (id: string, faqId: string, expectedVersion: number) => sellerProductFromApi(await api.delete<SellerProductDto>(`${at(id)}/faqs/${enc(faqId)}`, { service: purchase, query: { expectedVersion } }));
 
 /* ── 수정 심사(승인 상품) ── */
-export interface RevisionInput { name: string; description: string; imageIds: string[]; representativeId: string; shippingFee: number; dispatchBusinessDays: number; shippingNotice?: string; purchaseNotice?: string; startsAt: string; dispatchAddressId?: string; returnAddressId?: string }
+/** 수정 심사로 바꿀 수 있는 값만 보낸다(백엔드 ProductRevisionRequest). 구매 안내(purchaseNotice)는 등록 화면에도 없어 보내지 않는다. 상품명·사진·옵션·최초 수량·출고 기한·배송 안내는 승인 후 바꿀 수 없다 */
+export interface RevisionInput { description: string; purchaseNotice?: string; shippingFee: number; price: number; startsAt: string; dispatchAddressId?: string; returnAddressId?: string }
 /** GET …/revisions — data 자체가 배열 */
 export const listRevisions = (id: string, signal?: AbortSignal) => api.get<ProductRevisionDto[]>(`${at(id)}/revisions`, { service: purchase, signal });
 /** POST …/revisions — expectedVersion은 원본 상품 version. 201 + ProductRevision(IN_REVIEW) */
@@ -279,12 +280,13 @@ export async function submitListing(d: Draft, id: string): Promise<Product> {
   if (faqs.length) p = await withStage('FAQ 저장 실패', () => withFaqRetry(() => saveRegistrationFaqs(id, v(), faqs), faqs.some(f => f.suggestionId)));
   return withStage('심사 요청 실패', () => submitReview(id, v()));
 }
-/** 승인 상품 수정 제출(실제 모드): 가격·옵션·수량은 수정 대상이 아니다. 이미지는 draft.imageIds 순서, 대표=첫 장 */
+/** 승인 상품 수정 제출(실제 모드): 설명·판매가·배송비·판매 시작·출고지·반품지만 보낸다(REVISION_FIELDS) */
 export async function submitRevisionFromDraft(d: Draft, id: string): Promise<ProductRevisionDto> {
-  const p = await getSellerProduct(id), ids = (d.imageIds ?? []).filter(Boolean);
-  if (!ids.length) throw new Error('상품 사진을 확인해 주세요.');
-  return submitRevision(id, p.version ?? 0, { name: d.name.trim(), description: d.description.trim(), imageIds: ids, representativeId: ids[0], shippingFee: d.shipping, dispatchBusinessDays: d.dispatchDays, shippingNotice: d.shippingNotice?.trim() || undefined, startsAt: startIso(d), dispatchAddressId: d.dispatchAddressId, returnAddressId: d.returnAddressId });
+  const p = await getSellerProduct(id);
+  return submitRevision(id, p.version ?? 0, { description: d.description.trim(), shippingFee: d.shipping, price: d.price, startsAt: startIso(d), dispatchAddressId: d.dispatchAddressId, returnAddressId: d.returnAddressId });
 }
+/** 수정 심사에서 입력할 수 있는 칸(wizard data-field). 나머지 칸은 화면에서 읽기 전용이고, 제출 전 검사도 이 칸만 본다 */
+export const REVISION_FIELDS = ['description', 'price', 'shipping', 'startsAt', 'addresses'] as const;
 /** AI 분석 요청 사진 전체 용량 한도(백엔드 규칙) */
 export const MAX_ANALYSIS_BYTES = 30 * 1024 * 1024;
 export const PRODUCT_STATE_MESSAGE = '심사 중이거나 승인된 상품은 분석할 수 없어요';

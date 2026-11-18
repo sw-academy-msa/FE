@@ -87,14 +87,16 @@ describe('상품 관리 API', () => {
   it('수정 심사: 이력은 배열, 제출은 원본 version', async () => {
     const calls = fake(c => (c.method === 'GET' ? [{ id: 'r1', status: 'IN_REVIEW' }] : c.method === 'POST' ? { id: 'r2', status: 'IN_REVIEW' } : null));
     expect(await listRevisions('p1')).toHaveLength(1);
-    await submitRevision('p1', 7, { name: 'n', description: 'd', imageIds: ['i1'], representativeId: 'i1', shippingFee: 0, dispatchBusinessDays: 1, startsAt: 'x' });
-    expect(calls.map(sig)).toEqual(['GET /seller/products/p1/revisions', 'POST /seller/products/p1/revisions']); expect(calls[1].body).toMatchObject({ expectedVersion: 7, imageIds: ['i1'], representativeId: 'i1' });
+    await submitRevision('p1', 7, { description: 'd', shippingFee: 0, price: 9000, startsAt: 'x' });
+    expect(calls.map(sig)).toEqual(['GET /seller/products/p1/revisions', 'POST /seller/products/p1/revisions']); expect(calls[1].body).toEqual({ expectedVersion: 7, description: 'd', shippingFee: 0, price: 9000, startsAt: 'x' });
   });
-  it('submitRevisionFromDraft: 최신 version으로, 대표=첫 이미지, 사진 없으면 거절', async () => {
+  it('submitRevisionFromDraft: 최신 version으로, 수정 심사 계약 필드만(가격 포함) 보낸다', async () => {
     const calls = fake(c => (c.method === 'GET' ? dto({ version: 9, status: 'APPROVED' }) : { id: 'r', status: 'IN_REVIEW' }));
-    await submitRevisionFromDraft({ ...blankDraft(), name: '이름', imageIds: ['a', 'b'], startsAt: '2030-01-01T10:00' }, 'p1');
-    expect(calls[1].body).toMatchObject({ expectedVersion: 9, imageIds: ['a', 'b'], representativeId: 'a', name: '이름' });
-    await expect(submitRevisionFromDraft({ ...blankDraft(), name: 'x' }, 'p1')).rejects.toThrow('사진');
+    await submitRevisionFromDraft({ ...blankDraft(), name: '이름', description: ' 설명 ', price: 12000, shipping: 3000, imageIds: ['a', 'b'], dispatchDays: 2, shippingNotice: '안내', startsAt: '2030-01-01T10:00', dispatchAddressId: 'd1' }, 'p1');
+    const body = calls[1].body as Record<string, unknown>;
+    expect(body).toMatchObject({ expectedVersion: 9, description: '설명', price: 12000, shippingFee: 3000, dispatchAddressId: 'd1' });
+    expect(typeof body.startsAt).toBe('string');
+    for (const k of ['name', 'imageIds', 'representativeId', 'dispatchBusinessDays', 'shippingNotice']) expect(body).not.toHaveProperty(k);
   });
 });
 

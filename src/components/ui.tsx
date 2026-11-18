@@ -36,15 +36,6 @@ export function ProductImage({ src, alt, className = '' }: { src: string; alt: s
   return <img src={typeof src === 'string' && src.startsWith('/images/') ? `.${src}` : src || './images/generated.png'} alt={alt} onError={onError} className={`block rounded-[4px] bg-[var(--blue-soft)] object-cover ${className}`} loading="lazy"/>;
 }
 export function ProductSummary({ product, option, amount }: { product: { name: string; brand: string; image: string }; option?: ReactNode; amount?: number }) { return <div className="divider flex items-center gap-3 pb-4"><ProductImage src={product.image} alt={product.name} className="h-[86px] w-[76px] shrink-0"/><div className="min-w-0 flex-1 space-y-1.5"><p className="muted text-[10px]">{product.brand}</p><p className="text-[14px] font-semibold">{product.name}</p>{option && <div className="muted whitespace-pre-line text-[11px] leading-relaxed">{option}</div>}{amount !== undefined && <p className="font-number text-[14px] font-bold">{money(amount)}</p>}</div></div>; }
-/** 판매 시작 알림 신청 목록 — 로컬 저장(mock 유지).
- * TODO(api-gap): 상품별 판매 시작 알림 신청 API가 명세에 없다. 계정 단위 설정(PUT /v1/accounts/me/notification-settings saleStart)만 있음 */
-const NOTIFY_KEY = 'stockdrop:notified-products';
-export function readNotified(): string[] { try { const v = JSON.parse(localStorage.getItem(NOTIFY_KEY) || 'null'); return Array.isArray(v) ? v : ['basket']; } catch { return []; } }
-export function useNotified() {
-  const [ids, setIds] = useState<string[]>(readNotified);
-  const toggle = (id: string) => setIds(prev => { const next = prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]; try { localStorage.setItem(NOTIFY_KEY, JSON.stringify(next)); } catch { /* 저장 차단 시 화면 상태만 유지 */ } return next; });
-  return [ids, toggle] as const;
-}
 const pad = (n: number) => String(n).padStart(2, '0');
 export const clockLeft = (ms: number) => { const s = Math.max(0, Math.floor(ms / 1000)); return `${pad(Math.floor(s / 3600))}:${pad(Math.floor(s % 3600 / 60))}:${pad(s % 60)}`; };
 export const openLabel = (t: number, now: number) => { const d = new Date(t), n = new Date(now); const same = d.toDateString() === n.toDateString(); return `${same ? '오늘' : `${d.getMonth() + 1}월 ${d.getDate()}일`} ${pad(d.getHours())}:${pad(d.getMinutes())} 오픈`; };
