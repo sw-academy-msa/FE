@@ -904,9 +904,12 @@ export function SellerSupportPage() {
     </div>
   );
 }
+/** 판매자 약관 체크 상태. '보기'로 약관 페이지에 다녀와도 유지되도록 이 탭이 열려 있는 동안 기억한다 */
+const SELLER_TERMS_KEY = 'stockdrop:seller-terms-checks';
 export function TermsPage() {
   const navigate = useNavigate();
-  const [checks, setChecks] = useState<Record<string, boolean>>({});
+  const [checks, setChecksState] = useState<Record<string, boolean>>(() => { try { const v = JSON.parse(sessionStorage.getItem(SELLER_TERMS_KEY) || '{}'); return v && typeof v === 'object' ? v : {}; } catch { return {}; } });
+  const setChecks = (next: Record<string, boolean>) => { setChecksState(next); try { sessionStorage.setItem(SELLER_TERMS_KEY, JSON.stringify(next)); } catch { /* 저장이 막혀도 화면 상태는 유지 */ } };
   const items: [string, string, boolean][] = [['terms', '판매자 이용약관', true], ['fee', '정산 및 판매 수수료 정책', true], ['operation', '한정 판매 운영 정책', true], ['privacy', '개인정보 수집·이용 동의', true], ['marketing', '판매 알림·혜택 정보 수신', false]];
   const allRequired = items.filter(([,, r]) => r).every(([k]) => checks[k]);
   const allChecked = items.every(([k]) => checks[k]);
