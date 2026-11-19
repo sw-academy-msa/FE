@@ -330,11 +330,11 @@ export function WizardPage() {
     <section data-field="state" className="space-y-2">
       <Button outline={!!Object.keys(analysisProblems(d, editing?.reviewStatus)).length} className="flex w-full items-center justify-center gap-1.5 text-[14px]!" disabled={d.ai.status === 'analyzing' || uploading} onClick={runAnalysis}><Sparkles size={15}/>{d.ai.status === 'analyzing' ? 'AI가 분석하고 있어요' : d.ai.result || d.ai.status === 'uncertain' ? 'AI 분석 다시 하기' : 'AI로 카테고리 분석하기'}</Button>
       <p className="text-[12px] text-[var(--meta)]">사진·상품명·짧은 설명·처분 사유를 입력하면 AI가 카테고리를 추천해요. 분석은 선택이라 건너뛰고 카테고리를 직접 골라도 돼요</p>
-      <ul className="space-y-1 rounded-[6px] bg-[var(--soft)] p-3 text-[12px] leading-[1.6] text-[var(--aux)]"><li>· 상품 전체가 보이는 사진과 라벨(소재·사이즈 표기) 사진을 올려 주세요</li><li>· 설명에 실측 사이즈, 소재, 구성품, 관리 방법을 적으면 AI 질문이 줄어요</li><li>· 분석 뒤에 상품명·설명·브랜드·URL·사진 등을 바꾸면 질문을 다시 받아야 해요. 입력을 마친 뒤 분석하면 한 번에 끝나요</li></ul>
+      <ul className="space-y-1 rounded-[6px] bg-[var(--soft)] p-3 text-[12px] leading-[1.6] text-[var(--aux)]"><li>· 상품 전체가 보이는 사진과 라벨(소재·사이즈 표기) 사진을 올려 주세요</li><li>· 설명에 실측 사이즈, 소재, 구성품, 관리 방법을 적으면 AI 질문이 줄어요</li><li>· 분석 뒤에 상품명·설명·브랜드·사진 등을 바꾸면 질문을 다시 받아야 해요. 입력을 마친 뒤 분석하면 한 번에 끝나요</li></ul>
       <FieldError name="state"/>
     </section>
 
-    {stale && <section role="status" className="space-y-2 rounded-[6px] bg-[var(--red-soft)] p-4"><p className="text-[13px] font-bold text-[var(--red)]">정보가 바뀌어 AI 질문을 다시 받아야 해요</p><p className="text-[12px] text-[var(--red)]">분석한 뒤에 상품명·설명·브랜드·URL·카테고리·처분 사유·사진 중 하나가 바뀌었어요. 다시 분석하면 입력이 같을 땐 기존 결과, 다르면 새 분석을 받아요.</p><Button outline className="w-full" disabled={d.ai.status === 'analyzing' || uploading} onClick={runAnalysis}>다시 분석</Button></section>}
+    {stale && <section role="status" className="space-y-2 rounded-[6px] bg-[var(--red-soft)] p-4"><p className="text-[13px] font-bold text-[var(--red)]">정보가 바뀌어 AI 질문을 다시 받아야 해요</p><p className="text-[12px] text-[var(--red)]">분석한 뒤에 상품명·설명·브랜드·카테고리·처분 사유·사진 중 하나가 바뀌었어요. 다시 분석하면 입력이 같을 땐 기존 결과, 다르면 새 분석을 받아요.</p><Button outline className="w-full" disabled={d.ai.status === 'analyzing' || uploading} onClick={runAnalysis}>다시 분석</Button></section>}
 
     <section data-field="category"><Label hint="· AI 추천 또는 직접 선택">카테고리</Label>
       {!d.category && d.ai.status === 'uncertain' && d.ai.reason && <p role="status" className="pb-1 text-[12px] text-[var(--aux)]">{d.ai.reason}</p>}

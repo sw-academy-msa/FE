@@ -44,10 +44,8 @@ test('판매 상품 등록 단일 화면 → AI 분석 적용 → 판매 심사 
   await expect(page.getByText('http:// 또는 https://로 시작하는 주소를 입력해 주세요.')).toBeVisible();
   await page.getByLabel('타 플랫폼 판매 URL').fill('https://coupang.com/vp/products/7348215906');
   await expect(page.getByText('확인됨')).toBeVisible();
-  // 원본 URL도 분석 입력이라, 분석 뒤에 채우면 이전 AI 질문은 쓸 수 없다 → 다시 분석(입력이 같으면 기존 결과)
-  await expect(page.getByText('정보가 바뀌어 AI 질문을 다시 받아야 해요')).toBeVisible();
-  await page.getByRole('button', { name: '다시 분석', exact: true }).click(); await expect(page.getByRole('heading', { name: 'AI 상품 분석' })).toBeVisible();
-  await page.getByRole('button', { name: '이 카테고리로 적용' }).click(); await expect(page.getByText('정보가 바뀌어 AI 질문을 다시 받아야 해요')).toHaveCount(0);
+  // 판매처 URL은 분석 입력이 아니라, 분석 뒤에 채워도 AI 질문과 답을 그대로 쓴다
+  await expect(page.getByText('정보가 바뀌어 AI 질문을 다시 받아야 해요')).toHaveCount(0);
   await expect(page.getByRole('textbox', { name: /AI 질문 답/ })).toHaveValue('총장 68cm, 가슴 단면 56cm');
   await page.getByLabel('한정 판매가').fill('49000');
   await expect(page.getByText('45% 저렴')).toBeVisible();

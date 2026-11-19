@@ -79,13 +79,16 @@ export interface AiAnalysis { /** 점검 기준 코드(예 CLOTHING) */ code: st
 /** AI 점검 질문. checkCode는 registration-metadata 점검 기준 항목 코드 */
 export interface AiQuestion { checkCode?: string; /** 서버 질문 id — FAQ 저장 때 그대로 보낸다 */ suggestionId?: string; question: string; reason: string }
 /** AI 분석에 쓰이는 입력. 이 중 하나라도 바뀌면 이전 분석의 질문은 쓸 수 없다(카테고리를 AI 추천값으로 바꾼 것은 예외) */
-export interface AnalysisInput { name: string; description: string; brand: string; originalUrl: string; category: string; reason: string; images: string[] }
-export const analysisInputOf = (d: Pick<Draft, 'name' | 'description' | 'brand' | 'originalUrl' | 'category' | 'reason' | 'images' | 'imageIds'>): AnalysisInput => ({ name: d.name.trim(), description: d.description.trim(), brand: d.brand.trim(), originalUrl: d.originalUrl.trim(), category: d.category, reason: d.reason.trim(), images: d.imageIds ? d.imageIds.filter(Boolean) : d.images });
+/** AI 분석 입력. 판매처 URL은 AI가 열어보지 않아 넣지 않는다(서버 분석 입력과 같다). URL만 바꿔도 다시 분석하지 않는다 */
+export interface AnalysisInput { name: string; description: string; brand: string; category: string; reason: string; images: string[] }
+export const analysisInputOf = (d: Pick<Draft, 'name' | 'description' | 'brand' | 'category' | 'reason' | 'images' | 'imageIds'>): AnalysisInput => ({ name: d.name.trim(), description: d.description.trim(), brand: d.brand.trim(), category: d.category, reason: d.reason.trim(), images: d.imageIds ? d.imageIds.filter(Boolean) : d.images });
 /** 분석 뒤에 입력이 바뀌었는지(분석 결과가 있고 당시 입력을 기억할 때만). 카테고리가 분석 때 값이거나 AI 추천값이면 바뀐 게 아니다 */
 export function analysisStale(d: Draft): boolean {
   const a = d.ai.input; if (!a || !d.ai.result) return false;
-  const now = analysisInputOf(d), { category: c0, ...rest } = a, { category: c1, ...cur } = now;
-  return JSON.stringify(rest) !== JSON.stringify(cur) || (c1 !== c0 && c1 !== d.ai.result.category);
+  // 예전에 저장된 입력에는 URL이 들어 있을 수 있어 비교할 칸만 골라 본다
+  const key = (x: AnalysisInput) => JSON.stringify([x.name, x.description, x.brand, x.reason, x.images]);
+  const now = analysisInputOf(d);
+  return key(a) !== key(now) || (now.category !== a.category && now.category !== d.ai.result.category);
 }
 /** 사업자 정보 — 사업자등록증 기준. 값이 없으면 화면에서 해당 행을 숨긴다 */
 export interface BusinessInfo { name?: string; representative?: string; registrationNumber?: string; businessType?: string; openedAt?: string; address?: string }
