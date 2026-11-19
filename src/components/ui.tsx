@@ -34,7 +34,8 @@ export function MenuRow({ label, to, children }: { label: string; to: string; ch
 const signedUrl = (u: string) => /[?&]X-Amz-(Expires|Signature)=/i.test(u);
 export function ProductImage({ src, alt, className = '' }: { src: string; alt: string; className?: string }) {
   const reported = useRef('');
-  const onError = () => { if (typeof src === 'string' && signedUrl(src) && reported.current !== src) { reported.current = src; window.dispatchEvent(new Event(IMAGE_EXPIRED)); } };
+  // 서명 주소가 만료됐거나, 이 탭에서 만든 미리보기(blob:)가 새로고침으로 사라졌으면 새 주소를 받도록 알린다
+  const onError = () => { if (typeof src === 'string' && (signedUrl(src) || src.startsWith('blob:')) && reported.current !== src) { reported.current = src; window.dispatchEvent(new Event(IMAGE_EXPIRED)); } };
   // 사진을 아직 못 받았으면 예시 상품 사진을 쓰지 않고 빈 자리만 보여 준다(내 상품 대신 다른 사진이 먼저 보이던 문제)
   if (!src) return <div role="img" aria-label={alt} className={`block rounded-[4px] bg-[var(--soft)] ${className}`}/>;
   return <img src={typeof src === 'string' && src.startsWith('/images/') ? `.${src}` : src} alt={alt} onError={onError} className={`block rounded-[4px] bg-[var(--blue-soft)] object-cover ${className}`} loading="lazy"/>;

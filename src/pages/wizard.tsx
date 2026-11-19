@@ -227,7 +227,9 @@ export function WizardPage() {
         for (const [n, f] of picked.entries()) {
           setProgress(`${n + 1}/${picked.length}장 올리는 중…`); left = picked.slice(n); started = true;
           const u = await uploadProductImage(id, f);
-          images.push(u.url || URL.createObjectURL(f)); ids.push(u.id); sizes.push(f.size); patch({ images: [...images], imageIds: [...ids], imageSizes: [...sizes] }); // 열람 URL을 못 받아도 선택한 파일로 미리보기
+          // 미리보기는 고른 파일로 바로 보여 준다(서버 열람 주소는 올린 직후 잠시 열리지 않아 회색 칸으로 보였다).
+          // 새로고침 등으로 이 미리보기가 사라지면 ProductImage가 알리고, 위 IMAGE_EXPIRED 처리에서 서버 주소로 바꾼다
+          images.push(URL.createObjectURL(f)); ids.push(u.id); sizes.push(f.size); patch({ images: [...images], imageIds: [...ids], imageSizes: [...sizes] });
         }
       }
     }
