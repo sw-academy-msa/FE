@@ -30,11 +30,12 @@ export function sellerProductFromApi(d: SellerProductDto): Product {
     shippingNotice: d.shippingNotice ?? '', rejectionReason: d.status === 'REJECTED' ? (d.reviewReason ?? '') : undefined, version: d.version, reviewStatus: d.status,
   };
 }
-/** 관리 목록 항목 → Product. 목록에는 가격·옵션·이미지가 없다(TODO(api-gap): 목록 카드의 가격·수량은 상세를 열어야 채워짐) */
+/** 관리 목록 항목 → Product. 목록에는 옵션·이미지가 없고 가격·한정 수량·판매 수량 요약만 있다 */
 export function sellerProductFromListItem(d: ProductReviewListItemDto, sellerId: string): Product {
   return {
-    id: d.id, sellerId, name: d.name, brand: '', category: '', description: '', images: [], originalUrl: '', price: 0, shipping: 0, maxPerAccount: 0, dispatchDays: 0,
+    id: d.id, sellerId, name: d.name, brand: '', category: d.category ?? '', description: '', images: [], originalUrl: '', price: d.price ?? 0, shipping: 0, maxPerAccount: 0, dispatchDays: 0,
     startsAt: ms(d.startsAt) ?? 0, endsAt: ms(d.endsAt) ?? 0, published: d.status === 'APPROVED', options: [], dimensions: [], extras: [], reason: '', faqs: [], version: d.version, reviewStatus: d.status,
+    ...(d.totalQuantity !== undefined ? { listQuantity: { total: d.totalQuantity, sold: d.soldQuantity ?? 0 } } : {}),
   };
 }
 /** 상품 문의(판매자 시점) → Inquiry. userId=구매자, 상품명은 merge가 상품에서 채운다 */
@@ -251,8 +252,10 @@ export const sameDetails = (x: ReturnType<typeof detailsOf>, p: Product) => (x.d
 
 /** 저장할 FAQ: 직접 쓴 FAQ + AI 질문 답(suggestionId, question은 AI 질문 원문). 분석 뒤 입력이 바뀌었으면 그 분석의 질문 답은 쓸 수 없어 뺀다 */
 export function faqsToSave(d: Draft): FaqInput[] {
-  const stale = analysisStale(d), old = new Set((d.ai.result?.questions ?? []).map(q => q.suggestionId));
-  return d.faqs.filter(f => f.question.trim() && f.answer.trim() && !(stale && f.suggestionId && old.has(f.suggestionId)))
+  // AI 질문 답은 지금 분석 결과의 질문에 대한 것만 보낸다(입력이 바뀌었거나 다시 분석해 없어진 질문은 서버가 거절한다)
+  const stale = analysisStale(d), current = new Set((d.ai.result?.questions ?? []).map(q => q.suggestionId ?? q.question));
+  // 분석 결과를 모르는 초안(서버에서 다시 받은 상품)은 서버에 저장된 답을 그대로 둔다
+  return d.faqs.filter(f => f.question.trim() && f.answer.trim() && !(f.suggestionId && d.ai.result && (stale || !current.has(f.suggestionId))))
     .map(f => ({ id: f.id.startsWith('faq-') ? undefined : f.id, question: f.question, answer: f.answer, ...(f.suggestionId ? { suggestionId: f.suggestionId } : {}) }));
 }
 /** 분석이 막 끝난 직후 1~2초는 FAQ 저장이 거절될 수 있다 → 1초 간격으로 2번 더(총 3번). AI 질문 답이 없으면 재시도하지 않는다 */
@@ -277,7 +280,7 @@ export async function submitListing(d: Draft, id: string): Promise<Product> {
   p = await withStage('가격·배송 저장 실패', () => savePricingShipping(id, v(), { price: d.price, shippingFee: d.shipping, dispatchBusinessDays: d.dispatchDays, perAccountLimit: d.maxPerAccount, shippingNotice: d.shippingNotice?.trim() || undefined, dispatchAddressId: d.dispatchAddressId, returnAddressId: d.returnAddressId }));
   p = await withStage('판매 일정 저장 실패', () => saveSchedule(id, v(), startIso(d)));
   const faqs = faqsToSave(d);
-  if (faqs.length) p = await withStage('FAQ 저장 실패', () => withFaqRetry(() => saveRegistrationFaqs(id, v(), faqs), faqs.some(f => f.suggestionId)));
+  if (faqs.length || d.faqs.length) p = await withStage('FAQ 저장 실패', () => withFaqRetry(() => saveRegistrationFaqs(id, v(), faqs), faqs.some(f => f.suggestionId)));
   return withStage('심사 요청 실패', () => submitReview(id, v()));
 }
 /**

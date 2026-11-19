@@ -55,15 +55,18 @@ export function AddressFormPage() {
   const valid = value.recipientName.trim() && value.recipientPhone.trim() && /^\d{5}$/.test(value.postalCode.trim()) && value.roadAddress.trim() && value.detailAddress.trim();
   function openSearch() { sessionStorage.setItem(draftKey, JSON.stringify(value)); navigate(`/address-search?returnTo=${encodeURIComponent(location.pathname + location.search)}`); }
   async function submit() {
-    if (!/^\d{5}$/.test(value.postalCode.trim())) { setError('주소 검색으로 우편번호(5자리)를 입력해 주세요.'); return; }
-    if (!valid) { setError('받는 분·연락처·주소를 입력해 주세요.'); return; }
+    // 화면 위쪽 칸부터 빠진 것을 알려 준다
+    if (!value.recipientName.trim()) { setError('받는 분 이름을 입력해 주세요.'); return; }
+    if (!value.recipientPhone.trim()) { setError('연락처를 입력해 주세요.'); return; }
+    if (!/^\d{5}$/.test(value.postalCode.trim()) || !value.roadAddress.trim()) { setError('주소 검색으로 주소를 선택해 주세요.'); return; }
+    if (!valid) { setError('상세 주소를 입력해 주세요.'); return; }
     setBusy(true);
     try {
       const { makeDefault: wantDefault, ...body } = value;
       const makeDefault = wantDefault || (isNew && !(await listAddresses()).length); // 첫 배송지는 기본 배송지
       const saved = await saveAddress(id ?? null, { ...body, label: body.label.trim() || '배송지' }, makeDefault);
       if (saved.defaultAddress || returnTo.startsWith('/checkout')) mutate(state => { state.addresses[user.id] = toAddress(saved); });
-      toast('배송지를 저장했습니다.'); navigate(returnTo, { replace: true });
+      toast('배송지를 저장했어요.'); navigate(returnTo, { replace: true });
     } catch (e) { setError(errorMessage(e)); } finally { setBusy(false); }
   }
   const input = (key: keyof AddressBody, label: string, placeholder: string, extra: Record<string, unknown> = {}) => <input aria-label={label} className="field-line" value={value[key]} placeholder={placeholder} onChange={e => set({ [key]: e.target.value } as Partial<FormValue>)} {...extra}/>;
@@ -71,6 +74,7 @@ export function AddressFormPage() {
 
   return <div className="flex min-h-[calc(100dvh-44px)] flex-col">
     <Header title={isNew ? '새 배송지 추가' : '배송지 수정'} bare/>
+    {(location.state as { reason?: string } | null)?.reason === 'checkout' && <p className="mb-4 rounded-[6px] bg-[var(--blue-soft)] p-3 text-[12px] leading-relaxed">구매하려면 배송지가 필요해요. 배송지를 저장하면 고른 수량으로 바로 재고 확보를 이어서 진행해요.</p>}
     {ready && loadError && <div className="space-y-2 py-4"><ErrorBox message={loadError}/><button type="button" onClick={() => navigate(0)} className="h-11 w-full rounded-[6px] border border-[var(--border)] text-[14px] font-bold">다시 시도</button></div>}
     {!ready && <p role="status" className="muted py-8 text-center text-[12px]">불러오는 중이에요…</p>}
     {ready && !loadError && <form className="flex flex-1 flex-col" onSubmit={e => { e.preventDefault(); void submit(); }}>
@@ -130,11 +134,12 @@ export function AddressSearchPage() {
 
   return <div className="space-y-4">
     <Header title="주소 검색" bare/>
-    <form onSubmit={e => { e.preventDefault(); run(query); }}>
+    {/* 검색 뒤에는 카카오 검색 결과 창의 검색칸을 쓴다(검색칸이 두 개 겹치지 않게). 결과가 없을 때만 우리 검색칸을 다시 보여 준다 */}
+    {(!searched || empty) && <form onSubmit={e => { e.preventDefault(); run(query); }}>
       {searched
         ? <label className="flex h-12 items-center gap-2.5 rounded-[6px] bg-[var(--soft)] px-4"><Search size={18} className="shrink-0 text-[var(--meta)]"/><input aria-label="주소 검색" value={query} onChange={e => setQuery(e.target.value)} className="min-w-0 flex-1 bg-transparent text-[15px] outline-none"/><button type="button" aria-label="검색어 지우기" onClick={() => { setQuery(''); setSearched(''); setCount(null); }}><X size={16} className="text-[var(--meta)]"/></button></label>
         : <label className="flex h-12 items-center gap-2.5 rounded-[6px] border-[1.5px] border-[var(--ink)] px-3.5"><Search size={18} className="shrink-0"/><input aria-label="주소 검색" value={query} onChange={e => setQuery(e.target.value)} placeholder="도로명, 건물명 또는 지번으로 검색" className="min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-[var(--placeholder)]" autoFocus/></label>}
-    </form>
+    </form>}
     {!searched && <button type="button" disabled={locating} onClick={async () => { setLocating(true); setGeoError(''); try { sessionStorage.setItem(PICK_KEY, JSON.stringify(await currentAddress())); navigate(returnTo, { replace: true }); } catch (e) { setGeoError((e as Error).message); } finally { setLocating(false); } }} className="flex h-11 w-full items-center justify-center gap-2 rounded-[6px] border border-[var(--border)] text-[14px] font-bold disabled:opacity-60"><LocateFixed size={16}/>{locating ? '현재 위치를 찾는 중…' : '현재 위치로 주소 찾기'}</button>}
     {!searched && <ErrorBox message={geoError}/>}
     {searched && <div ref={frame} aria-label="주소 검색 결과" className={empty ? 'hidden' : 'h-[calc(100dvh-150px)] w-full'}/>}

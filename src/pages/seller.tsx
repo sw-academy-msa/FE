@@ -4,11 +4,11 @@ import { BankField } from '../components/BankField';
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Plus, Check, ChevronRight, FileText, Info, Rocket, ScanSearch, Share2, Truck } from 'lucide-react';
-import { activeUser, feeFor, markDelivered, money, nowOf, parseRejection, saleState, uid } from '../domain';
+import { activeUser, feeFor, formatPhone, markDelivered, maskName, money, nowOf, orderNo, parseRejection, saleState, uid } from '../domain';
 import type { Order, Product, SellerSettings } from '../domain';
 import { atomic, mutate, useStore } from '../store';
 import { endSession } from '../auth';
-import { dateTime, kstShort, kstSlot, useClock } from '../hooks';
+import { addBusinessDays, dateTime, kstDay, kstShort, kstSlot, openDay, useClock } from '../hooks';
 import { Badge, Button, CopyButton, copyText, Toggle, Empty, ErrorBox, Field, Header, InfoRow, LiveStatus, MenuRow, Modal, Note, ORDER_LABELS, ProductImage, ProductSummary, Unavailable, useToast } from '../components/ui';
 import { PdfField } from '../components/PdfField';
 import { AddressBookFormPage, AddressBookPage } from './sellerAddresses';
@@ -31,8 +31,13 @@ export function SellerProductsPage() {
     const rows = await Promise.all(editable.split(',').map(async id => [id, (await listRevisions(id, signal).catch(() => [] as ProductRevisionDto[])).sort((a, b) => Date.parse(b.submittedAt) - Date.parse(a.submittedAt))[0]] as const));
     return Object.fromEntries(rows.filter(([, r]) => r));
   }, [editable]);
-  if (!user.seller) return <Unavailable/>; const settings = s.sellerSettings[user.id]; const allProducts = s.products.filter(p => p.sellerId === user.id); const products = allProducts.filter(p => tab === '전체' || (tab === '판매 심사 중' ? p.reviewStatus === 'IN_REVIEW' : saleState(p, now) === tab)); const thisMonth = summary.data?.confirmedQuantity ?? s.orders.filter(o => o.sellerId === user.id && !['cancelled','refunded'].includes(o.status)).reduce((n, o) => n + o.lines.reduce((a, l) => a + l.quantity, 0), 0); const alarmCount = 226; /* TODO(api-gap): 알림 신청 인원 API 없음(목업) */ const soldOutCount = allProducts.filter(p => saleState(p, now) === '판매 종료').length;
-  const chips: [string, number][] = [['전체', allProducts.length], ['판매 중', allProducts.filter(p => saleState(p, now) === '판매 중').length], ['판매 예정', allProducts.filter(p => saleState(p, now) === '판매 예정').length], ['판매 심사 중', allProducts.filter(p => p.reviewStatus === 'IN_REVIEW').length], ['판매 종료', soldOutCount]];
+  // 한정·판매 수량: 서버 목록 요약(listQuantity)이 있으면 그 값, 없으면 옵션 합계와 이 기기의 주문으로 센다
+  const qtyOf = (p: Product) => { const localSold = s.orders.filter(o => o.productId === p.id && !['cancelled','refunded'].includes(o.status)).reduce((n, o) => n + o.lines.reduce((a, l) => a + l.quantity, 0), 0);
+    return p.listQuantity ? { total: p.listQuantity.total, sold: Math.max(p.listQuantity.sold, localSold) } : { total: p.options.reduce((n, o) => n + o.stock, 0), sold: localSold }; };
+  if (!user.seller) return <Unavailable/>; const settings = s.sellerSettings[user.id]; const allProducts = s.products.filter(p => p.sellerId === user.id); const products = allProducts.filter(p => tab === '전체' || (tab === '판매 심사 중' ? p.reviewStatus === 'IN_REVIEW' : saleState(p, now) === tab)); const thisMonth = summary.data?.confirmedQuantity ?? s.orders.filter(o => o.sellerId === user.id && !['cancelled','refunded'].includes(o.status)).reduce((n, o) => n + o.lines.reduce((a, l) => a + l.quantity, 0), 0); const alarmCount = 226; /* TODO(api-gap): 알림 신청 인원 API 없음(목업) */ const endedCount = allProducts.filter(p => saleState(p, now) === '판매 종료').length;
+  // 완판: 한정 수량을 모두 판 종료 상품(목록 요약의 판매 수량 기준)
+  const soldOutCount = allProducts.filter(p => { const q = qtyOf(p); return saleState(p, now) === '판매 종료' && q.total > 0 && q.sold >= q.total; }).length;
+  const chips: [string, number][] = [['전체', allProducts.length], ['판매 중', allProducts.filter(p => saleState(p, now) === '판매 중').length], ['판매 예정', allProducts.filter(p => saleState(p, now) === '판매 예정').length], ['판매 심사 중', allProducts.filter(p => p.reviewStatus === 'IN_REVIEW').length], ['판매 종료', endedCount]];
   return <div className="space-y-0">
     <Header title="판매 상품 관리" backTo="/my" action={<Link to="/seller/new" aria-label="상품 등록"><Plus size={22}/></Link>}/>
     <div className="flex items-center justify-between py-3"><span className="text-[13px] font-bold">{settings?.displayName ?? user.name}</span><span className="muted text-[12px]">{new Date(now).getMonth()+1}월 기준</span></div>
@@ -40,7 +45,7 @@ export function SellerProductsPage() {
     <div className="mb-4 flex justify-around rounded-[4px] bg-[var(--canvas)] py-4">{([['이번 달 판매', `${thisMonth}개`], ...(USE_MOCK ? [['알림 신청', `${alarmCount}명`]] : []), ['완판', `${soldOutCount}건`]] as [string,string][]).map(([label, value]) => <div key={label} className="text-center"><p className="font-number text-[16px] font-bold">{value}</p><p className="muted mt-1 text-[11px]">{label}</p></div>)}</div>
     <div className="-mx-4 mb-2 flex gap-1.5 overflow-x-auto px-4">{chips.map(([label, count]) => <button key={label} onClick={() => setParams(label === '전체' ? {} : { state: label }, { replace: true })} className={`h-[30px] shrink-0 rounded-[4px] px-2.5 text-[12px] ${tab === label ? 'bg-[var(--ink)] font-bold text-[var(--surface)]' : 'muted bg-[var(--soft)]'}`}>{label} {count}</button>)}</div>
     {products.map(p => {
-      const status = saleState(p, now); const sold = s.orders.filter(o => o.productId === p.id && !['cancelled','refunded'].includes(o.status)).reduce((n, o) => n + o.lines.reduce((a, l) => a + l.quantity, 0), 0); const total = p.options.reduce((n, o) => n + o.stock, 0); const remaining = Math.max(0, total - sold); const isLive = status === '판매 중', ended = status === '판매 종료'; const secondsLeft = Math.max(0, Math.floor((p.endsAt - now) / 1000)); const hh = String(Math.floor(secondsLeft/3600)).padStart(2,'0'), mm = String(Math.floor(secondsLeft%3600/60)).padStart(2,'0'), ss = String(secondsLeft%60).padStart(2,'0');
+      const status = saleState(p, now); const { total, sold } = qtyOf(p); const remaining = Math.max(0, total - sold); const isLive = status === '판매 중', ended = status === '판매 종료'; const secondsLeft = Math.max(0, Math.floor((p.endsAt - now) / 1000)); const hh = String(Math.floor(secondsLeft/3600)).padStart(2,'0'), mm = String(Math.floor(secondsLeft%3600/60)).padStart(2,'0'), ss = String(secondsLeft%60).padStart(2,'0');
       return <div key={p.id} className="divider space-y-3 py-4">
         <div className="flex gap-3">
           <ProductImage src={p.images[0]} alt={p.name} className="h-[72px] w-[72px] shrink-0"/>
@@ -51,13 +56,13 @@ export function SellerProductsPage() {
           </div>
         </div>
         {isLive && <><div className="flex items-center justify-between text-[12px]"><span className="font-bold">{sold} / {total}개 판매</span><span className="muted">{hh}:{mm}:{ss} 남음</span></div><div className="h-1 w-full rounded-full bg-[var(--line)]"><div className="h-1 rounded-full bg-[var(--ink)]" style={{width: total > 0 ? `${(sold/total)*100}%` : '0%'}}/></div></>}
-        {ended && <><div className="flex items-center justify-between text-[12px]"><span className="font-bold">{sold} / {total}개 판매</span><span className="muted">{sold >= total ? '완판' : '판매 종료'}</span></div><div className="h-1 w-full rounded-full bg-[var(--line)]"><div className="h-1 rounded-full bg-[var(--muted)]" style={{width: total > 0 ? `${Math.min(100, sold/total*100)}%` : '0%'}}/></div></>}
-        {status === '판매 예정' && <p className="muted text-[12px]">D-{Math.max(0, Math.ceil((p.startsAt - now)/86400000))}{USE_MOCK && ` · 알림 신청 ${alarmCount}명`}</p>}
+        {ended && <><div className="flex items-center justify-between text-[12px]"><span className="font-bold">{sold} / {total}개 판매</span><span className="muted">{total > 0 && sold >= total ? '완판' : '판매 종료'}</span></div><div className="h-1 w-full rounded-full bg-[var(--line)]"><div className="h-1 rounded-full bg-[var(--muted)]" style={{width: total > 0 ? `${Math.min(100, sold/total*100)}%` : '0%'}}/></div></>}
+        {status === '판매 예정' && <p className="muted text-[12px]">{openDay(p.startsAt, now)}{USE_MOCK && ` · 알림 신청 ${alarmCount}명`}</p>}
         {isLive || ended ? <Link to={`/seller/product/${p.id}`} className="btn btn-outline w-full text-[13px]!">{isLive ? '판매 현황' : '판매 결과'}</Link> : status === '판매 예정' && <Link to={`/seller/new?edit=${p.id}`} className="btn btn-outline w-full text-[13px]!">판매 정보 수정</Link>}
         {status === '게시 전' && (p.reviewStatus === 'IN_REVIEW' ? <Link to={`/seller/published/${p.id}`} className="btn btn-outline w-full text-[13px]!">심사 상태 보기</Link> : p.reviewStatus === 'REJECTED' && !USE_MOCK ? <RejectedActions p={p}/> : <Link to={`/seller/new?edit=${p.id}`} className="btn btn-outline w-full text-[13px]!">{p.reviewStatus === 'REJECTED' ? '수정하고 다시 요청' : '이어서 등록'}</Link>)}
       </div>;
     })}
-    {!products.length && !live.loading && <Empty title="등록한 상품이 없어요"/>}
+    {!products.length && !live.loading && <Empty title={tab === '전체' ? '등록한 상품이 없어요' : `${tab} 상품이 없어요`}/>}
     <Link className="btn mt-6 w-full" to="/seller/new"><Plus size={17}/>새 한정 판매 등록</Link>
   </div>;
 }
@@ -346,18 +351,18 @@ export function SellerOrdersPage() {
     <LiveStatus state={live}/>
     <div className="mb-2 flex flex-wrap gap-2 py-2">{Object.entries(counts).map(([label, count]) => <button key={label} onClick={() => setTab(label)} className={`rounded-full px-3 py-1 text-[13px] font-bold ${tab === label ? 'bg-[var(--ink)] text-[var(--surface)]' : 'muted border border-[var(--line)] bg-[var(--surface)]'}`}>{label} {count}</button>)}</div>
     {orders.map(o => {
-      const statusLabel = ORDER_LABELS[o.status]; const needsAction = o.status === 'paid'; const time = dateTime(o.createdAt);
+      const statusLabel = ORDER_LABELS[o.status]; const needsAction = o.status === 'paid'; const time = kstShort(o.paidAt ?? o.createdAt);
       return <Link to={`/seller/orders/${o.id}`} key={o.id} className="divider block space-y-3 py-5">
         <div className="flex items-center justify-between gap-2">
           <span className={`rounded-[3px] px-2 py-0.5 text-[11px] font-bold ${needsAction ? 'bg-[var(--ink)] text-[var(--surface)]' : o.status === 'delivered' ? 'bg-[#EEF8F3] text-[#3FB181]' : 'bg-[var(--soft)] text-[var(--muted)]'}`}>{statusLabel}</span>
-          <span className="muted truncate text-[12px]">{o.id}</span>
-          <span className="muted shrink-0 text-[12px]">{time.split(' ')[1] ?? time}</span>
+          <span className="muted truncate text-[12px]">주문번호 {orderNo(o.id)}</span>
+          <span className="muted shrink-0 text-[12px]">{time}</span>
         </div>
         <div className="flex gap-3">
           <ProductImage src={o.product.image} alt={o.product.name} className="h-[56px] w-[56px] shrink-0"/>
           <div className="min-w-0 flex-1 space-y-1">
             <p className="text-[14px]">{o.product.name}</p>
-            <p className="muted text-[12px]">{o.lines.map(l => `${l.name} · ${l.quantity}개`).join(' · ')} · {o.address.name.replace(/^(.)(.)(.)$/, '$1*$3').replace(/^(.).+(.)$/, (_, a, z) => `${a}*${z}`)}</p>
+            <p className="muted text-[12px]">{[...o.lines.map(l => `${l.name} · ${l.quantity}개`), maskName(o.address.name)].filter(Boolean).join(' · ')}</p>
             <p className="font-number text-[14px] font-bold">{money(o.total)}</p>
           </div>
           <span className="muted self-center">›</span>
@@ -373,24 +378,26 @@ export function SellerOrderPage() {
   const live = useLive(async signal => (id && user.seller ? { o: await getSellerOrder(id, user.id, signal), qs: await listSellerOrderInquiries(id, user.id, signal) } : null), (st, r) => { if (r) { mergeOrders(st, [r.o]); mergeInquiries(st, r.qs); } }, [id]);
   if (!user.seller) return <Unavailable message="판매자 주문을 찾을 수 없습니다."/>;
   if (!order) return live.loading || live.error ? <LiveStatus state={live}/> : <Unavailable message="판매자 주문을 찾을 수 없습니다."/>;
-  const o = order; const paidAt = new Date(o.createdAt); const dueDate = new Date(paidAt); dueDate.setDate(dueDate.getDate() + 2); const dueDateStr = `${dueDate.getMonth()+1}.${String(dueDate.getDate()).padStart(2,'0')} (${['일','월','화','수','목','금','토'][dueDate.getDay()]})`;
+  // 출고 기한은 상품에 설정한 영업일(토·일 제외)로 계산한다
+  const o = order; const paidAt = o.paidAt ?? o.createdAt; const dueStr = o.dispatchDays ? `결제 후 ${o.dispatchDays}영업일 이내 출고 · ${kstDay(addBusinessDays(paidAt, o.dispatchDays))}까지` : '';
+  const dispatchFrom = s.sellerSettings[user.id]?.shippingAddress || (USE_MOCK ? '성수 물류창고' : ''); const doneAt = o.deliveredAt ?? o.processedAt;
   const needsTracking = ['paid', 'preparing'].includes(o.status); const orderInquiries = s.inquiries.filter(q => q.orderId === o.id && q.sellerId === user.id);
   return <div className="space-y-5">
-    <Header title="주문 상세" subtitle={`${o.id} · ${new Date(o.createdAt).getMonth()+1}.${String(new Date(o.createdAt).getDate()).padStart(2,'0')} ${String(new Date(o.createdAt).getHours()).padStart(2,'0')}:${String(new Date(o.createdAt).getMinutes()).padStart(2,'0')} 결제`}/>
-    {needsTracking ? <><h1 className="text-[24px] font-bold tracking-[-.7px]">송장을 등록해 주세요</h1><p className="text-[13px] text-[#7B7B7B]">결제 후 2영업일 이내 출고 · {dueDateStr}까지</p></> : <h1 className="text-[24px] font-bold tracking-[-.7px]">{o.status === 'shipping' ? '상품이 배송 중이에요' : o.status === 'delivered' ? '배송이 완료됐어요' : ORDER_LABELS[o.status]}</h1>}
+    <Header title="주문 상세" subtitle={`주문번호 ${orderNo(o.id)} · ${kstShort(paidAt)} 결제`}/>
+    {needsTracking ? <><h1 className="text-[24px] font-bold tracking-[-.7px]">송장을 등록해 주세요</h1>{dueStr && <p className="text-[13px] text-[#7B7B7B]">{dueStr}</p>}</> : <h1 className="text-[24px] font-bold tracking-[-.7px]">{o.status === 'shipping' ? '상품이 배송 중이에요' : o.status === 'delivered' ? '배송이 완료됐어요' : ORDER_LABELS[o.status]}</h1>}
     <div className="flex gap-3 rounded-[4px] bg-[var(--canvas)] p-4">
       <ProductImage src={o.product.image} alt={o.product.name} className="h-[64px] w-[64px] shrink-0"/>
       <div className="min-w-0 flex-1 space-y-1"><p className="muted text-[11px] font-bold">{o.product.brand}</p><p className="text-[14px]">{o.product.name}</p><p className="muted text-[12px]">{o.lines.map(l => l.name).join(' / ')} / {o.lines.reduce((n,l)=>n+l.quantity,0)}개</p></div>
     </div>
     <section className="divider space-y-2 pb-4"><h2 className="text-[15px] font-bold">주문 및 결제 정보</h2><InfoRow label="상품금액" value={money(o.total - o.shipping)}/><InfoRow label="고정 배송비" value={money(o.shipping)}/><InfoRow label="최종 결제금액" value={<span className="font-bold">{money(o.total)}</span>}/></section>
-    <section className="divider space-y-2 pb-4"><h2 className="text-[15px] font-bold">배송지</h2><p className="text-[12px]">{o.address.name} · {o.address.phone}</p><p className="muted text-[12px] leading-relaxed">{o.address.address} {o.address.detail}<br/>{o.address.request}</p></section>
-    <section className="divider space-y-2 pb-4"><h2 className="text-[15px] font-bold">배송 처리</h2><InfoRow label="출고지" value={s.sellerSettings[user.id]?.shippingAddress || (USE_MOCK ? '성수 물류창고' : '-')}/><InfoRow label="택배사" value={o.carrier || <span className="text-[var(--muted)]">미등록</span>}/><InfoRow label="운송장 번호" value={o.tracking ? <span className="inline-flex items-center gap-1">{o.tracking}<CopyButton value={o.tracking}/></span> : <span className="text-[var(--muted)]">미등록</span>}/></section>
+    <section className="divider space-y-2 pb-4"><h2 className="text-[15px] font-bold">배송지</h2><p className="text-[12px]">{o.address.name} · {formatPhone(o.address.phone)}</p><p className="muted text-[12px] leading-relaxed">{o.address.address} {o.address.detail}<br/>{o.address.request}</p></section>
+    <section className="divider space-y-2 pb-4"><h2 className="text-[15px] font-bold">배송 처리</h2>{dispatchFrom && <InfoRow label="출고지" value={dispatchFrom}/>}<InfoRow label="택배사" value={o.carrier || <span className="text-[var(--muted)]">미등록</span>}/><InfoRow label="운송장 번호" value={o.tracking ? <span className="inline-flex items-center gap-1">{o.tracking}<CopyButton value={o.tracking}/></span> : <span className="text-[var(--muted)]">미등록</span>}/></section>
     <Note>송장을 등록하면 구매자에게 배송 중으로 안내돼요. 판매자의 수동 배송완료 처리는 구매확정이나 정산 송금을 의미하지 않습니다.</Note>
     {orderInquiries.length > 0 && <Link to={`/seller/inquiries/${orderInquiries[0].id}`} className="flex items-center gap-3 rounded-[4px] border border-[var(--line)] p-4"><div className="flex-1 space-y-1"><p className="text-[13px] font-bold">이 주문의 문의</p><p className="muted text-[12px]">{orderInquiries[0].kind} 문의 {orderInquiries.length}건</p></div>{orderInquiries.some(q => !q.answer) && <span className="rounded-[3px] bg-[var(--red-soft)] px-2 py-0.5 text-[11px] font-bold text-[var(--red)]">미답변 {orderInquiries.filter(q => !q.answer).length}</span>}<ChevronRight size={16} className="muted"/></Link>}
-    <section className="divider space-y-3 py-3"><h2 className="text-[15px] font-bold">배송 진행 내역</h2>{o.processedAt && <InfoRow label={dateTime(o.processedAt)} value="배송완료 · 판매자 수동 등록"/>}{o.shippedAt && <InfoRow label={dateTime(o.shippedAt)} value="운송장 등록 · 배송 중"/>}<InfoRow label={dateTime(o.createdAt)} value="결제 완료"/></section>
+    <section className="divider space-y-3 py-3"><h2 className="text-[15px] font-bold">배송 진행 내역</h2>{doneAt && <InfoRow label={dateTime(doneAt)} value="배송완료 · 판매자 처리"/>}{o.shippedAt && <InfoRow label={dateTime(o.shippedAt)} value="운송장 등록 · 배송 중"/>}<InfoRow label={dateTime(paidAt)} value="결제 완료"/></section>
     <ErrorBox message={error}/>
     <div className="flex gap-2">
-      {o.status === 'shipping' ? <><Button outline className="flex-[1]" onClick={() => setConfirm(true)}>배송완료 확인</Button><Button className="flex-[2]" onClick={() => setShowTracking(true)}>송장 등록</Button></> : needsTracking ? <><Button outline className="flex-[1]" onClick={() => setConfirm(true)} disabled>배송완료</Button><Button className="flex-[2]" onClick={() => setShowTracking(true)}>송장 등록</Button></> : <Button className="w-full" disabled>{ORDER_LABELS[o.status]}</Button>}
+      {o.status === 'shipping' ? <Button className="w-full" onClick={() => setConfirm(true)}>배송완료 확인</Button> : needsTracking ? <><Button outline className="flex-[1]" onClick={() => setConfirm(true)} disabled>배송완료</Button><Button className="flex-[2]" onClick={() => setShowTracking(true)}>송장 등록</Button></> : <Button className="w-full" disabled>{ORDER_LABELS[o.status]}</Button>}
     </div>
     {showTracking && <TrackingModal order={o} onClose={() => setShowTracking(false)} onSaved={() => { setShowTracking(false); toast('운송장을 등록했습니다.'); }}/>}
     {confirm && <DeliveredModal order={o} now={now} onClose={() => setConfirm(false)}/>}
@@ -400,18 +407,18 @@ function TrackingModal({ order, onClose, onSaved }: { order: Order; onClose: () 
   const [carrier, setCarrier] = useState(order.carrier || 'CJ대한통운'), [tracking, setTracking] = useState(order.tracking || ''), [error, setError] = useState(''), [busy, setBusy] = useState(false);
   return <Modal title="송장 등록" onClose={onClose}><div className="space-y-4">
     <div className="rounded-[4px] bg-[var(--canvas)] p-3 space-y-1">
-      <p className="muted text-[11px] font-bold">{order.id} · {order.address.name.replace(/^(.)(.)(.)$/, '$1*$3').replace(/^(.).+(.)$/, (_,a,z) => `${a}*${z}`)}</p>
+      <p className="muted text-[11px] font-bold">{[`주문번호 ${orderNo(order.id)}`, maskName(order.address.name)].filter(Boolean).join(' · ')}</p>
       <p className="text-[14px]">{order.product.name} · {order.lines.reduce((n,l)=>n+l.quantity,0)}개</p>
-      <p className="muted text-[12px]">{order.lines.map(l=>l.name).join(' / ')} · 출고지 {order.product.brand}</p>
+      <p className="muted text-[12px]">{order.lines.map(l=>l.name).join(' / ')}</p>
     </div>
     <Field label="택배사" required><select aria-label="택배사" value={carrier} onChange={e => setCarrier(e.target.value)} className="field">{['CJ대한통운','한진택배','롯데택배','우체국택배'].map(c => <option key={c}>{c}</option>)}</select></Field>
-    <Field label="운송장 번호" required><input aria-label="운송장 번호" inputMode="numeric" value={tracking} onChange={e => { setTracking(e.target.value); setError(''); }} className="field" placeholder="숫자만 입력"/></Field>
+    <Field label="운송장 번호" required><input aria-label="운송장 번호" inputMode="numeric" value={tracking} onChange={e => { setTracking(e.target.value.replace(/\s/g, '')); setError(''); }} className="field" placeholder="송장 번호"/></Field>
     {error && <p className="text-[12px] text-[#EF6253]">{error} 입력한 내용은 그대로 유지돼요.</p>}
-    <Note>'-' 없이 숫자만 입력해 주세요. 등록하면 구매자에게 배송 시작 알림이 발송돼요.</Note>
+    <Note>송장에 적힌 번호를 그대로 입력해 주세요(영문, 숫자, 하이픈). 등록하면 구매자에게 배송 시작 알림이 발송돼요.</Note>
     <ErrorBox message=""/>
     <div className="flex gap-2"><Button outline className="flex-1" disabled={busy} onClick={onClose}>취소</Button><Button className="flex-1" disabled={busy || !tracking.trim()} onClick={async () => { setError(''); setBusy(true); try {
     if (!USE_MOCK) { // 출고용 원본(fulfillment) version으로 송장 등록. 송장은 영문·숫자·하이픈 1~100자
-      if (!/^[A-Za-z0-9-]{1,100}$/.test(tracking.trim())) throw new Error('운송장 번호를 확인해 주세요.');
+      if (!/^[A-Za-z0-9-]{1,100}$/.test(tracking.trim())) throw new Error('운송장 번호는 영문, 숫자, 하이픈(-)만 쓸 수 있어요. 송장에 적힌 번호를 확인해 주세요.');
       const updated = await shipOrder(order.id, order.sellerId, carrier, tracking.trim()); mutate(st => mergeOrders(st, [updated])); onSaved(); return;
     }
     if (!/^\d[\d-]{7,}$/.test(tracking.trim())) throw new Error('운송장 번호를 확인해 주세요.'); await atomic(state => { const item = state.orders.find(item => item.id === order.id && item.sellerId === state.activeUserId); if (!item || !['paid','preparing'].includes(item.status)) throw new Error('출고 가능한 주문이 아닙니다.'); item.carrier = carrier; item.tracking = tracking.trim(); item.shippedAt = nowOf(state); item.status = 'shipping'; }); onSaved(); } catch (e) { setError((e as Error).message); } finally { setBusy(false); } }}>등록하기</Button></div>
@@ -423,7 +430,7 @@ function DeliveredModal({ order, now, onClose }: { order: Order; now: number; on
     <h2 className="text-[17px] font-bold tracking-[-.4px]">배송완료로 처리할까요?</h2>
     <p className="text-[13px] text-[#7B7B7B]">처리하면 구매자에게 배송 완료로 안내돼요.</p>
     <div className="rounded-[4px] bg-[var(--canvas)] p-3 space-y-1">
-      <p className="muted text-[12px] font-bold">{order.id} · {order.address.name.replace(/^(.)(.)(.)$/, '$1*$3').replace(/^(.).+(.)$/, (_,a,z) => `${a}*${z}`)}</p>
+      <p className="muted text-[12px] font-bold">{[`주문번호 ${orderNo(order.id)}`, maskName(order.address.name)].filter(Boolean).join(' · ')}</p>
       <p className="text-[13px]">{order.product.name} · {order.lines.map(l=>l.name).join(' / ')} / {order.lines.reduce((n,l)=>n+l.quantity,0)}개</p>
       {order.tracking && <p className="muted text-[12px]">{order.carrier} {order.tracking}</p>}
     </div>
@@ -439,13 +446,18 @@ function DeliveredModal({ order, now, onClose }: { order: Order; now: number; on
 /** 판매자 권한이 있는 사용자의 마이페이지 — 판매 관리와 구매 메뉴를 한 화면에 둔다(모드 전환 없음). 권한이 없으면 MyPage */
 export function SellerMyPage() {
   const s = useStore(), user = activeUser(s);
+  // 수치는 서버 집계로 보여 준다(다른 화면에서 받아 둔 일부 데이터로 세면 볼 때마다 달라진다). 받기 전에는 '-'
+  const month = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit' }).format(Date.now());
+  const sales = useApi(async signal => (USE_MOCK || !user.seller ? null : getSalesSummary(month, signal)), [user.id, month]);
   if (!user.seller) return <Unavailable/>;
   const settings = s.sellerSettings[user.id];
   const displayName = settings?.displayName ?? user.name;
   const initial = displayName.charAt(0).toUpperCase();
   const products = s.products.filter(p => p.sellerId === user.id);
-  const activeDrops = products.filter(p => saleState(p, Date.now()) === '판매 중' || saleState(p, Date.now()) === '판매 예정').length;
+  const sd = sales.data, ready = USE_MOCK || !!sd;
+  const activeDrops = sd ? sd.onSaleCount + sd.scheduledCount : products.filter(p => saleState(p, Date.now()) === '판매 중' || saleState(p, Date.now()) === '판매 예정').length;
   const settlement = s.orders.filter(o => o.sellerId === user.id && !['cancelled','refunded'].includes(o.status)).reduce((n, o) => n + o.total - o.shipping, 0);
+  const productCount = sd ? sd.productCount : products.length;
   const unanswered = s.inquiries.filter(q => q.sellerId === user.id && !q.answer).length;
   const maskedBank = USE_MOCK ? (settings?.account ? `국민 ****${settings.account.slice(-4)}` : '국민 ****1024') : settings?.account ? `${settings.bank} ${settings.account}`.trim() : '';
   return (
@@ -463,7 +475,7 @@ export function SellerMyPage() {
         <ChevronRight size={17} className="muted shrink-0"/>
       </Link>
       <div className="mb-4 flex rounded-[4px] bg-[var(--canvas)]">
-        {([['진행 중 드롭', `${activeDrops}건`, '/seller/products'], ['이번 달 정산 예정', money(settlement), '/seller/settings/bank'], ['미답변 문의', `${unanswered}건`, '/seller/inquiries', unanswered > 0]] as [string, string, string, boolean?][]).map(([label, value, to, red], i) => (
+        {([['진행 중 드롭', ready ? `${activeDrops}건` : '-', '/seller/products'], USE_MOCK ? ['이번 달 정산 예정', money(settlement), '/seller/settings/bank'] : ['이번 달 판매', sd ? `${sd.confirmedQuantity}개` : '-', '/seller/products'], ['미답변 문의', `${unanswered}건`, '/seller/inquiries', unanswered > 0]] as [string, string, string, boolean?][]).map(([label, value, to, red], i) => (
           <Link key={label} to={to} className={`flex flex-1 flex-col items-center gap-1 py-4 ${i > 0 ? 'border-l border-[var(--line)]' : ''}`}>
             <span className={`font-number text-[15px] font-bold ${red ? 'text-[var(--red)]' : ''}`}>{value}</span>
             <span className="muted text-[11px]">{label}</span>
@@ -472,7 +484,7 @@ export function SellerMyPage() {
       </div>
       <section className="mb-4">
         <p className="muted mb-2 text-[13px] font-bold">판매 관리</p>
-        <MenuRow to="/seller/products" label="판매 상품 관리"><span className="muted mr-1 text-[12px]">{products.length}개</span></MenuRow>
+        <MenuRow to="/seller/products" label="판매 상품 관리"><span className="muted mr-1 text-[12px]">{ready ? `${productCount}개` : '-'}</span></MenuRow>
         <MenuRow to="/seller/products?state=판매 중" label="판매 현황"/>
         <MenuRow to="/seller/orders" label="주문 관리"/>
         <MenuRow to="/seller/inquiries" label="문의 답변"><span className={`mr-1 text-[12px] ${unanswered > 0 ? 'text-[var(--red)]' : 'muted'}`}>{unanswered > 0 ? `${unanswered}건 대기` : ''}</span></MenuRow>
@@ -516,7 +528,7 @@ export function SellerSettingsPage() {
   // 실제 모드: 서버의 판매자 정보를 폼에 채운다(mock은 store 값 그대로)
   const me = useApi(async signal => (USE_MOCK ? null : fetchSellerMe(original, signal)), []);
   useEffect(() => { if (me.data) { setForm(me.data.settings); setPhone(me.data.contactPhone); setEmail(me.data.contactEmail); } }, [me.data]);
-  useEffect(() => { if (me.error) setError(me.error); }, [me.error]);
+
   // 스토어 소개·로고(계정 설정 화면)
   const store = useApi(async signal => (USE_MOCK || section !== 'account' ? null : fetchSellerStore(signal)), [section]);
   const [intro, setIntro] = useState(''), [logoUrl, setLogoUrl] = useState(''), [logoTick, setLogoTick] = useState(0);
@@ -534,6 +546,8 @@ export function SellerSettingsPage() {
   async function removeLogo() { setError(''); try { await deleteSellerLogo(); store.reload(); toast('로고를 삭제했습니다.'); } catch (e) { setError(errorMessage(e)); } }
 
   if (!user.seller) return <Unavailable/>;
+  // 판매자 정보 조회 실패: 화면마다 위쪽에 다시 시도를 보여 준다(저장 오류와 구분)
+  const loadFail = me.error ? <div className="flex items-center justify-between gap-3 rounded-[6px] bg-[var(--red-soft)] p-3 text-[12px] text-[var(--red)]"><span>판매자 정보를 불러오지 못했어요.</span><button type="button" className="shrink-0 font-bold underline" onClick={me.reload}>다시 시도</button></div> : null;
   // 실제 모드: 출고지·반품지는 판매자 주소록 API로 조회·추가·수정·삭제·기본 지정(mock은 아래 Figma 목업 화면)
   if (!USE_MOCK && section === 'addresses') return <AddressBookPage/>;
   if (!USE_MOCK && (section === 'ship-edit' || section === 'returns')) return <AddressBookFormPage fallback={section === 'returns' ? 'RETURN' : 'DISPATCH'}/>;
@@ -566,15 +580,16 @@ export function SellerSettingsPage() {
   if (section === 'business') return (
     <form className="space-y-5" onSubmit={handleSubmit}>
       <Header title="사업자 서류 · 담당자 정보"/>
+      {loadFail}
       <section className="space-y-4">
         <h2 className="text-[13px] font-bold text-[var(--muted)]">사업자 서류</h2>
         <div className="divider flex items-center gap-3 pb-4">
           <div className="grid h-10 w-10 shrink-0 place-items-center rounded-[6px] bg-[var(--canvas)]"><FileText size={18} className="muted"/></div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2"><span className="text-[14px] font-bold">사업자등록증</span><span className="rounded-[3px] bg-[var(--green-soft)] px-1.5 py-0.5 text-[10px] font-bold text-[var(--green)]">확인 완료</span></div>
-            <p className="muted mt-0.5 text-[12px]">lomfield_biz.pdf · 2026.05.02 업로드</p>
+            <p className="muted mt-0.5 text-[12px]">{USE_MOCK ? 'lomfield_biz.pdf · 2026.05.02 업로드' : '입점 신청 때 제출한 PDF'}</p>
           </div>
-          <button type="button" className="h-8 shrink-0 rounded-[4px] border border-[var(--line)] px-2.5 text-[12px] font-bold">보기</button>
+          {USE_MOCK && <button type="button" className="h-8 shrink-0 rounded-[4px] border border-[var(--line)] px-2.5 text-[12px] font-bold">보기</button>}
         </div>
         {/* TODO(api-gap): 상호·대표자·등록번호·업태는 서버 응답에 없어 mock 표시 유지 */}
         {form.business && <div className="space-y-1.5 px-2 text-[12px]">
@@ -602,6 +617,7 @@ export function SellerSettingsPage() {
     <form className="space-y-5" onSubmit={handleSubmit}>
       <Header title="정산 계좌 관리"/>
       <h2 className="text-[13px] font-bold text-[var(--muted)]">현재 정산 계좌</h2>
+      {loadFail}
       <section className="rounded-[8px] bg-[var(--canvas)] p-5">
         <div>
           <div className="flex items-center justify-between"><p className="muted text-[13px]">{USE_MOCK ? form.bank || 'KB국민은행' : me.data?.settings.bank || '-'}</p>{USE_MOCK && <span className="flex items-center gap-1 rounded-[3px] bg-[var(--surface)] px-2 py-0.5 text-[10px] font-bold text-[var(--green)]"><Check size={11}/>인증 완료</span>}</div>
@@ -620,9 +636,9 @@ export function SellerSettingsPage() {
       <Field label="은행" required><BankField label="은행" value={form.bank || ''} onChange={v => change('bank', v)}/></Field>
       <Field label="계좌번호" required><input aria-label="계좌번호" className="field-line" inputMode="numeric" value={form.account ?? ''} onChange={e => change('account', e.target.value)} placeholder="'-' 없이 숫자만 입력"/></Field>
       <Field label="예금주" hint="사업자등록증의 상호 또는 대표자명과 같아야 해요"><input aria-label="예금주" className="field-line" value={form.holder ?? ''} onChange={e => change('holder', e.target.value)}/></Field>
-      <div className="flex gap-2 rounded-[6px] bg-[var(--canvas)] p-4 text-[12px] text-[#7B7B7B]"><Info size={15} className="mt-px shrink-0"/><p>1원 입금으로 본인 계좌를 확인해요. 변경한 계좌는 다음 정산부터 적용돼요.</p></div>
+      <div className="flex gap-2 rounded-[6px] bg-[var(--canvas)] p-4 text-[12px] text-[#7B7B7B]"><Info size={15} className="mt-px shrink-0"/><p>변경한 계좌는 다음 정산부터 적용돼요.</p></div>
       <ErrorBox message={error}/>
-      <Button type="submit" className="w-full" disabled={busy}>{busy ? '저장 중…' : '계좌 인증하고 변경'}</Button>
+      <Button type="submit" className="w-full" disabled={busy}>{busy ? '저장 중…' : '계좌 변경하기'}</Button>
     </form>
   );
 
@@ -788,9 +804,10 @@ export function SellerSettingsPage() {
   if (section === 'account') return (
     <form className="space-y-5" onSubmit={handleSubmit}>
       <Header title="계정 설정"/>
+      {loadFail}
       <div className="flex items-start gap-4">
         <div className="relative shrink-0">
-          {logoUrl ? <img src={logoUrl} alt="스토어 로고" className="h-[64px] w-[64px] rounded-[8px] object-cover"/> : <div className="grid h-[64px] w-[64px] place-items-center rounded-[8px] bg-[var(--ink)] text-[24px] font-bold text-white">L</div>}
+          {logoUrl ? <img src={logoUrl} alt="스토어 로고" className="h-[64px] w-[64px] rounded-[8px] object-cover"/> : <div className="grid h-[64px] w-[64px] place-items-center rounded-[8px] bg-[var(--ink)] text-[24px] font-bold text-white">{(form.displayName || user.name).trim().charAt(0) || 'S'}</div>}
           {!USE_MOCK && <input id="seller-logo-file" type="file" accept="image/png,image/jpeg" hidden onChange={e => { changeLogo(e.target.files?.[0]); e.target.value = ''; }}/>}
           <button type="button" aria-label="로고 변경" onClick={() => document.getElementById('seller-logo-file')?.click()} className="absolute -bottom-1 -right-1 grid h-[26px] w-[26px] place-items-center rounded-full border border-[var(--line)] bg-[var(--surface)]">
             <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="1" y="2.5" width="11" height="8.5" rx="1.5" stroke="#7B7B7B" strokeWidth="1.2"/><path d="M4.5 2.5V2a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v.5" stroke="#7B7B7B" strokeWidth="1.2"/><circle cx="6.5" cy="6.75" r="1.75" stroke="#7B7B7B" strokeWidth="1.2"/></svg>

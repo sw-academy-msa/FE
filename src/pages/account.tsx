@@ -5,7 +5,7 @@ import { ArrowLeft, Building2, CalendarCheck, Check, Store, UserRound, CheckCirc
 import { activeUser, approveApplication, INSPECTION_PREFIX, money, nowOf, saleState, uid } from '../domain';
 import type { Address, Application, DocumentFile } from '../domain';
 import { atomic, mutate, useStore } from '../store';
-import { dateTime, kstShort } from '../hooks';
+import { dateTime, kstShort, kstSlot } from '../hooks';
 import { Badge, Button, Chip, ConfirmLeave, Empty, ErrorBox, Field, Header, InfoRow, LiveStatus, MenuRow, Modal, Note, ProductImage, Unavailable, useToast } from '../components/ui';
 import { PdfField } from '../components/PdfField';
 import { deleteAddress, listAddresses, setDefaultAddress, takeAddressPick, toAddress } from './address';
@@ -284,7 +284,7 @@ export function AdminInquiriesPage() {
   const items = s.inquiries.filter(q => q.sellerId === 'stockdrop').sort((a, b) => Number(!!a.answer) - Number(!!b.answer) || b.createdAt - a.createdAt);
   return <div>
     <Header title="문의 관리" subtitle={`답변 대기 ${items.filter(q => !q.answer).length}건 · 1:1 문의`}/>
-    {!USE_MOCK && <Note title="준비 중">운영자 문의 API가 아직 없어 이 기기에 있는 문의만 보여요.</Note>}
+    {!USE_MOCK && <Note title="준비 중">1:1 문의 답변 기능은 준비 중이에요.</Note>}
     {items.map(q => <div key={q.id} className="divider space-y-2 py-4">
       <button className="w-full space-y-1 text-left" aria-expanded={open === q.id} onClick={() => { setOpen(open === q.id ? '' : q.id); setAnswer(''); }}>
         <div className="flex items-center justify-between gap-2"><span className={`rounded px-2 py-0.5 text-[10px] font-semibold ${q.answer ? 'bg-[#EEF8F3] text-[#3FB181]' : 'bg-[var(--soft)] text-[var(--muted)]'}`}>{q.answer ? '답변 완료' : '답변 대기'}</span><span className="muted text-[10px]">{q.kind} · {dateTime(q.createdAt)}</span></div>
@@ -304,7 +304,7 @@ export function AdminListPage() {
   const reviewDeadline = (sub: number) => sub + 2 * 86_400_000;
   return (
     <div className={`border-l-4 ${REVIEW_KIND.store.bar} -ml-4 pl-3`}>
-      <Header title="입점 심사 목록" subtitle="판매자 신청 · 사업자등록증과 판매 URL을 확인하고 승인해 주세요." action={<ReviewKindBadge kind="store"/>}/>
+      <Header title="입점 심사 목록" subtitle="판매자 신청 · 사업자등록증과 신청 정보를 확인하고 승인해 주세요." action={<ReviewKindBadge kind="store"/>}/>
       <div className="mb-3 flex gap-5 border-b border-[var(--line)]">
         {(['pending', 'approved'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)} className={`border-b-2 py-3 text-[14px] ${tab === t ? 'border-[var(--ink)] font-bold text-[var(--ink)]' : 'border-transparent text-[#949494]'}`}>
@@ -333,18 +333,14 @@ export function AdminListPage() {
             </div>
             <span className="text-[14px] text-[#949494]">›</span>
           </div>
-          <div className="flex items-center gap-3">
-            <span className="text-[11px] text-[#949494]">{app.id} · 신청 정보 보기</span>
-            <span className="text-[11px] text-[#949494]">· PDF</span>
-            <span className="text-[11px] text-[#949494]">URL</span>
-          </div>
+          <p className="text-[11px] text-[#949494]">사업자등록증 PDF · 신청 정보 보기</p>
         </Link>
       ))}
       <LiveStatus state={live}/>
       {!live.loading && !live.error && !apps.length && <Empty title={tab === 'pending' ? '심사 대기 중인 신청이 없어요' : '승인한 신청이 없어요'}/>}
       <div className="mt-8 rounded-[4px] bg-[var(--soft)] p-4 space-y-1">
-        <p className="text-[13px] font-bold">첨부된 사업자등록증 PDF와 판매 URL을 검토합니다.</p>
-        <p className="text-[12px] text-[#7B7B7B]">신청 상세에서 PDF와 타 플랫폼 판매 페이지를 모두 열람한 뒤<br/>승인하거나 반려해 주세요.</p>
+        <p className="text-[13px] font-bold">첨부된 사업자등록증 PDF와 신청 정보를 검토합니다.</p>
+        <p className="text-[12px] text-[#7B7B7B]">신청 상세에서 사업자등록증을 열람한 뒤<br/>승인하거나 반려해 주세요.</p>
       </div>
     </div>
   );
@@ -368,14 +364,15 @@ export function AdminDetailPage() {
   const dlLabel = `${dl.getMonth()+1}.${dl.getDate()} (${days[dl.getDay()]})`;
   const dDay = Math.ceil((reviewDeadline - Date.now()) / 86_400_000);
   const bothViewed = pdfViewed && (urlViewed || !app.salesUrl);
+  // 입점 심사 목록·판매자 목록 어디서 열었든 온 곳으로 돌아간다
+  const back = () => { if (window.history.state?.idx > 0) navigate(-1); else navigate('/admin/applications'); };
   return (
     <div className={`pb-32 border-l-4 ${REVIEW_KIND.store.bar} -ml-4 pl-3`}>
       <Header title="입점 심사 상세" back={true} action={<ReviewKindBadge kind="store"/>}/>
-      <p className="-mt-3 mb-3 text-[11px] font-bold text-[#949494]">판매자 신청 · {app.id}</p>
-      {/* Meta */}
+      {/* Meta: 심사 중일 때만 결과 안내 기한을 보여 준다 */}
       <div className="mb-4 flex items-center gap-2">
-        <span className="inline-flex h-[18px] items-center rounded-[4px] bg-[var(--soft)] px-2 text-[11px] font-bold text-[#7B7B7B]">심사 대기</span>
-        <span className="text-[11px] font-bold text-[#E5484D]">결과 안내 기한 {dlLabel} · D-{Math.max(0, dDay)}</span>
+        <span className={`inline-flex h-[18px] items-center rounded-[4px] px-2 text-[11px] font-bold ${app.status === 'approved' ? 'bg-[#EEF8F3] text-[#3FB181]' : 'bg-[var(--soft)] text-[#7B7B7B]'}`}>{app.status === 'approved' ? '승인 완료' : app.status === 'rejected' ? '반려' : '심사 대기'}</span>
+        {app.status === 'pending' && <span className="text-[11px] font-bold text-[#E5484D]">결과 안내 기한 {dlLabel} · D-{Math.max(0, dDay)}</span>}
       </div>
       <h1 className="mb-1 text-[20px] font-bold">{app.displayName || `${app.name}의 스토어`}</h1>
       <p className="mb-6 text-[12px] text-[#7B7B7B]">{app.name} · {app.email} · {dateTime(app.submittedAt)} 신청</p>
@@ -411,14 +408,14 @@ export function AdminDetailPage() {
           <button className="text-[12px] font-bold text-[var(--ink)]" onClick={async () => { setError(''); const tab = USE_MOCK ? null : openPendingTab(); /* 클릭 직후 탭을 열어 모바일 사파리 팝업 차단을 피한다 */ try { if (USE_MOCK) { app.document && getPdf(app.document.id).catch(() => {}); } else { const pdf = await reviewCertificate(app.id); const url = URL.createObjectURL(pdf.type ? pdf : new Blob([pdf], { type: 'application/pdf' })); if (tab) tab.location.href = url; else window.open(url, '_blank'); } setPdfViewed(true); } catch (e) { const msg = `사업자등록증을 열지 못했어요. ${errorMessage(e)}`; failTab(tab, msg); setError(msg); } }}>열람하기</button>
         </div>
       </div>
-      {/* URL Section */}
-      <div className="mb-6 space-y-3">
+      {/* URL Section: 신청서에 판매 URL이 있을 때만 */}
+      {app.salesUrl && <div className="mb-6 space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-[15px] font-bold">타 플랫폼 판매 URL</h2>
           {urlViewed && <span className="inline-flex h-[18px] items-center rounded-[4px] bg-[#EEF8F3] px-2 text-[11px] font-bold text-[#3FB181]">열람 완료</span>}
         </div>
-        {app.salesUrl ? <UrlCard url={app.salesUrl} viewed={urlViewed} onView={() => setUrlViewed(true)}/> : <p className="rounded-[6px] bg-[var(--soft)] px-4 py-3 text-[12px] text-[#7B7B7B]">신청서에 제출된 판매 URL이 없어요.</p>}
-      </div>
+        <UrlCard url={app.salesUrl} viewed={urlViewed} onView={() => setUrlViewed(true)}/>
+      </div>}
       {/* 신청 정보 */}
       <h2 className="mb-3 text-[15px] font-bold">신청 정보</h2>
       <div className="mb-6 space-y-4 border-b border-[var(--line)] pb-4">
@@ -444,11 +441,11 @@ export function AdminDetailPage() {
       </div>
       <ErrorBox message={error}/>
       {app.status === 'approved'
-        ? <><div className="rounded-[4px] bg-[#EEF8F3] p-4"><p className="text-[13px] font-bold text-[#3FB181]">판매자 권한 추가 완료</p><p className="mt-1 text-[12px] text-[#7B7B7B]">승인 일시 {dateTime(app.approvedAt!)} · 처리자 운영자</p></div><Link className="btn w-full mt-4" to="/admin/applications">신청 목록으로</Link></>
+        ? <><div className="rounded-[4px] bg-[#EEF8F3] p-4"><p className="text-[13px] font-bold text-[#3FB181]">판매자 권한 추가 완료</p><p className="mt-1 text-[12px] text-[#7B7B7B]">승인 일시 {dateTime(app.approvedAt!)} · 처리자 운영자</p></div><Button className="mt-4 w-full" onClick={back}>목록으로</Button></>
         : app.status === 'rejected'
-        ? <><Note title="반려 처리됨">{app.rejectionItems?.map(i => i.reason).join(' ') || '반려 사유가 판매자에게 전달됐어요.'}</Note><Link className="btn btn-outline mt-4 w-full" to="/admin/applications">신청 목록으로</Link></>
+        ? <><Note title="반려 처리됨">{app.rejectionItems?.map(i => i.reason).join(' ') || '반려 사유가 판매자에게 전달됐어요.'}</Note><Button outline className="mt-4 w-full" onClick={back}>목록으로</Button></>
         : <div className="fixed bottom-0 left-1/2 w-full max-w-[390px] -translate-x-1/2 bg-white px-4 safe-bottom pt-3">
-            <p className="mb-2 text-center text-[12px] text-[#949494]">{bothViewed ? '사업자등록증과 판매 URL을 모두 열람했어요' : '사업자등록증 PDF와 판매 URL을 먼저 열람해 주세요.'}</p>
+            <p className="mb-2 text-center text-[12px] text-[#949494]">{bothViewed ? (app.salesUrl ? '사업자등록증과 판매 URL을 모두 열람했어요' : '사업자등록증을 열람했어요') : (app.salesUrl ? '사업자등록증 PDF와 판매 URL을 먼저 열람해 주세요.' : '사업자등록증 PDF를 먼저 열람해 주세요.')}</p>
             <div className="flex gap-2">
               <Button outline className="w-[96px]" disabled={!bothViewed} onClick={() => setRejecting(true)}>반려</Button>
               <Button className="flex-1" disabled={!bothViewed} onClick={() => setConfirm(true)}>승인하기</Button>
@@ -493,8 +490,11 @@ export function AdminDetailPage() {
   );
 }
 export function AdminProductListPage() {
-  const s = useStore(), user = activeUser(s); const [tab, setTab] = useState<'pending' | 'approved'>('pending');
-  const [params, setParams] = useSearchParams(); const kind = params.get('kind') === 'revision' ? 'revision' : 'new'; // 신규 / 수정 심사 탭
+  const s = useStore(), user = activeUser(s);
+  // 심사 대기/승인 완료 탭은 주소에 남겨 상세를 보고 돌아와도 유지한다
+  const [params, setParams] = useSearchParams(); const tab: 'pending' | 'approved' = params.get('tab') === 'approved' ? 'approved' : 'pending';
+  const setTab = (t: 'pending' | 'approved') => { const next = new URLSearchParams(params); if (t === 'approved') next.set('tab', t); else next.delete('tab'); setParams(next, { replace: true }); };
+  const kind = params.get('kind') === 'revision' ? 'revision' : 'new'; // 신규 / 수정 심사 탭
   const revisions = useRevisionQueue(user.admin);
   const live = useLive(async sig => user.admin ? (await Promise.all((['IN_REVIEW', 'REJECTED', 'APPROVED'] as const).map(st => listAdminProductReviews(st, sig)))).flat() : [], mergeAdminProductList, [user.admin]);
   if (!user.admin) return <Unavailable message="운영자만 사용할 수 있습니다."/>;
@@ -519,9 +519,7 @@ export function AdminProductListPage() {
       </div>
       {products.map(p => {
         const seller = s.users.find(u => u.id === p.sellerId);
-        const d = new Date(p.startsAt);
-        const days = ['일','월','화','수','목','금','토'];
-        const openLabel = `오픈 ${d.getMonth()+1}.${d.getDate()} (${days[d.getDay()]}) ${d.getHours()}:00`;
+        const openLabel = `오픈 ${kstShort(p.startsAt)}`;
         const dDay = Math.ceil((p.startsAt - Date.now()) / 86_400_000);
         return (
           <Link key={p.id} to={`/admin/products/${p.id}`} className="flex gap-3 border-b border-[var(--line)] py-4">
@@ -538,7 +536,7 @@ export function AdminProductListPage() {
               </div>
               <p className="text-[13px] font-bold">{p.name}</p>
               <p className="text-[11px] text-[#7B7B7B]">{p.category} · {money(p.price)}</p>
-              <p className="text-[11px] text-[#949494]">{seller?.name ?? p.sellerId}</p>
+              {seller?.name && <p className="text-[11px] text-[#949494]">{seller.name}</p>}
             </div>
           </Link>
         );
@@ -568,9 +566,7 @@ export function AdminProductDetailPage() {
   const live = useLive(sig => user.admin && id ? getAdminProductReviewWithImages(id, sig) : Promise.resolve(null), (st, x) => { if (x) mergeProducts(st, [x]); }, [id, user.admin]);
   if (!user.admin) return <Unavailable message="운영자만 사용할 수 있습니다."/>;
   if (!p) return live.loading || live.error ? <LiveStatus state={live}/> : <Empty title="상품을 찾을 수 없어요"><Link to="/admin/products" className="btn">심사 목록으로</Link></Empty>;
-  const d = new Date(p.startsAt);
-  const days = ['일','월','화','수','목','금','토'];
-  const openLabel = `오픈 ${d.getMonth()+1}.${d.getDate()} (${days[d.getDay()]}) ${d.getHours()}:00`;
+  const openLabel = `오픈 ${kstShort(p.startsAt)}`;
   const dDay = Math.ceil((p.startsAt - Date.now()) / 86_400_000);
   const totalStock = p.options.reduce((s, o) => s + o.stock, 0);
   const selectedCount = Object.values(checkedReasons).filter(Boolean).length;
@@ -597,7 +593,7 @@ export function AdminProductDetailPage() {
           <ProductImage src={p.images[0]} alt={p.name} className="h-12 w-12 shrink-0 rounded-[4px]"/>
           <div className="min-w-0 flex-1">
             <p className="text-[13px] font-bold">{p.name}</p>
-            <p className="text-[12px] text-[#7B7B7B]">{seller?.name ?? p.sellerId} · {openLabel}</p>
+            <p className="text-[12px] text-[#7B7B7B]">{[seller?.name, openLabel].filter(Boolean).join(' · ')}</p>
           </div>
         </div>
         {/* Reasons */}
@@ -646,7 +642,6 @@ export function AdminProductDetailPage() {
   return (
     <div className={`pb-32 border-l-4 ${REVIEW_KIND.sale.bar} -ml-4 pl-3`}>
       <Header title="판매 심사 상세" back={true} action={<ReviewKindBadge kind="sale"/>}/>
-      <p className="-mt-3 mb-3 text-[11px] font-bold text-[#949494]">상품 · {p.id}</p>
       {/* Meta */}
       {p.published
         ? <div className="mb-4 inline-flex h-[18px] items-center rounded-[4px] bg-[#EEF8F3] px-2 text-[11px] font-bold text-[#3FB181]">승인 완료</div>
@@ -658,7 +653,7 @@ export function AdminProductDetailPage() {
             </div>
       }
       <h1 className="mb-1 text-[20px] font-bold">{p.name}</h1>
-      <p className="mb-6 text-[12px] text-[#7B7B7B]">{seller?.name ?? p.sellerId} · {money(p.price)} · {totalStock}개 한정 · {dateTime(p.startsAt)} 요청</p>
+      <p className="mb-6 text-[12px] text-[#7B7B7B]">{[seller?.name, money(p.price), `${totalStock}개 한정`, `${kstSlot(p.startsAt)} 판매 시작`].filter(Boolean).join(' · ')}</p>
       {/* URL Section */}
       {p.originalUrl && (
         <div className="mb-6 space-y-3">
@@ -693,18 +688,26 @@ export function AdminProductDetailPage() {
       <div className="mb-4 space-y-2 border-b border-[#F2F2F2] pb-4">
         <p className="text-[11px] font-bold text-[#949494]">상품</p>
         <InfoRow label="카테고리" value={p.category}/>
-        <InfoRow label="한정 판매가" value={`${money(p.price)} (타 플랫폼 비교가 별도)`}/>
+        <InfoRow label="한정 판매가" value={money(p.price)}/>
+        <InfoRow label="배송비" value={money(p.shipping)}/>
         <InfoRow label="옵션별 수량" value={p.options.map(o => `${o.name} ${o.stock}`).join(' · ') + ` · 총 ${totalStock}개`}/>
       </div>
       <div className="mb-6 space-y-2 border-b border-[#F2F2F2] pb-4">
         <p className="text-[11px] font-bold text-[#949494]">판매 · 출고</p>
-        <InfoRow label="판매 일정" value={`${d.getMonth()+1}.${d.getDate()} (${days[d.getDay()]}) ${d.getHours()}:00 – ${(d.getHours()+3)%24}:00`}/>
-        <InfoRow label="출고 기한" value="2영업일"/>
-        <InfoRow label="판매자" value={seller?.name ?? p.sellerId}/>
+        <InfoRow label="판매 일정" value={`${kstShort(p.startsAt)} – ${kstShort(p.endsAt)}`}/>
+        {p.dispatchDays > 0 && <InfoRow label="출고 기한" value={`결제 후 ${p.dispatchDays}영업일 이내`}/>}
+        {seller?.name && <InfoRow label="판매자" value={seller.name}/>}
+      </div>
+      {/* 판매자가 입력한 상품 설명·카테고리별 정보·처분 사유: 심사 때 사진과 함께 확인한다 */}
+      <div className="mb-6 space-y-2 border-b border-[#F2F2F2] pb-4">
+        <p className="text-[11px] font-bold text-[#949494]">상품 설명</p>
+        {p.description && <p className="whitespace-pre-line text-[12px] leading-[1.7]">{p.description}</p>}
+        {p.extras.filter(e => e.key && e.value).map((e, i) => <InfoRow key={i} label={e.key} value={e.value}/>)}
+        {p.reason && <InfoRow label="재고 처분 사유" value={p.reason}/>}
       </div>
       {p.rejectionReason && <Note title="반려 사유">반려 사유 · {p.rejectionReason}</Note>}
       <ErrorBox message={error}/>
-      {viewer !== null && <PhotoViewer images={p.images.filter(Boolean)} start={viewer} onClose={() => setViewer(null)} panel={<div className="space-y-2">
+      {viewer !== null && p.images.some(Boolean) && <PhotoViewer images={p.images.filter(Boolean)} start={viewer} onClose={() => setViewer(null)} panel={<div className="space-y-2">
         <p className="text-[13px] font-bold">물품 검수 확인</p>
         {INSPECTION_ITEMS.map(([k, hint]) => <label key={k} className="flex items-start gap-2 text-[12px]"><input type="checkbox" className="mt-0.5 h-4 w-4" checked={inspected.includes(k)} onChange={() => setInspected(v => (v.includes(k) ? v.filter(x => x !== k) : [...v, k]))}/><span><b>{k}</b> <span className="muted">{hint}</span></span></label>)}
         {!p.published && !p.rejectionReason && <div className="flex gap-2 pt-1"><Button outline className="w-[96px]" onClick={() => { setViewer(null); setReject(true); }}>반려</Button><Button className="flex-1" onClick={() => { setViewer(null); setApproveConfirm(true); }}>승인하기</Button></div>}
