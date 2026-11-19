@@ -13,7 +13,7 @@ import { Badge, Button, clockLeft, CopyButton, copyText, Toggle, Empty, ErrorBox
 import { PdfField } from '../components/PdfField';
 import { AddressBookFormPage, AddressBookPage } from './sellerAddresses';
 import type { ProductRevisionDto } from '../api';
-import { answerOrderInquiry, listSellerOrderInquiries, answerProductInquiry, deleteSellerLogo, deliverOrder, errorMessage, getSalesSummary, getSellerOrder, getSellerOrderInquiry, getSellerOrderSummary, getSellerProduct, getSellerProductWithImages, listRevisions, listSellerOrderInquiryInbox, listSellerOrders, listSellerProductInquiries, listSellerProducts, mergeInquiries, mergeOrders, mergeProducts, shipOrder, useLive, fetchSellerLogo, fetchSellerMe, fetchSellerStore, fetchWithdrawalEligibility, updateSellerAddresses, updateSellerBank, updateSellerContact, updateSellerStore, uploadSellerLogo, useApi, withdrawAccount } from '../api';
+import { getSellerSettlement, settlementNet, getProductDispatchAddress, answerOrderInquiry, listSellerOrderInquiries, answerProductInquiry, deleteSellerLogo, deliverOrder, errorMessage, getSalesSummary, getSellerOrder, getSellerOrderInquiry, getSellerOrderSummary, getSellerProduct, getSellerProductWithImages, listRevisions, listSellerOrderInquiryInbox, listSellerOrders, listSellerProductInquiries, listSellerProducts, mergeInquiries, mergeOrders, mergeProducts, shipOrder, useLive, fetchSellerLogo, fetchSellerMe, fetchSellerStore, fetchWithdrawalEligibility, updateSellerAddresses, updateSellerBank, updateSellerContact, updateSellerStore, uploadSellerLogo, useApi, withdrawAccount } from '../api';
 import { api } from '../api';
 import { USE_MOCK } from '../config';
 const hm = (t: number) => new Date(t).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false });
@@ -25,6 +25,7 @@ export function SellerSalesPage() {
   const live = useLive(async signal => (user.seller ? listSellerProducts(user.id, {}, signal) : null), (st, items) => { if (items) mergeProducts(st, items); }, [user.id]);
   const sales = useApi(async signal => (USE_MOCK || !user.seller ? null : getSalesSummary(month, signal)), [user.id, month]);
   const orders = useApi(async signal => (USE_MOCK || !user.seller ? null : getSellerOrderSummary({}, signal)), [user.id]);
+  const settle = useApi(async signal => (USE_MOCK || !user.seller ? null : getSellerSettlement(month, signal)), [user.id, month]);
   if (!user.seller) return <Unavailable/>;
   const mine = s.products.filter(p => p.sellerId === user.id && p.reviewStatus !== 'DRAFT');
   const onSale = mine.filter(p => saleState(p, now) === '판매 중'), sd = sales.data, od = orders.data;
@@ -35,6 +36,12 @@ export function SellerSalesPage() {
     <LiveStatus state={{ loading: sales.loading, error: sales.error, reload: sales.reload }}/>
     <section className="space-y-2"><h2 className="text-[15px] font-bold">이번 달 판매</h2>
       <div className="grid grid-cols-3 gap-2">{tile('판매 수량', num(sd?.confirmedQuantity, '개'))}{tile('결제 대기', num(sd?.reservedQuantity, '개'))}{tile('남은 수량', num(sd?.availableQuantity, '개'))}</div>
+    </section>
+    <section className="space-y-2"><h2 className="text-[15px] font-bold">정산(구매 확정 기준)</h2>
+      {(() => { const st = settle.data, n = st ? settlementNet(st, Object.fromEntries(mine.map(p => [p.id, p.listQuantity]))) : undefined;
+        return <><div className="grid grid-cols-3 gap-2">{tile('구매 확정 금액', st ? money(st.confirmedAmount) : '-')}{tile('수수료', n ? money(n.fee) : '-')}{tile('정산 예정', n ? money(n.net) : '-')}</div>
+          <p className="muted text-[11px] leading-relaxed">{st ? `확정 대기 ${st.awaitingOrders}건 · ${money(st.awaitingAmount)} (배송 완료 후 구매 확정 전). ` : ''}상품 금액 기준(배송비 제외)이에요. 한정 수량의 90%를 넘게 팔린 상품은 판매 금액의 10%가 수수료예요.</p></>; })()}
+      {settle.error && <p className="text-[12px] text-[var(--red)]">정산 금액을 불러오지 못했어요. <button type="button" className="font-bold underline" onClick={settle.reload}>다시 시도</button></p>}
     </section>
     <section className="space-y-2"><h2 className="text-[15px] font-bold">상품</h2>
       <div className="grid grid-cols-3 gap-2">{tile('판매 예정', num(sd?.scheduledCount, '개'), '/seller/products?state=판매 예정')}{tile('판매 중', num(sd?.onSaleCount, '개'), '/seller/products?state=판매 중')}{tile('판매 종료', num(sd?.endedCount, '개'), '/seller/products?state=판매 종료')}</div>
@@ -320,7 +327,7 @@ export function SellerProductPage() {
       </section>
       <div className="rounded-[8px] bg-[var(--soft)] p-5 space-y-2">
         <p className="text-[13px] font-bold">구매 확정 후 D+7 영업일에 입금돼요</p>
-        <p className="text-[12px] text-[#7B7B7B]">반품·교환이 생기면 정산 금액이 달라질 수 있어요.</p>
+        <p className="text-[12px] text-[#7B7B7B]">반품·환불은 STOCKDROP이 처리하지 않아요. 구매자와 직접 협의해 진행해 주세요.</p>
         <p className="text-[12px] text-[#7B7B7B]">정산 내역은 마이페이지 &gt; 정산 계좌에서 볼 수 있어요.</p>
       </div>
     </div>;
@@ -407,11 +414,13 @@ export function SellerOrderPage() {
   const { id } = useParams(); const s = useStore(), user = activeUser(s), toast = useToast(), now = useClock(); const order = s.orders.find(o => o.id === id && o.sellerId === user.id); const [showTracking, setShowTracking] = useState(false), [confirm, setConfirm] = useState(false), [error, setError] = useState(''), [busy, setBusy] = useState(false);
   // 실제 모드: 주문 상세(배송지·송장)와 이 주문의 문의를 서버에서 받는다
   const live = useLive(async signal => (id && user.seller ? { o: await getSellerOrder(id, user.id, signal), qs: await listSellerOrderInquiries(id, user.id, signal) } : null), (st, r) => { if (r) { mergeOrders(st, [r.o]); mergeInquiries(st, r.qs); } }, [id]);
+  // 출고지: 주문에는 없어 상품의 출고지를 받는다(판매 시작 뒤에는 바뀌지 않는다)
+  const dispatch = useApi(async signal => (USE_MOCK || !order?.productId ? null : { productId: order.productId, address: await getProductDispatchAddress(order.productId, signal).catch(() => '') }), [order?.productId]);
   if (!user.seller) return <Unavailable message="판매자 주문을 찾을 수 없습니다."/>;
   if (!order) return live.loading || live.error ? <LiveStatus state={live}/> : <Unavailable message="판매자 주문을 찾을 수 없습니다."/>;
   // 출고 기한은 상품에 설정한 영업일(토·일 제외)로 계산한다
   const o = order; const paidAt = o.paidAt ?? o.createdAt; const dueStr = o.dispatchDays ? `결제 후 ${o.dispatchDays}영업일 이내 출고 · ${kstDay(addBusinessDays(paidAt, o.dispatchDays))}까지` : '';
-  const dispatchFrom = s.sellerSettings[user.id]?.shippingAddress || (USE_MOCK ? '성수 물류창고' : ''); const doneAt = o.deliveredAt ?? o.processedAt;
+  const dispatchFrom = USE_MOCK ? s.sellerSettings[user.id]?.shippingAddress || '성수 물류창고' : (dispatch.data?.productId === o.productId ? dispatch.data.address : ''); const doneAt = o.deliveredAt ?? o.processedAt;
   const needsTracking = ['paid', 'preparing'].includes(o.status); const orderInquiries = s.inquiries.filter(q => q.orderId === o.id && q.sellerId === user.id);
   return <div className="space-y-5">
     <Header title="주문 상세" subtitle={`주문번호 ${orderNo(o.id)} · ${kstShort(paidAt)} 결제`}/>
@@ -480,6 +489,8 @@ export function SellerMyPage() {
   // 수치는 서버 집계로 보여 준다(다른 화면에서 받아 둔 일부 데이터로 세면 볼 때마다 달라진다). 받기 전에는 '-'
   const month = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit' }).format(Date.now());
   const sales = useApi(async signal => (USE_MOCK || !user.seller ? null : getSalesSummary(month, signal)), [user.id, month]);
+  const settle = useApi(async signal => (USE_MOCK || !user.seller ? null : getSellerSettlement(month, signal)), [user.id, month]);
+  useLive(async signal => (USE_MOCK || !user.seller ? null : listSellerProducts(user.id, {}, signal)), (st, items) => { if (items) mergeProducts(st, items); }, [user.id]);
   if (!user.seller) return <Unavailable/>;
   const settings = s.sellerSettings[user.id];
   const displayName = settings?.displayName ?? user.name;
@@ -489,6 +500,7 @@ export function SellerMyPage() {
   const activeDrops = sd ? sd.onSaleCount + sd.scheduledCount : products.filter(p => saleState(p, Date.now()) === '판매 중' || saleState(p, Date.now()) === '판매 예정').length;
   const settlement = s.orders.filter(o => o.sellerId === user.id && !['cancelled','refunded'].includes(o.status)).reduce((n, o) => n + o.total - o.shipping, 0);
   const productCount = sd ? sd.productCount : products.length;
+  const net = settle.data ? settlementNet(settle.data, Object.fromEntries(products.map(p => [p.id, p.listQuantity])))?.net : undefined;
   const unanswered = s.inquiries.filter(q => q.sellerId === user.id && !q.answer).length;
   const maskedBank = USE_MOCK ? (settings?.account ? `국민 ****${settings.account.slice(-4)}` : '국민 ****1024') : settings?.account ? `${settings.bank} ${settings.account}`.trim() : '';
   return (
@@ -506,7 +518,7 @@ export function SellerMyPage() {
         <ChevronRight size={17} className="muted shrink-0"/>
       </Link>
       <div className="mb-4 flex rounded-[4px] bg-[var(--canvas)]">
-        {([['진행 중 드롭', ready ? `${activeDrops}건` : '-', '/seller/products'], USE_MOCK ? ['이번 달 정산 예정', money(settlement), '/seller/settings/bank'] : ['이번 달 판매', sd ? `${sd.confirmedQuantity}개` : '-', '/seller/products'], ['미답변 문의', `${unanswered}건`, '/seller/inquiries', unanswered > 0]] as [string, string, string, boolean?][]).map(([label, value, to, red], i) => (
+        {([['진행 중 드롭', ready ? `${activeDrops}건` : '-', '/seller/products'], ['이번 달 정산 예정', USE_MOCK ? money(settlement) : net === undefined ? '-' : money(net), '/seller/sales'], ['미답변 문의', `${unanswered}건`, '/seller/inquiries', unanswered > 0]] as [string, string, string, boolean?][]).map(([label, value, to, red], i) => (
           <Link key={label} to={to} className={`flex flex-1 flex-col items-center gap-1 py-4 ${i > 0 ? 'border-l border-[var(--line)]' : ''}`}>
             <span className={`font-number text-[15px] font-bold ${red ? 'text-[var(--red)]' : ''}`}>{value}</span>
             <span className="muted text-[11px]">{label}</span>

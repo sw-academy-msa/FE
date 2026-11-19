@@ -38,7 +38,7 @@ export function orderFromCommand(d: OrderCommandDto, userId: string): Order {
     shipping: d.shippingFee ?? 0, total: d.totalAmount ?? 0,
     address: d.address ? addressFromApi(d.address) : { name: '', phone: '', address: '', detail: '', request: '' },
     status: orderStatus(d.state, d.delivery), createdAt: ms(d.confirmedAt) ?? Date.now(), carrier: d.carrier ?? undefined, tracking: d.trackingNumber ?? undefined,
-    paidAt: ms(d.confirmedAt), dispatchDays: d.dispatchBusinessDays || undefined,
+    paidAt: ms(d.confirmedAt), dispatchDays: d.dispatchBusinessDays || undefined, purchaseConfirmedAt: ms(d.purchaseConfirmedAt ?? null),
   };
 }
 /** 목록 항목 → Order. 목록에는 단가·배송비·배송지가 없어 0/빈 값 (상세를 이미 받았다면 merge가 유지) */
@@ -75,6 +75,10 @@ export async function retryWhileUnavailable<T>(run: () => Promise<T>, onWait: ()
       if (!onWait()) return undefined;
     }
   }
+}
+/** POST /v1/orders/{id}/purchase-confirmation — 구매 확정(배송 완료 주문). 이미 확정했으면 그대로 돌려준다 */
+export async function confirmPurchase(id: string, userId: string): Promise<Order> {
+  return orderFromCommand(await api.post<OrderCommandDto>(`/v1/orders/${enc(id)}/purchase-confirmation`, undefined, { service: purchase }), userId);
 }
 /** GET /v1/orders/{id}/checkout — 결제 화면 진입·새로고침·결과 확인 (Command 원본) */
 export const getCheckout = (id: string, signal?: AbortSignal) => api.get<OrderCommandDto>(`/v1/orders/${enc(id)}/checkout`, { service: purchase, signal });
@@ -139,7 +143,7 @@ export function mergeOrders(s: State, items: Order[]) {
   for (const n of items) {
     const old = s.orders.find(x => x.id === n.id);
     const img = s.products.find(p => p.id === n.productId)?.images[0] ?? '';
-    const merged: Order = old ? { ...old, ...n, sellerId: n.sellerId || old.sellerId, product: { ...old.product, ...n.product, price: n.product.price || old.product.price, image: img || n.product.image || old.product.image }, shipping: n.shipping || old.shipping, address: emptyAddr(n) ? old.address : n.address } : { ...n, product: { ...n.product, image: img } };
+    const merged: Order = old ? { ...old, ...n, purchaseConfirmedAt: n.purchaseConfirmedAt ?? old.purchaseConfirmedAt, sellerId: n.sellerId || old.sellerId, product: { ...old.product, ...n.product, price: n.product.price || old.product.price, image: img || n.product.image || old.product.image }, shipping: n.shipping || old.shipping, address: emptyAddr(n) ? old.address : n.address } : { ...n, product: { ...n.product, image: img } };
     if (old) s.orders[s.orders.indexOf(old)] = merged; else s.orders.push(merged);
   }
 }

@@ -53,14 +53,14 @@ export function markApplication(s: State, id: string, status: 'approved' | 'reje
 /** GET …/product-reviews — 최초 심사 목록(`items`). 기본 IN_REVIEW. 목록에는 가격·옵션이 없다 */
 export async function listAdminProductReviews(status: ProductStatus = 'IN_REVIEW', signal?: AbortSignal): Promise<Product[]> {
   const r = await api.get<ItemsPage<ProductReviewListItemDto>>(REVIEWS, { service: purchase, signal, query: { status, size: 100 } });
-  return r.items.map(d => sellerProductFromListItem(d, '')); // 목록에 sellerId 없음 → 상세에서 채워짐
+  return r.items.map(d => sellerProductFromListItem(d, d.sellerId ?? '')); // 판매자 이름은 sellerId로 승인된 입점 신청에서 찾는다
 }
 /** 목록 항목을 store에 반영: 이미 상세로 채운 가격·옵션 등은 0으로 덮지 않고 이름·상태·일정·version만 갱신 */
 export function mergeAdminProductList(s: State, items: Product[]) {
   for (const p of items) {
     const i = s.products.findIndex(x => x.id === p.id);
     if (i < 0) s.products.push(p);
-    else { const o = s.products[i]; s.products[i] = { ...o, name: p.name, published: p.published, startsAt: p.startsAt, endsAt: p.endsAt, version: p.version, reviewStatus: p.reviewStatus, rejectionReason: p.reviewStatus === 'REJECTED' ? o.rejectionReason || '반려됨' : undefined }; }
+    else { const o = s.products[i]; s.products[i] = { ...o, sellerId: p.sellerId || o.sellerId, name: p.name, published: p.published, startsAt: p.startsAt, endsAt: p.endsAt, version: p.version, reviewStatus: p.reviewStatus, rejectionReason: p.reviewStatus === 'REJECTED' ? o.rejectionReason || '반려됨' : undefined }; }
   }
 }
 /** GET …/product-reviews/{id} — 상품 원본(version 포함) */
