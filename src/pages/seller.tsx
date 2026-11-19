@@ -40,7 +40,7 @@ export function SellerSalesPage() {
     <section className="space-y-2"><h2 className="text-[15px] font-bold">정산(구매 확정 기준)</h2>
       {(() => { const st = settle.data, n = st ? settlementNet(st, Object.fromEntries(mine.map(p => [p.id, p.listQuantity]))) : undefined;
         return <><div className="grid grid-cols-3 gap-2">{tile('구매 확정 금액', st ? money(st.confirmedAmount) : '-')}{tile('수수료', n ? money(n.fee) : '-')}{tile('정산 예정', n ? money(n.net) : '-')}</div>
-          <p className="muted text-[11px] leading-relaxed">{st ? `확정 대기 ${st.awaitingOrders}건 · ${money(st.awaitingAmount)} (배송 완료 후 구매 확정 전). ` : ''}상품 금액 기준(배송비 제외)이에요. 한정 수량의 90%를 넘게 팔린 상품은 판매 금액의 10%가 수수료예요.</p></>; })()}
+          <p className="muted text-[11px] leading-relaxed">{st ? `확정 대기 ${st.awaitingOrders}건 · ${money(st.awaitingAmount)} (배송 완료 후 구매 확정 전). ` : ''}상품 금액 기준(배송비 제외)이에요. 상품별 한정 수량의 90%를 넘게 팔리면 판매 금액의 10%가 수수료이며, 그 외에는 0%예요.</p></>; })()}
       {settle.error && <p className="text-[12px] text-[var(--red)]">정산 금액을 불러오지 못했어요. <button type="button" className="font-bold underline" onClick={settle.reload}>다시 시도</button></p>}
     </section>
     <section className="space-y-2"><h2 className="text-[15px] font-bold">상품</h2>
@@ -322,7 +322,7 @@ export function SellerProductPage() {
       <section className="space-y-3">
         <h2 className="text-[15px] font-bold">정산 예정</h2>
         <InfoRow label="총 판매 금액" value={money(fee.revenue)}/>
-        <InfoRow label={`판매 수수료 (${fee.rate > 0.9 ? '9.8' : '0'}%)`} value={fee.fee > 0 ? `−${money(fee.fee)}` : '없음'}/>
+        <InfoRow label={`판매 수수료 (${fee.initial > 0 && fee.sold * 10 > fee.initial * 9 ? '10' : '0'}%)`} value={fee.fee > 0 ? `−${money(fee.fee)}` : '없음'}/>
         <div className="border-t border-[var(--line)] pt-3"><InfoRow label="정산 예정 금액" value={<span className="font-number text-[16px] font-bold">{money(fee.net)}</span>} strong/></div>
       </section>
       <div className="rounded-[8px] bg-[var(--soft)] p-5 space-y-2">
@@ -950,7 +950,7 @@ export function SellerSupportPage() {
         {[['판매자 이용약관', '/seller/terms'], ['판매 수수료 안내', '/seller/terms'], ['운영 정책 · 패널티 기준', '/seller/terms']].map(([label, to]) => (
           <Link key={label} to={to} className="divider flex h-[52px] items-center justify-between">
             <span className="text-[13px]">{label}</span>
-            <span className="muted text-[12px]">{label === '판매 수수료 안내' ? '판매가의 9.8%' : ''}<ChevronRight size={16} className="inline muted ml-1"/></span>
+            <span className="muted text-[12px]">{label === '판매 수수료 안내' ? '상품별 한정 수량 90% 초과 판매 시 판매 금액의 10%, 그 외 0%' : ''}<ChevronRight size={16} className="inline muted ml-1"/></span>
           </Link>
         ))}
       </section>
