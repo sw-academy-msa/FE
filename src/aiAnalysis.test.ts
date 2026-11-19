@@ -32,7 +32,12 @@ describe('AI 분석 확인', () => {
 describe('분석 뒤 정보가 바뀐 경우', () => {
   const base = (): Draft => { const d = { ...blankDraft(), name: '티셔츠', description: '설명', brand: 'A', originalUrl: 'https://x.co/1', category: '', reason: '재고', images: ['a', 'b'] }; return { ...d, ai: { ...d.ai, status: 'recommended', input: analysisInputOf(d), result: { code: 'CLOTHING', category: '반팔 티셔츠', photos: 2, questions: [{ suggestionId: 's1', question: 'Q1', reason: '' }] } } }; };
   it('분석 직후나 값이 같으면 바뀌지 않은 것', () => { expect(analysisStale(base())).toBe(false); });
-  it.each([['name', '다른 이름'], ['description', '다른 설명'], ['brand', 'B'], ['originalUrl', 'https://x.co/2'], ['reason', '다른 사유']] as const)('%s이 바뀌면 다시 분석', (k, v) => { expect(analysisStale({ ...base(), [k]: v })).toBe(true); });
+  it.each([['name', '다른 이름'], ['description', '다른 설명'], ['brand', 'B'], ['reason', '다른 사유']] as const)('%s이 바뀌면 다시 분석', (k, v) => { expect(analysisStale({ ...base(), [k]: v })).toBe(true); });
+  it('판매처 URL만 바꾸면 다시 분석하지 않는다(예전에 URL과 함께 저장된 입력 포함)', () => {
+    expect(analysisStale({ ...base(), originalUrl: 'https://x.co/2' })).toBe(false);
+    const d = base(), legacy = { ...d.ai.input!, originalUrl: 'https://x.co/1' };
+    expect(analysisStale({ ...d, originalUrl: 'https://x.co/3', ai: { ...d.ai, input: legacy } })).toBe(false);
+  });
   it('사진 목록이 바뀌면 다시 분석(순서 포함)', () => { expect(analysisStale({ ...base(), images: ['a'] })).toBe(true); expect(analysisStale({ ...base(), images: ['b', 'a'] })).toBe(true); });
   it('카테고리는 AI 추천값으로 바꾼 것만 예외, 다른 값으로 바꾸면 다시 분석', () => { expect(analysisStale({ ...base(), category: '반팔 티셔츠' })).toBe(false); expect(analysisStale({ ...base(), category: '볼펜' })).toBe(true); });
   it('분석 결과가 없으면(분석 없이 등록) 바뀐 것으로 보지 않는다', () => { const d = base(); expect(analysisStale({ ...d, ai: { ...d.ai, result: undefined } })).toBe(false); });
