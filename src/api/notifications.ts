@@ -10,11 +10,12 @@ import type { NotificationDto, NotificationPage } from './types';
 const service = 'general' as const;
 const BASE = '/v1/notifications';
 
-export type NotificationKind = '구매' | '상품' | '맞춤 추천';
+export type NotificationKind = '구매' | '상품' | '맞춤 추천' | '판매';
 export interface InboxItem { id: string; kind: NotificationKind; title: string; desc: string; ts: number; read: boolean; targetType: NotificationDto['targetType']; targetId: string }
 
 export function notificationFromApi(d: NotificationDto): InboxItem {
-  const kind: NotificationKind = (d.type ?? '').includes('PERSONALIZED') ? '맞춤 추천' : d.targetType === 'ORDER' || d.targetType === 'SELLER_ORDER' ? '구매' : '상품';
+  // 판매자에게 온 알림(입점·상품 심사·판매 주문)은 '판매'로 묶어 구매 알림과 섞이지 않게 한다
+  const kind: NotificationKind = (d.type ?? '').includes('PERSONALIZED') ? '맞춤 추천' : d.targetType.startsWith('SELLER_') ? '판매' : d.targetType === 'ORDER' ? '구매' : '상품';
   return { id: d.id, kind, title: d.title ?? '', desc: d.body ?? '', ts: ms(d.occurredAt) ?? Date.parse(d.createdAt), read: !!d.readAt, targetType: d.targetType, targetId: d.targetId };
 }
 /** 알림 대상 → 앱 경로. SELLER_APPLICATION은 전용 화면이 없어 /apply로 보낸다 */

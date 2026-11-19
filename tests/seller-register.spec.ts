@@ -61,9 +61,9 @@ test('판매 상품 등록 단일 화면 → AI 분석 적용 → 판매 심사 
   // 점검 기준 입력칸은 질문 문장이 아닌 고정 표시명, AI 질문은 같은 칸 옆에
   await expect(page.getByText('실측 사이즈(총장·가슴 단면)를 알려 주세요')).toBeVisible();
   await page.getByLabel('소재·혼용률', { exact: true }).fill('울 80%');
-  // 택배사·반품·교환 배송비 → 배송 안내 글 자동 작성
-  await page.getByLabel('택배사').selectOption('CJ대한통운'); await page.getByLabel('반품 배송비').fill('3000'); await page.getByLabel('교환 배송비').fill('6000');
-  await expect(page.getByLabel('배송 안내')).toHaveValue('CJ대한통운 / 반품 배송비 3,000원 / 교환 배송비 6,000원');
+  // 택배사·반품 배송비 → 배송 안내 글 자동 작성(교환은 지원하지 않아 교환 배송비 칸 없음)
+  await page.getByLabel('택배사').selectOption('CJ대한통운'); await page.getByLabel('반품 배송비').fill('3000'); await expect(page.getByLabel('교환 배송비')).toHaveCount(0);
+  await expect(page.getByLabel('배송 안내')).toHaveValue('CJ대한통운 / 반품 배송비 3,000원');
 
   // 물품 검수: 모두 확인하지 않으면 심사 요청이 막힌다
   await page.getByRole('button', { name: '판매 심사 요청하기' }).click();
@@ -79,5 +79,5 @@ test('판매 상품 등록 단일 화면 → AI 분석 적용 → 판매 심사 
   expect(p.options).toEqual([expect.objectContaining({ name: '차콜 / S', stock: 5 })]);
   expect(p.faqs).toEqual([expect.objectContaining({ question: '실측 사이즈(총장·가슴 단면)를 알려 주세요', answer: '총장 68cm, 가슴 단면 56cm', suggestionId: 'mock-suggestion-1' })]); // AI 질문 답은 attributes가 아니라 FAQ로
   expect(p.extras).toEqual([{ key: '소재·혼용률', value: '울 80%' }]); // 카테고리별 입력칸은 그대로 attributes
-  expect(p.shippingNotice).toBe('CJ대한통운 / 반품 배송비 3,000원 / 교환 배송비 6,000원');
+  expect(p.shippingNotice).toBe('CJ대한통운 / 반품 배송비 3,000원');
 });

@@ -10,9 +10,9 @@ import { imageData } from '../files';
 import { Button, Empty, ErrorBox, Header, LiveStatus, Modal, Note, ProductImage, Unavailable, useToast } from '../components/ui';
 import { useClock } from '../hooks';
 import { categoryTree } from '../categoryTree';
-import { INSPECTION_CHECKS, INSPECTION_PHOTOS, analysisInputOf, analysisStale } from '../domain';
+import { INSPECTION_CHECKS, INSPECTION_PHOTOS, analysisInputOf, analysisStale, carryAiAnswers } from '../domain';
 import { kstTime } from './checkoutExpired';
-import { COLOR_AXIS, optionPresetFor } from '../optionPresets';
+import { COLOR_AXIS, defaultAxesFor, optionPresetFor } from '../optionPresets';
 import { IMAGE_EXPIRED, QUICK_SCHEDULE, USE_MOCK } from '../config';
 import { AiDelayedError } from '../api/sellerProducts';
 import { parseServerTime } from '../api';
@@ -82,8 +82,10 @@ export function aiStateOf(token: string, r: { outcome: string; code: string; cat
   return { ...base, status: 'uncertain', reason: r.outcome === 'NOT_APPLICABLE' ? AI_MESSAGES.NOT_APPLICABLE : r.outcome === 'UNCLEAR' ? AI_MESSAGES.UNCLEAR : AI_MESSAGES.NO_CATEGORY };
 }
 /** 실제 모드 AI 분석: 서버에 기본 정보 저장 → 분석 요청 → 폴링. 결과가 오면(화면을 떠났어도) 초안에 반영 */
-async function analyzeReal(userId: string, token: string) {
-  const done = (ai: Draft['ai']) => { const d = getState().drafts[userId]; if (d && d.ai.status === 'analyzing' && d.ai.signature === token) patchDraft(userId, { ai }); };
+async function analyzeReal(userId: string, token: string, prev: AiQuestion[]) {
+  // 결과가 오면 예전 질문에 쓴 답을 같은 점검 항목의 새 질문으로 옮긴다(옮길 곳이 없는 답은 지운다)
+  // 실패·지연이면 직전 질문을 계속 보관해 다음 재시도에서도 답을 옮길 수 있게 한다
+  const done = (ai: Draft['ai']) => { const d = getState().drafts[userId]; if (d && d.ai.status === 'analyzing' && d.ai.signature === token) patchDraft(userId, ai.result ? { ai, faqs: carryAiAnswers(d.faqs, prev, ai.result.questions) } : { ai: { ...ai, prev } }); };
   const failed: Draft['ai'] = { status: 'failed', signature: token, category: '', reason: '' };
   try {
     const id = await ensureServerDraft(userId), d = getState().drafts[userId];
@@ -99,16 +101,17 @@ const ANALYSIS_MS = 2500;
 function startAnalysis(userId: string) {
   // 실제 모드: 진행 중인 분석이 있으면 새로 시작하지 않는다(같은 초안에 저장·요청이 겹치면 version만 오른다)
   if (!USE_MOCK && getState().drafts[userId]?.ai.status === 'analyzing') return;
-  const token = Date.now().toString(36);
-  patchDraft(userId, { ai: { status: 'analyzing', signature: token, category: '', reason: '' } });
-  if (!USE_MOCK) { void analyzeReal(userId, token); return; }
+  const cur = getState().drafts[userId]?.ai, token = Date.now().toString(36), prev = cur?.result?.questions ?? cur?.prev ?? [];
+  patchDraft(userId, { ai: { status: 'analyzing', signature: token, category: '', reason: '', prev } });
+  if (!USE_MOCK) { void analyzeReal(userId, token, prev); return; }
   setTimeout(() => {
     const state = getState(), d = state.drafts[userId];
     if (!d || d.ai.status !== 'analyzing' || d.ai.signature !== token) return;
     // 미리보기 도구의 AI 결과 선택: uncertain = UNCLEAR, unsupported = NOT_APPLICABLE, failed = 요청 실패
     if (state.aiOutcome === 'failed' || !d.images.length) { patchDraft(userId, { ai: { status: 'failed', signature: token, category: '', reason: '' } }); return; }
     const r = mockAiAnalysis(d), outcome = state.aiOutcome === 'uncertain' ? 'UNCLEAR' : state.aiOutcome === 'unsupported' ? 'NOT_APPLICABLE' : 'RECOMMENDED';
-    patchDraft(userId, { ai: { ...aiStateOf(token, { ...r, outcome }, d.images.length), input: analysisInputOf(d) } });
+    const ai = { ...aiStateOf(token, { ...r, outcome }, d.images.length), input: analysisInputOf(d) };
+    patchDraft(userId, ai.result ? { ai, faqs: carryAiAnswers(d.faqs, prev, ai.result.questions) } : { ai });
   }, ANALYSIS_MS);
 }
 function useDraft() {
@@ -165,6 +168,16 @@ export function WizardPage() {
   // AI 분석이 저장·조건 단계에서 막혔으면 해당 칸 아래에 표시한다
   const aiFields = d?.ai.status === 'failed' ? d.ai.fields : undefined;
   useEffect(() => { if (aiFields) setFieldErr(aiFields); }, [aiFields && JSON.stringify(aiFields)]);
+  // 카테고리가 정해지면 옵션 기본값을 카테고리에 맞춘다(옵션 값을 아직 넣지 않았을 때만). 칫솔·수납함처럼 색상·사이즈가 없는 상품은 옵션 없이 시작
+  useEffect(() => {
+    const cur = getState().drafts[user.id]; if (!cur?.axes || cur.editingId) return;
+    if ((cur.colors?.length ?? 0) || (cur.sizes?.length ?? 0) || Object.values(cur.stock ?? {}).some(Boolean)) return;
+    const want = defaultAxesFor(cur.category, meta.data); if (!want) return;
+    if (cur.axes.color !== want.color || cur.axes.size !== want.size || (want.sizeName && cur.sizeName !== want.sizeName)) patch({ axes: { color: want.color, size: want.size }, ...(want.sizeName ? { sizeName: want.sizeName } : {}) });
+  }, [d?.category, meta.data]);
+  // 칸 아래 오류는 그 칸을 고치면 바로 지운다(아래 render에서 recheck를 채운다)
+  const recheck = useRef<(() => void) | null>(null);
+  useEffect(() => { recheck.current?.(); }, [d]);
   // 출고지·반품지: 실제 모드는 판매자 주소록, mock은 판매자 설정의 주소
   const book = useApi(async signal => (USE_MOCK ? null : Promise.all([listAddressBook('DISPATCH', signal), listAddressBook('RETURN', signal)])), []);
   if (!user.seller) return <Unavailable message="승인된 판매자만 상품을 등록할 수 있습니다."/>;
@@ -239,6 +252,23 @@ export function WizardPage() {
     else if (d.ai.result) navigate(`/seller/new/ai${suffix}`);
     else { const next = new URLSearchParams(params); next.set('pick', 'category'); setParams(next); }
   }
+  /** 제출 전 검사(서버 규칙과 같다). 칸 이름 → 안내 문구 */
+  function submitProblems() {
+    const settings = s.sellerSettings[user.id];
+    const problems = listingProblems(d, { categories: meta.data?.categories ?? [], now, dispatch: USE_MOCK ? !!settings?.shippingAddress : !!book.data?.[0].length, return: USE_MOCK ? !!settings?.returnAddress : !!book.data?.[1].length });
+    if (!editId && (d.inspection?.length ?? 0) < INSPECTION_CHECKS.length) problems.inspection = '물품 검수 항목을 모두 확인해 주세요.';
+    if (revision) for (const k of Object.keys(problems)) if (!(REVISION_FIELDS as readonly string[]).includes(k)) delete problems[k];
+    return problems;
+  }
+  // 지금 보이는 오류 중 고쳐진 칸은 지운다. 모두 고쳐지면 위쪽 요약 오류도 지운다
+  recheck.current = () => {
+    const keys = Object.keys(fieldErr); if (!keys.length) return;
+    const now = { ...analysisProblems(d, editing?.reviewStatus), ...submitProblems() };
+    const left = keys.filter(k => k in now);
+    if (left.length === keys.length) return;
+    setFieldErr(Object.fromEntries(left.map(k => [k, fieldErr[k]])));
+    if (!left.length) setError('');
+  };
   /** 빠진 칸으로 스크롤하고 그 칸에 포커스 */
   function showProblems(f: Record<string, string>) {
     setFieldErr(f);
@@ -255,10 +285,7 @@ export function WizardPage() {
   async function submit() {
     setError(''); setFieldErr({});
     // 서버는 업무 규칙 오류(PRODUCT_INVALID)에 violations를 주지 않으므로 제출 전에 같은 규칙으로 먼저 막는다
-    const settings = s.sellerSettings[user.id];
-    const problems = listingProblems(d, { categories: meta.data?.categories ?? [], now, dispatch: USE_MOCK ? !!settings?.shippingAddress : !!book.data?.[0].length, return: USE_MOCK ? !!settings?.returnAddress : !!book.data?.[1].length });
-    if (!editId && (d.inspection?.length ?? 0) < INSPECTION_CHECKS.length) problems.inspection = '물품 검수 항목을 모두 확인해 주세요.';
-    if (revision) for (const k of Object.keys(problems)) if (!(REVISION_FIELDS as readonly string[]).includes(k)) delete problems[k];
+    const problems = submitProblems();
     if (Object.keys(problems).length) { showProblems(problems); setError('빠진 정보를 확인해 주세요.'); return; }
     setBusy(true);
     try {
@@ -275,13 +302,15 @@ export function WizardPage() {
     }
     catch (e) {
       const f = e instanceof StageError ? e.fields : fieldErrors(e);
-      // 화면 검사를 통과했는데 PRODUCT_INVALID면 그사이 서버 값이 바뀐 것: 상품을 다시 받아 화면을 새로 그린다
+      // 화면 검사를 통과했는데 PRODUCT_INVALID면 서버 값과 화면이 어긋난 것: 상품을 다시 받아 화면을 새로 그린다(검수 확인은 유지)
       if (!Object.keys(f).length && (isApiError(e, 'PRODUCT_INVALID') || e instanceof StageError && e.code === 'PRODUCT_INVALID') && serverId) {
+        let reloaded = false;
         try {
           const fresh = await getSellerProductWithImages(serverId);
-          mutate(st => { mergeProducts(st, [fresh]); const m = st.products.find(x => x.id === fresh.id)!; st.drafts[user.id] = { ...fromProduct(m), editingId: d.editingId, serverId: d.serverId, ai: d.ai }; });
-        } catch { /* 다시 받기 실패: 안내만 */ }
-        setError('그사이 정보가 바뀌었어요. 확인 후 다시 요청해 주세요');
+          mutate(st => { mergeProducts(st, [fresh]); const m = st.products.find(x => x.id === fresh.id)!; st.drafts[user.id] = { ...fromProduct(m), editingId: d.editingId, serverId: d.serverId, ai: d.ai, inspection: d.inspection }; });
+          reloaded = true;
+        } catch { /* 다시 받기 실패: 아래 안내 */ }
+        setError(reloaded ? '심사 요청을 처리하지 못했어요. 저장된 정보로 화면을 새로 불러왔으니 내용을 확인한 뒤 다시 요청해 주세요.' : '심사 요청을 처리하지 못했어요. 잠시 후 다시 요청해 주세요. 계속되면 화면을 새로고침해 주세요.');
       } else if (revision && (isApiError(e, 'PRODUCT_STATE') || isApiError(e, 'COMMON_OPTIMISTIC_LOCK_CONFLICT'))) {
         // 편집을 시작한 뒤 상품이 바뀌었거나(다른 수정 승인 등) 이미 심사 중인 수정 요청이 있다. 입력한 내용은 그대로 둔다
         setError('편집하는 사이 상품 정보가 바뀌었거나 이미 심사 중인 수정 요청이 있어요. 상품 관리에서 최신 정보를 확인한 뒤 다시 수정해 주세요.');
@@ -379,7 +408,7 @@ export function WizardPage() {
     <section className="space-y-2.5" data-field="price"><Label hint="· 필수">한정 판매가</Label>
       <label className="flex h-12 items-center border-b border-[var(--line)]"><input aria-label="한정 판매가" inputMode="numeric" className="min-w-0 flex-1 bg-transparent text-[16px] outline-none placeholder:text-[var(--placeholder)]" value={d.price ? d.price.toLocaleString('ko-KR') : ''} placeholder="0" onChange={e => patch({ price: Number(e.target.value.replace(/\D/g, '')) || 0 })}/><span className="text-[14px] text-[var(--aux)]">원</span></label>
       {discount > 0 && reference && <p className="flex items-center gap-2 text-[12px] text-[var(--aux)]"><span className="rounded-[3px] bg-[var(--positive-soft)] px-1.5 py-0.5 text-[11px] font-bold text-[var(--positive)]">{Math.round(discount / reference.price * 100)}% 저렴</span>{`${reference.platform} 판매가보다 ${money(discount)} 저렴해요`}</p>}
-      <p className="text-[12px] text-[var(--meta)]">{revision && reference ? `등록한 URL의 판매가(${money(reference.price)})보다 낮아야 심사를 요청할 수 있어요` : '등록한 URL의 판매가보다 낮아야 심사를 요청할 수 있어요'}</p>
+      <p className="text-[12px] text-[var(--meta)]">{revision && reference ? `등록한 URL의 판매가(${money(reference.price)})보다 낮아야 심사를 요청할 수 있어요` : '등록한 URL의 판매가보다 낮게 정해 주세요. 운영자가 심사 때 URL의 판매가와 비교해요'}</p>
       <FieldError name="price"/>
     </section>
 
@@ -405,12 +434,12 @@ export function WizardPage() {
     <section className="space-y-3" data-field="startsAt"><Label hint="· 필수">판매 일정</Label>
       <div className="flex gap-4">
         <label className="relative flex h-12 min-w-0 flex-[1.6] items-center justify-between border-b border-[var(--line)]"><span className="text-[16px]">{startOk ? dateLabel(d.startsAt) : '날짜 선택'}</span><Calendar size={18} className="text-[var(--aux)]"/><input aria-label="판매 날짜" type="date" className="absolute inset-0 opacity-0" min={localDateTime(now).slice(0, 10)} max={localDateTime(now + 7 * 86_400_000).slice(0, 10)} value={startOk ? localDateTime(start.getTime()).slice(0, 10) : ''} onChange={e => setDate(e.target.value)}/></label>
-        <label className="relative flex h-12 min-w-0 flex-1 items-center justify-between border-b border-[var(--line)]"><span className="text-[16px]">{startOk ? hhmm(start.getHours(), start.getMinutes()) : '시간'}</span><ChevronDown size={18} className="text-[var(--aux)]"/>{QUICK_SCHEDULE ? <input aria-label="판매 시작 시각" type="time" step={60} className="absolute inset-0 opacity-0" value={startOk ? hhmm(start.getHours(), start.getMinutes()) : ''} onChange={e => e.target.value && setTime(e.target.value)}/> : <select aria-label="판매 시작 시각" className="absolute inset-0 opacity-0" value={startOk ? hhmm(start.getHours(), start.getMinutes()) : ''} onChange={e => setTime(e.target.value)}>{TIME_SLOTS.map(t => <option key={t}>{t}</option>)}</select>}</label>
+        <label className="relative flex h-12 min-w-0 flex-1 items-center justify-between border-b border-[var(--line)]"><span className="text-[16px]">{startOk ? hhmm(start.getHours(), start.getMinutes()) : '시간'}</span><ChevronDown size={18} className="text-[var(--aux)]"/>{QUICK_SCHEDULE ? <input aria-label="판매 시작 시각" type="time" step={60} className="absolute inset-0 opacity-0" value={startOk ? hhmm(start.getHours(), start.getMinutes()) : ''} onChange={e => e.target.value && setTime(e.target.value)}/> : <select aria-label="판매 시작 시각" className="absolute inset-0 opacity-0" value={startOk ? hhmm(start.getHours(), start.getMinutes()) : ''} onChange={e => setTime(e.target.value)}>{TIME_SLOTS.map(t => <option key={t} disabled={startOk && new Date(`${localDateTime(start.getTime()).slice(0, 10)}T${t}`).getTime() <= now}>{t}</option>)}</select>}</label>
       </div>
       {QUICK_SCHEDULE && <button type="button" className="w-full rounded-[6px] border border-dashed border-[var(--line)] py-2.5 text-[12px] font-bold text-[var(--aux)]" onClick={() => patch({ startsAt: localDateTime(Math.ceil((now + 5 * 60_000) / 60_000) * 60_000) })}>테스트: 5분 뒤 시작</button>}
       {startOk && <p className="flex items-center gap-2 rounded-[6px] bg-[var(--soft)] px-4 py-3 text-[13px] font-bold"><Timer size={16}/>{`${hhmm(start.getHours(), start.getMinutes())} 시작 – ${endLabel} 자동 종료 · 3시간 선착순 판매`}</p>}
       <p className="flex items-start gap-1.5 text-[12px] text-[var(--aux)]"><Info size={14} className="mt-[2px] shrink-0"/>운영자 승인 전에 시작 시각이 지나면 승인이 실패해요. 여유 있게 잡아 주세요</p>
-      <FieldError name="startsAt"/>
+      {startOk && start.getTime() <= now && !fieldErr.startsAt ? <p className="mt-1.5 text-[12px] text-[var(--red)]">판매 시작 시각이 지났어요. 지금보다 뒤로 바꿔 주세요.</p> : <FieldError name="startsAt"/>}
     </section>
 
     {!revision && <>
@@ -427,14 +456,13 @@ export function WizardPage() {
     </section>
     {!revision && <>
     {/* 택배사·반품/교환 배송비: 판매자 설정 API가 없어 상품의 shippingNotice 글로 저장한다. 칸을 고치면 아래 글이 다시 만들어지고, 글은 직접 고칠 수 있다 */}
-    <section className="space-y-3" data-field="shippingNotice"><div><Label hint="· 구매자에게 안내돼요">택배사 · 반품·교환 배송비</Label></div>
+    <section className="space-y-3" data-field="shippingNotice"><div><Label hint="· 구매자에게 안내돼요">택배사 · 반품 배송비</Label></div>
       {(() => {
-        const set = (v: Partial<Pick<Draft, 'carrier' | 'returnFee' | 'exchangeFee'>>) => { const n = { carrier: d.carrier ?? '', returnFee: d.returnFee ?? '', exchangeFee: d.exchangeFee ?? '', ...v }; patch({ ...n, shippingNotice: composeShippingNotice(n.carrier, n.returnFee, n.exchangeFee) }); };
+        const set = (v: Partial<Pick<Draft, 'carrier' | 'returnFee' | 'exchangeFee'>>) => { const n = { carrier: d.carrier ?? '', returnFee: d.returnFee ?? '', exchangeFee: '', ...v }; /* 교환은 지원하지 않아 교환 배송비는 안내하지 않는다 */ patch({ ...n, shippingNotice: composeShippingNotice(n.carrier, n.returnFee, n.exchangeFee) }); };
         const digits = (v: string) => v.replace(/\D/g, '');
         return <>
           <label className="block text-[13px]">택배사<select aria-label="택배사" className="field-line" value={d.carrier ?? ''} onChange={e => set({ carrier: e.target.value })}><option value="">선택 안 함</option>{['CJ대한통운', '한진택배', '롯데택배', '우체국택배'].map(c => <option key={c}>{c}</option>)}</select></label>
           <label className="block text-[13px]">반품 배송비<span className="flex items-center border-b border-[var(--line)]"><input aria-label="반품 배송비" inputMode="numeric" className="min-w-0 flex-1 bg-transparent py-3 text-[16px] outline-none" value={d.returnFee ? Number(d.returnFee).toLocaleString('ko-KR') : ''} placeholder="3,000" onChange={e => set({ returnFee: digits(e.target.value) })}/><span className="text-[14px] text-[var(--aux)]">원</span></span></label>
-          <label className="block text-[13px]">교환 배송비<span className="flex items-center border-b border-[var(--line)]"><input aria-label="교환 배송비" inputMode="numeric" className="min-w-0 flex-1 bg-transparent py-3 text-[16px] outline-none" value={d.exchangeFee ? Number(d.exchangeFee).toLocaleString('ko-KR') : ''} placeholder="6,000" onChange={e => set({ exchangeFee: digits(e.target.value) })}/><span className="text-[14px] text-[var(--aux)]">원</span></span></label>
         </>;
       })()}
       <label className="block text-[13px]">배송 안내 글<textarea aria-label="배송 안내" rows={3} className="mt-1 w-full rounded-[6px] border border-[var(--border)] p-3 text-[14px] outline-none" value={d.shippingNotice ?? ''} onChange={e => patch({ shippingNotice: e.target.value })}/></label>

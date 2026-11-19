@@ -70,9 +70,23 @@ export function ProductCard({ product: p, now, availableCount, notified, onNotif
 }
 export function Progress({ step }: { step: number }) { return <div aria-label={`상품 등록 ${step} / 7단계`} className="mb-5 flex gap-[5px]">{Array.from({ length: 7 }, (_, i) => <div key={i} className={`h-1 flex-1 rounded-[2px] ${i < step ? 'bg-[var(--ink)]' : 'bg-[var(--line)]'}`}/>)}</div>; }
 export const ORDER_LABELS: Record<Order['status'], string> = { paid: '결제 완료', preparing: '배송 준비', shipping: '배송 중', delivered: '배송 완료', cancelled: '취소 완료', refunded: '환불 완료' };
-export function DeliveryProgress({ status }: { status: Order['status'] }) { const active = ['paid', 'preparing', 'shipping', 'delivered'].indexOf(status); return <div className="divider grid grid-cols-4 gap-1 pb-5">{['결제 완료', '배송 준비', '배송 중', '배송 완료'].map((label, i) => <div key={label} className="flex flex-col items-center gap-2"><span className={`font-number grid h-[30px] w-[30px] place-items-center rounded-full text-[11px] ${i <= active ? 'bg-[var(--ink)] text-[var(--surface)]' : 'bg-[var(--blue-soft)] text-[var(--muted)]'}`}>{i < active ? '✓' : i + 1}</span><span className={`text-[10px] ${i === active ? 'font-bold' : 'muted'}`}>{label}</span></div>)}</div>; }
+export function DeliveryProgress({ status }: { status: Order['status'] }) { const active = ['paid', 'preparing', 'shipping', 'delivered'].indexOf(status); return <div className="divider grid grid-cols-4 gap-1 pb-5">{['결제 완료', '배송 준비', '배송 중', '배송 완료'].map((label, i) => <div key={label} className="flex flex-col items-center gap-2"><span className={`font-number grid h-[30px] w-[30px] place-items-center rounded-full text-[11px] ${i <= active ? 'bg-[var(--ink)] text-[var(--surface)]' : 'bg-[var(--blue-soft)] text-[var(--muted)]'}`}>{i < active || status === 'delivered' && i === active ? '✓' : i + 1}</span><span className={`text-[10px] ${i === active ? 'font-bold' : 'muted'}`}>{label}</span></div>)}</div>; }
+/**
+ * 열린 창(모달·시트·사진 보기)을 브라우저 뒤로 가기(아이폰 스와이프 포함)로 닫는다.
+ * 열 때 같은 주소로 기록을 하나 쌓고, 뒤로 가기가 오면 페이지 대신 창만 닫는다. 버튼으로 닫으면 쌓은 기록을 되돌린다
+ */
+export function useCloseOnBack(onClose: () => void) {
+  const close = useRef(onClose); close.current = onClose;
+  useEffect(() => {
+    const id = Math.random().toString(36).slice(2); let popped = false;
+    window.history.pushState({ ...(window.history.state ?? {}), sdModal: id }, '');
+    const onPop = () => { popped = true; close.current(); };
+    window.addEventListener('popstate', onPop);
+    return () => { window.removeEventListener('popstate', onPop); if (!popped && window.history.state?.sdModal === id) window.history.back(); };
+  }, []);
+}
 export function Modal({ title, children, onClose }: { title: string; children: ReactNode; onClose: () => void }) {
-  const ref = useRef<HTMLDialogElement>(null);
+  const ref = useRef<HTMLDialogElement>(null); useCloseOnBack(onClose);
   useEffect(() => { const node = ref.current!; node.showModal(); const alreadyLocked = document.body.classList.contains('overflow-hidden'); document.body.classList.add('overflow-hidden'); return () => { node.close(); if (!alreadyLocked) document.body.classList.remove('overflow-hidden'); }; }, []);
   return <dialog ref={ref} aria-label={title} onCancel={event => { event.preventDefault(); onClose(); }} onClick={event => { if (event.target === event.currentTarget) onClose(); }} className="fixed inset-x-0 bottom-0 top-auto m-0 mx-auto max-h-[92dvh] w-full max-w-[390px] overflow-y-auto rounded-t-[16px] border-0 bg-[var(--surface)] p-5 pb-[max(20px,env(safe-area-inset-bottom))] text-[var(--ink)] backdrop:bg-[var(--overlay)]"><div className="mx-auto mb-5 h-1 w-9 rounded-full bg-[var(--line)]"/><div className="mb-5 flex items-center justify-between gap-4"><h2 className="text-[18px] font-bold">{title}</h2><button aria-label="닫기" onClick={onClose} className="grid h-9 w-9 shrink-0 place-items-center"><X size={20}/></button></div>{children}</dialog>;
 }
@@ -89,6 +103,7 @@ export function Loading({ text = '확인하고 있어요…' }: { text?: string 
 
 /** 바텀시트 — 상단 모서리 16, 손잡이, 뒤 배경 45% 어둡게 */
 export function BottomSheet({ title, children, onClose }: { title?: string; children: ReactNode; onClose: () => void }) {
+  useCloseOnBack(onClose);
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center" style={{ background: 'var(--overlay)' }} onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="w-full max-w-[390px] rounded-t-[16px] bg-[var(--surface)] pb-safe" style={{ animation: 'sheet-in 240ms cubic-bezier(.22,1,.36,1) both' }}>

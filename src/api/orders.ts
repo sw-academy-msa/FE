@@ -38,6 +38,7 @@ export function orderFromCommand(d: OrderCommandDto, userId: string): Order {
     shipping: d.shippingFee ?? 0, total: d.totalAmount ?? 0,
     address: d.address ? addressFromApi(d.address) : { name: '', phone: '', address: '', detail: '', request: '' },
     status: orderStatus(d.state, d.delivery), createdAt: ms(d.confirmedAt) ?? Date.now(), carrier: d.carrier ?? undefined, tracking: d.trackingNumber ?? undefined,
+    paidAt: ms(d.confirmedAt), dispatchDays: d.dispatchBusinessDays || undefined,
   };
 }
 /** 목록 항목 → Order. 목록에는 단가·배송비·배송지가 없어 0/빈 값 (상세를 이미 받았다면 merge가 유지) */

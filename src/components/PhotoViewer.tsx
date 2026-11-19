@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { ChevronLeft, ChevronRight, Minus, Plus, X } from 'lucide-react';
+import { useCloseOnBack } from './ui';
 
 /** 전체 화면 사진 보기 — 좌우로 넘기고(버튼·스와이프·방향키) 확대/축소. panel은 사진 아래에 같이 보여 줄 내용(검수 항목 등) */
 export function PhotoViewer({ images, start = 0, onClose, panel }: { images: string[]; start?: number; onClose: () => void; panel?: ReactNode }) {
   const [i, setI] = useState(Math.min(start, images.length - 1)), [zoom, setZoom] = useState(1), touchX = useRef<number | null>(null);
+  useCloseOnBack(onClose);
   const go = (d: number) => { setI(v => (v + d + images.length) % images.length); setZoom(1); };
   useEffect(() => {
     const key = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); else if (e.key === 'ArrowLeft') go(-1); else if (e.key === 'ArrowRight') go(1); };
