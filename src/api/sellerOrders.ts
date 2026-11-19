@@ -5,6 +5,7 @@
  */
 import type { Inquiry, Order } from '../domain';
 import { api } from './client';
+import { allSellerPages } from './sellerPaging';
 import { inquiryFromCard, orderInquiryFromApi } from './inquiries';
 import { orderFromApi } from './mappers';
 import { orderFromCommand, orderFromListItem } from './orders';
@@ -21,8 +22,11 @@ const mine = (sellerId: string) => (o: Order): Order => ({ ...o, sellerId });
 export interface SellerOrderQuery { keyword?: string; state?: OrderState; delivery?: DeliveryState; createdFrom?: string; createdTo?: string; productId?: string; page?: number; size?: number }
 /** GET /v1/seller/orders — 본인 주문 목록(`content`). 목록에는 단가·배송지가 없다 */
 export async function listSellerOrders(sellerId: string, q: SellerOrderQuery = {}, signal?: AbortSignal): Promise<Order[]> {
-  const r = await api.get<ContentPage<OrderListItemDto>>(S, { service: general, signal, query: { size: 100, ...q } });
-  return r.content.filter(d => d.state === 'CONFIRMED').map(d => mine(sellerId)(orderFromListItem(d, '')));
+  const rows = await allSellerPages(async page => {
+    const r = await api.get<ContentPage<OrderListItemDto>>(S, { service: general, signal, query: { size: 100, ...q, page } });
+    return { ...r, rows: r.content };
+  }, q.page);
+  return rows.filter(d => d.state === 'CONFIRMED').map(d => mine(sellerId)(orderFromListItem(d, '')));
 }
 /** GET /v1/seller/orders/{id} — 상세(배송지·송장 포함) */
 export async function getSellerOrder(id: string, sellerId: string, signal?: AbortSignal): Promise<Order> {
@@ -67,13 +71,19 @@ export async function deliverOrder(id: string, sellerId: string): Promise<Order>
 const asSeller = (sellerId: string) => (q: Inquiry): Inquiry => ({ ...q, sellerId });
 /** GET /v1/seller/orders/inquiries — 전체 주문 문의함(`content`) */
 export async function listSellerOrderInquiryInbox(sellerId: string, q: { productId?: string; unansweredOnly?: boolean } = {}, signal?: AbortSignal): Promise<Inquiry[]> {
-  const r = await api.get<ContentPage<InquiryCardDto>>(`${S}/inquiries`, { service: general, signal, query: { size: 100, ...q } });
-  return r.content.map(d => asSeller(sellerId)(inquiryFromCard(d, '')));
+  const rows = await allSellerPages(async page => {
+    const r = await api.get<ContentPage<InquiryCardDto>>(`${S}/inquiries`, { service: general, signal, query: { size: 100, ...q, page } });
+    return { ...r, rows: r.content };
+  });
+  return rows.map(d => asSeller(sellerId)(inquiryFromCard(d, '')));
 }
 /** GET …/{id}/inquiries — 한 주문의 문의 목록 */
 export async function listSellerOrderInquiries(orderId: string, sellerId: string, signal?: AbortSignal): Promise<Inquiry[]> {
-  const r = await api.get<ContentPage<OrderInquiryDto>>(`${at(orderId)}/inquiries`, { service: general, signal, query: { size: 100 } });
-  return r.content.map(d => asSeller(sellerId)(orderInquiryFromApi(d, '')));
+  const rows = await allSellerPages(async page => {
+    const r = await api.get<ContentPage<OrderInquiryDto>>(`${at(orderId)}/inquiries`, { service: general, signal, query: { size: 100, page } });
+    return { ...r, rows: r.content };
+  });
+  return rows.map(d => asSeller(sellerId)(orderInquiryFromApi(d, '')));
 }
 /** GET …/{id}/inquiries/{inquiryId} — 문의 상세(메시지 전체) */
 export async function getSellerOrderInquiry(orderId: string, inquiryId: string, sellerId: string, signal?: AbortSignal): Promise<Inquiry> {

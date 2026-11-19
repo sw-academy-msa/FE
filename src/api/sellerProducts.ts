@@ -8,6 +8,7 @@
 import type { Draft, Inquiry, Product } from '../domain';
 import { CATEGORY_PATHS, analysisStale, optionKey } from '../domain';
 import { ApiError, api } from './client';
+import { allSellerPages } from './sellerPaging';
 import { ms } from './mappers';
 import { errorMessage } from './errors';
 import type { AiAnalysisAcceptedDto, AiAnalysisDto, ProductImageMetaDto, ProductImageUploadDto, ProductRevisionDto, ProductReviewListItemDto, ProductSalesSummaryDto, RegistrationMetadataDto, SellerProductDto, SellerProductInquiryDto, ItemsPage } from './types';
@@ -47,8 +48,11 @@ export function sellerProductInquiryFromApi(d: SellerProductInquiryDto, sellerId
 export interface SellerProductQuery { status?: 'DRAFT' | 'IN_REVIEW' | 'REJECTED' | 'APPROVED'; month?: string; saleState?: 'SCHEDULED' | 'ON_SALE' | 'ENDED'; page?: number; size?: number }
 /** GET /v1/seller/products — 본인 상품 관리 목록(`items`) */
 export async function listSellerProducts(sellerId: string, q: SellerProductQuery = {}, signal?: AbortSignal): Promise<Product[]> {
-  const r = await api.get<ItemsPage<ProductReviewListItemDto>>(P, { service: purchase, signal, query: { size: 100, ...q } });
-  return r.items.map(d => sellerProductFromListItem(d, sellerId));
+  const rows = await allSellerPages(async page => {
+    const r = await api.get<ItemsPage<ProductReviewListItemDto>>(P, { service: purchase, signal, query: { size: 100, ...q, page } });
+    return { ...r, rows: r.items };
+  }, q.page);
+  return rows.map(d => sellerProductFromListItem(d, sellerId));
 }
 /** POST /v1/seller/products — 등록 초안 생성(201, 본문 없음) */
 export const createProductDraft = async () => sellerProductFromApi(await api.post<SellerProductDto>(P, undefined, { service: purchase }));
@@ -220,8 +224,11 @@ export async function pollAiAnalysis(requestId: string, o: { schedule?: number[]
 /* ── 문의 답변 ── */
 /** GET /v1/seller/products/inquiries — 본인 상품 문의함(`items`) */
 export async function listSellerProductInquiries(sellerId: string, q: { productId?: string; unanswered?: boolean } = {}, signal?: AbortSignal): Promise<Inquiry[]> {
-  const r = await api.get<ItemsPage<SellerProductInquiryDto>>(`${P}/inquiries`, { service: purchase, signal, query: { size: 100, ...q } });
-  return r.items.map(d => sellerProductInquiryFromApi(d, sellerId));
+  const rows = await allSellerPages(async page => {
+    const r = await api.get<ItemsPage<SellerProductInquiryDto>>(`${P}/inquiries`, { service: purchase, signal, query: { size: 100, ...q, page } });
+    return { ...r, rows: r.items };
+  });
+  return rows.map(d => sellerProductInquiryFromApi(d, sellerId));
 }
 /** PUT …/{productId}/inquiries/{inquiryId}/answer — expectedVersion은 문의 version. publishToFaq=true면 FAQ도 갱신 */
 export async function answerProductInquiry(sellerId: string, productId: string, inquiryId: string, b: { expectedVersion: number; answer: string; publishToFaq?: boolean }): Promise<Inquiry> {
