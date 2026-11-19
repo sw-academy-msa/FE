@@ -86,7 +86,7 @@ export function mergeProducts(s: State, items: Product[]) {
     if (i < 0) { s.products.push(p); continue; }
     const old = s.products[i];
     s.products[i] = { ...old, ...p, options: p.options.length ? p.options : old.options, description: p.description || old.description, images: p.images.length ? p.images : old.images,
-      sellerId: p.sellerId || old.sellerId, originalUrl: p.originalUrl || old.originalUrl, shipping: p.shipping || old.shipping, maxPerAccount: p.maxPerAccount || old.maxPerAccount, dispatchDays: p.dispatchDays || old.dispatchDays,
+      sellerId: p.sellerId || old.sellerId, category: p.category || old.category, price: p.price || old.price, originalUrl: p.originalUrl || old.originalUrl, shipping: p.shipping || old.shipping, maxPerAccount: p.maxPerAccount || old.maxPerAccount, dispatchDays: p.dispatchDays || old.dispatchDays,
       dimensions: p.dimensions.length ? p.dimensions : old.dimensions, extras: p.extras.length ? p.extras : old.extras, reason: p.reason || old.reason, faqs: p.faqs.length ? p.faqs : old.faqs };
   }
 }

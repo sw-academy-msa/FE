@@ -22,3 +22,14 @@ export function optionPresetFor(category: string, meta?: Pick<RegistrationMetada
   if (major === 'HOUSEHOLD') return { second: ['크기', '용량'], quick: {} };
   return { second: [DEFAULT_SECOND_AXIS], quick: {} }; // 카테고리를 아직 고르지 않았거나 모를 때는 기존 그대로
 }
+/**
+ * 카테고리를 고르면(아직 옵션 값을 넣기 전) 처음 켜 둘 옵션. 의류·신발은 색상 × 사이즈, 그 밖은 옵션 없이 시작한다
+ * (문구·생활잡화는 색상·사이즈가 없는 상품이 많다. 필요하면 추천 칩으로 켠다). 카테고리를 모르면 undefined(지금 상태 유지)
+ */
+export function defaultAxesFor(category: string, meta?: Pick<RegistrationMetadataDto, 'categoryCriteria'>): { color: boolean; size: boolean; sizeName?: string } | undefined {
+  const code = category ? meta?.categoryCriteria.find(c => c.name === category)?.code : undefined, major = code ? majorOf(code) : undefined;
+  if (!major) return undefined;
+  if (major === 'CLOTHING') return { color: true, size: true, sizeName: '사이즈' };
+  if (major === 'FASHION_ACCESSORIES' && code && groupOf(code) === '신발') return { color: true, size: true, sizeName: '사이즈(mm)' };
+  return { color: false, size: false };
+}

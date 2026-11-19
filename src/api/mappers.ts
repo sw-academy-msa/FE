@@ -33,5 +33,6 @@ export function orderFromApi(d: OrderDetailDto, userId: string, image = ''): Ord
     address: d.address ? addressFromApi(d.address) : { name: '', phone: '', address: '', detail: '', request: '' },
     status: orderStatus(d.state, d.delivery), createdAt: Date.parse(d.createdAt),
     carrier: d.carrier ?? undefined, tracking: d.trackingNumber ?? undefined, shippedAt: ms(d.shippedAt), deliveredAt: ms(d.deliveredAt),
+    paidAt: ms(d.confirmedAt), dispatchDays: d.dispatchBusinessDays || undefined,
   };
 }

@@ -19,6 +19,7 @@ export interface Product {
   /** 판매에 참여(구매 시도)한 인원 — 백엔드 요청 필드 */ participants?: number;
   /** 타 플랫폼 판매가 확인 결과 — 백엔드 요청 필드 */ reference?: ReferenceListing;
   /** 판매자 API 상품: 낙관적 잠금 version, 심사 상태, 서버 이미지 id(images와 같은 순서) */ version?: number; reviewStatus?: 'DRAFT' | 'IN_REVIEW' | 'REJECTED' | 'APPROVED'; imageIds?: string[]; /** 서버 이미지 바이트 수(imageIds와 같은 순서) */ imageSizes?: number[];
+  /** 판매자 관리 목록 요약(옵션 없이 받은 목록 항목): 한정 수량 합계·판매(확정) 수량 */ listQuantity?: { total: number; sold: number };
   /** 서버(실제 API)에서 받은 상품의 재고 요약. 있으면 options[].stock은 서버의 남은 수량이고 로컬 주문·확보로 다시 빼지 않는다 */ live?: { initial: number; available: number };
 }
 export interface User { id: string; name: string; email: string; phone: string; seller: boolean; admin: boolean }
@@ -52,7 +53,10 @@ export interface Order {
   shipping: number; total: number; address: Address; status: OrderStatus; createdAt: number;
   carrier?: string; tracking?: string; shippedAt?: number; deliveredAt?: number; deliveredPlace?: string;
   deliveredMemo?: string; processedBy?: string; processedAt?: number;
+  /** 결제 확정 시각(없으면 createdAt) · 상품의 출고 기한(영업일) */ paidAt?: number; dispatchDays?: number;
 }
+/** 화면에 보이는 주문번호. 구매자·판매자·운영자가 같은 값을 보도록 주문 ID 앞 10자리를 쓴다 */
+export const orderNo = (id: string) => id.replace(/-/g, '').slice(0, 10).toUpperCase();
 export interface Inquiry { id: string; userId: string; sellerId: string; productId: string; orderId?: string; productName: string; kind: string; question: string; answer?: string; public: boolean; createdAt: number;
   /** 문의한 주문 수량 — 백엔드 요청 필드 (docs/backend-api-requests.md) */ quantity?: number; images?: string[]
   /** 판매자 상품 문의 답변용 낙관적 잠금 version */ version?: number
@@ -78,6 +82,26 @@ export interface ReferenceListing { platform: string; title: string; price: numb
 export interface AiAnalysis { /** 점검 기준 코드(예 CLOTHING) */ code: string; /** 기본 선택할 등록 카테고리 이름 */ category: string; photos: number; questions: AiQuestion[] }
 /** AI 점검 질문. checkCode는 registration-metadata 점검 기준 항목 코드 */
 export interface AiQuestion { checkCode?: string; /** 서버 질문 id — FAQ 저장 때 그대로 보낸다 */ suggestionId?: string; question: string; reason: string }
+/**
+ * 다시 분석한 뒤 AI 질문 답을 새 질문으로 옮긴다. 같은 점검 항목(checkCode)이나 같은 문구의 새 질문이 있으면 답을 그대로 옮기고,
+ * 없으면 예전 질문의 답은 지운다(서버는 예전 분석의 질문 id를 받지 않는다). 직접 쓴 FAQ는 그대로 둔다
+ */
+export function carryAiAnswers(faqs: Faq[], prev: AiQuestion[], next: AiQuestion[]): Faq[] {
+  const sid = (q: AiQuestion) => q.suggestionId ?? q.question;
+  const nextIds = new Set(next.map(sid)), used = new Set<string>();
+  const out: Faq[] = [];
+  for (const f of faqs) {
+    if (!f.suggestionId) { out.push(f); continue; }
+    if (nextIds.has(f.suggestionId)) { used.add(f.suggestionId); out.push(f); continue; }
+    if (!f.answer.trim()) continue;
+    const old = prev.find(q => sid(q) === f.suggestionId);
+    const to = next.find(q => !used.has(sid(q)) && (old?.checkCode && q.checkCode === old.checkCode || q.question.trim() === f.question.trim()));
+    if (!to) continue;
+    used.add(sid(to));
+    out.push({ ...f, id: `faq-${sid(to)}`, question: to.question, suggestionId: sid(to) });
+  }
+  return out;
+}
 /** AI 분석에 쓰이는 입력. 이 중 하나라도 바뀌면 이전 분석의 질문은 쓸 수 없다(카테고리를 AI 추천값으로 바꾼 것은 예외) */
 /** AI 분석 입력. 판매처 URL은 AI가 열어보지 않아 넣지 않는다(서버 분석 입력과 같다). URL만 바꿔도 다시 분석하지 않는다 */
 export interface AnalysisInput { name: string; description: string; brand: string; category: string; reason: string; images: string[] }
@@ -291,3 +315,7 @@ export function lookupReference(url: string): ReferenceListing | undefined {
 export function mockAiAnalysis(d: Draft): AiAnalysis {
   return { code: 'CLOTHING_MOCK_01', category: '패션 › 상의 › 니트/스웨터', photos: d.images.length, questions: [{ checkCode: 'CLOTHING_MOCK_01__CLOTHING_MEASUREMENTS', suggestionId: 'mock-suggestion-1', question: '실측 사이즈(총장·가슴 단면)를 알려 주세요', reason: '사진만으로는 사이즈를 확인할 수 없어요' }] };
 }
+/** 판매자 화면용 받는 분 이름 가리기(홍길동 → 홍*동, 두 글자 → 홍*). 비어 있으면 빈 문자열 */
+export const maskName = (name: string) => { const n = name.trim(); return n.length <= 1 ? n : n.length === 2 ? `${n[0]}*` : `${n[0]}${'*'.repeat(n.length - 2)}${n[n.length - 1]}`; };
+/** 연락처 표시: 01012345678 → 010-1234-5678, 0212345678 → 02-1234-5678. 모양이 다르면 그대로 */
+export const formatPhone = (v: string) => { const d = (v ?? '').replace(/\D/g, ''); return d.startsWith('02') && (d.length === 9 || d.length === 10) ? `02-${d.slice(2, -4)}-${d.slice(-4)}` : d.length === 10 || d.length === 11 ? `${d.slice(0, 3)}-${d.slice(3, -4)}-${d.slice(-4)}` : v; };
