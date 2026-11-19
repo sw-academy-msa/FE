@@ -123,6 +123,11 @@ export function warnCriteria(meta: RegistrationMetadataDto) {
 }
 /** GET /v1/seller/products/sales-summary — 판매·재고 집계(매출·정산 없음) */
 export const getSalesSummary = (month?: string, signal?: AbortSignal) => api.get<ProductSalesSummaryDto>(`${P}/sales-summary`, { service: purchase, signal, query: { month } });
+/** 상품의 출고지(판매자 주문 상세 표시용). 판매가 시작된 상품의 출고지는 바뀌지 않아 주문 당시 출고지와 같다. 없으면 '' */
+export async function getProductDispatchAddress(id: string, signal?: AbortSignal): Promise<string> {
+  const a = (await api.get<SellerProductDto>(at(id), { service: purchase, signal })).dispatchAddress;
+  return a ? [a.roadAddress, a.detailAddress].filter(Boolean).join(' ') : '';
+}
 /** GET /v1/seller/products/{id} — 편집 원본(version 포함). 이미지는 getSellerProductWithImages */
 export async function getSellerProduct(id: string, signal?: AbortSignal): Promise<Product> {
   return sellerProductFromApi(await api.get<SellerProductDto>(at(id), { service: purchase, signal }));
