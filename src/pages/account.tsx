@@ -15,7 +15,7 @@ import { changePassword, restoreSession, validPassword } from '../auth';
 import { USE_MOCK } from '../config';
 import { applicationFailure, applicationProblems, firstProblem, normalizeAccount, normalizePhone, problemSummary } from '../sellerApply';
 import type { ApplyField, ApplyProblems } from '../sellerApply';
-import { ApiError, apiPut, apiDelete, approveSellerApplication, decideProductReview, errorMessage, getAdminApplication, getAdminProductReviewWithImages, listAdminApplications, listAdminProductReviews, markApplication, mergeAdminApplications, mergeAdminProductList, mergeProducts, rejectSellerApplication, reviewCertificate, fetchMyApplication, mergeApplication, resubmitApplication, submitApplication, updateMyName, addInquiryMessage, getInquiryImageUrl, getOrderInquiry, listInquiryInbox, mergeInquiries, useLive } from '../api';
+import { answerSupportInquiry, createSupportInquiry, listAdminSupportInquiries, listMySupportInquiries, ApiError, apiPut, apiDelete, approveSellerApplication, decideProductReview, errorMessage, getAdminApplication, getAdminProductReviewWithImages, listAdminApplications, listAdminProductReviews, markApplication, mergeAdminApplications, mergeAdminProductList, mergeProducts, rejectSellerApplication, reviewCertificate, fetchMyApplication, mergeApplication, resubmitApplication, submitApplication, updateMyName, addInquiryMessage, getInquiryImageUrl, getOrderInquiry, listInquiryInbox, mergeInquiries, useLive } from '../api';
 import { failTab, getPdf, openPendingTab } from '../files';
 import { RevisionList, useRevisionQueue } from './revisions';
 import { PhotoViewer } from '../components/PhotoViewer';
@@ -279,18 +279,19 @@ export function AdminSellersPage() {
 }
 /** 문의 관리(StockDrop 1:1 문의) — TODO(api-gap): 운영자 문의 조회·답변 API가 명세에 없어 mock(이 기기 저장) 유지 */
 export function AdminInquiriesPage() {
-  const s = useStore(), user = activeUser(s), toast = useToast(); const [open, setOpen] = useState(''), [answer, setAnswer] = useState('');
+  const s = useStore(), user = activeUser(s), toast = useToast(); const [open, setOpen] = useState(''), [answer, setAnswer] = useState(''), [busy, setBusy] = useState(false);
+  const live = useLive(sig => (USE_MOCK || !user.admin ? Promise.resolve([]) : listAdminSupportInquiries(sig)), mergeInquiries, [user.admin]);
   if (!user.admin) return <Unavailable message="운영자만 사용할 수 있습니다."/>;
   const items = s.inquiries.filter(q => q.sellerId === 'stockdrop').sort((a, b) => Number(!!a.answer) - Number(!!b.answer) || b.createdAt - a.createdAt);
   return <div>
     <Header title="문의 관리" subtitle={`답변 대기 ${items.filter(q => !q.answer).length}건 · 1:1 문의`}/>
-    {!USE_MOCK && <Note title="준비 중">1:1 문의 답변 기능은 준비 중이에요.</Note>}
+    {!USE_MOCK && <LiveStatus state={live}/>}
     {items.map(q => <div key={q.id} className="divider space-y-2 py-4">
       <button className="w-full space-y-1 text-left" aria-expanded={open === q.id} onClick={() => { setOpen(open === q.id ? '' : q.id); setAnswer(''); }}>
         <div className="flex items-center justify-between gap-2"><span className={`rounded px-2 py-0.5 text-[10px] font-semibold ${q.answer ? 'bg-[#EEF8F3] text-[#3FB181]' : 'bg-[var(--soft)] text-[var(--muted)]'}`}>{q.answer ? '답변 완료' : '답변 대기'}</span><span className="muted text-[10px]">{q.kind} · {dateTime(q.createdAt)}</span></div>
         <p className={`text-[13px] ${open === q.id ? 'whitespace-pre-line' : 'truncate'}`}>{q.question}</p>
       </button>
-      {open === q.id && (q.answer ? <div className="rounded-[6px] border border-[var(--line)] p-3 text-[12px] leading-relaxed whitespace-pre-line">{q.answer}</div> : <div className="space-y-2"><textarea aria-label="문의 답변" className="field field-box w-full" rows={3} maxLength={1000} value={answer} onChange={e => setAnswer(e.target.value)} placeholder="답변을 입력해 주세요"/><Button className="w-full" disabled={!answer.trim()} onClick={() => { mutate(st => { const it = st.inquiries.find(x => x.id === q.id); if (it) it.answer = answer.trim(); }); setOpen(''); toast('답변을 등록했습니다.'); }}>답변 등록</Button></div>)}
+      {open === q.id && (q.answer ? <div className="rounded-[6px] border border-[var(--line)] p-3 text-[12px] leading-relaxed whitespace-pre-line">{q.answer}</div> : <div className="space-y-2"><textarea aria-label="문의 답변" className="field field-box w-full" rows={3} maxLength={1000} value={answer} onChange={e => setAnswer(e.target.value)} placeholder="답변을 입력해 주세요"/><Button className="w-full" disabled={!answer.trim() || busy} onClick={async () => { setBusy(true); try { if (!USE_MOCK) { const r = await answerSupportInquiry(q.id, answer); mutate(st => mergeInquiries(st, [{ ...r, userId: q.userId }])); } else mutate(st => { const it = st.inquiries.find(x => x.id === q.id); if (it) it.answer = answer.trim(); }); setOpen(''); toast('답변을 등록했어요. 문의한 분께 알림이 가요.'); } catch (e) { toast(errorMessage(e)); } finally { setBusy(false); } }}>{busy ? '등록 중…' : '답변 등록'}</Button></div>)}
     </div>)}
     {!items.length && <Empty title="받은 문의가 없어요"/>}
   </div>;
@@ -1010,6 +1011,7 @@ export function FaqPage() {
 export function InquiryListPage() {
   const s = useStore(); const navigate = useNavigate(); const [tab, setTab] = useState<'전체' | '판매자 문의' | '1:1 문의'>('전체');
   const live = useLive(sig => listInquiryInbox(s.activeUserId, sig), mergeInquiries, [s.activeUserId]);
+  useLive(sig => (USE_MOCK ? Promise.resolve([]) : listMySupportInquiries(s.activeUserId, sig)), mergeInquiries, [s.activeUserId]); // 1:1 문의
   const all = s.inquiries.filter(q => q.userId === s.activeUserId);
   const sellerCount = all.filter(q => q.sellerId !== 'stockdrop').length;
   const directCount = all.filter(q => q.sellerId === 'stockdrop').length;
@@ -1053,6 +1055,9 @@ export function InquiryDetailPage() {
   const q = s.inquiries.find(i => i.id === id && i.userId === s.activeUserId);
   // 상세 API는 주문 id가 필요하다: store에 없으면(직접 진입) 문의함에서 찾아 orderId를 얻는다
   const live = useLive(async sig => {
+    if (q?.sellerId === 'stockdrop') return USE_MOCK ? null : (await listMySupportInquiries(s.activeUserId, sig)).find(i => i.id === id) ?? null;
+    const support = !q && !USE_MOCK ? (await listMySupportInquiries(s.activeUserId, sig).catch(() => [])).find(i => i.id === id) : undefined;
+    if (support) return support;
     const orderId = q?.orderId ?? (await listInquiryInbox(s.activeUserId, sig)).find(i => i.id === id)?.orderId;
     return orderId && id ? getOrderInquiry(orderId, id, s.activeUserId, sig) : null;
   }, (st, d) => { if (d) mergeInquiries(st, [d]); }, [id, s.activeUserId]);
@@ -1129,7 +1134,7 @@ export function OpsInquiryComposePage() {
   const kinds = ['계정', '결제', '앱 오류', '입점·판매', '기타'];
   const dirty = !!title.trim() || !!content.trim();
   const userOrders = s.orders.filter(o => o.userId === s.activeUserId).slice(0, 10);
-  return <form className="space-y-5" onSubmit={async e => { e.preventDefault(); if (!title.trim() || !content.trim()) { setError('제목과 내용을 입력해 주세요.'); return; } setBusy(true); setError(''); try { const newId = uid('q-'); await atomic(state => { state.inquiries.unshift({ id: newId, userId: state.activeUserId, sellerId: 'stockdrop', productId: '', productName: title.trim(), kind, question: content.trim(), orderId: orderId || undefined, public: false, createdAt: nowOf(state) }); }); toast('문의가 접수되었습니다. 평일 10:00–18:00 내에 답변드릴게요.'); navigate(`/inquiries/${newId}`); } catch (e) { setError((e as Error).message); } finally { setBusy(false); } }}>
+  return <form className="space-y-5" onSubmit={async e => { e.preventDefault(); if (!title.trim() || !content.trim()) { setError('제목과 내용을 입력해 주세요.'); return; } setBusy(true); setError(''); try { let newId = uid('q-'); if (!USE_MOCK) { const q = await createSupportInquiry({ kind, title, content, orderId }, s.activeUserId); newId = q.id; mutate(st => mergeInquiries(st, [q])); } else await atomic(state => { state.inquiries.unshift({ id: newId, userId: state.activeUserId, sellerId: 'stockdrop', productId: '', productName: title.trim(), kind, question: content.trim(), orderId: orderId || undefined, public: false, createdAt: nowOf(state) }); }); toast('문의가 접수되었습니다. 평일 10:00–18:00 내에 답변드릴게요.'); navigate(`/inquiries/${newId}`, { replace: true }); } catch (e) { setError((e as Error).message); } finally { setBusy(false); } }}>
     <Header title="1:1 문의하기" action={<button type="button" onClick={() => { if (dirty) setLeaving(true); else navigate(-1); }} className="muted text-[11px]">닫기</button>}/>
     <section className="space-y-3"><p className="label">문의 유형 <span className="muted text-[10px]">· 필수</span></p><div className="flex flex-wrap gap-2">{kinds.map(k => <Chip key={k} selected={kind === k} onClick={() => setKind(k)}>{k}</Chip>)}</div></section>
     <Field label="제목" required><input aria-label="제목" className="field" value={title} onChange={e => setTitle(e.target.value)} placeholder="제목을 입력해 주세요" required/></Field>

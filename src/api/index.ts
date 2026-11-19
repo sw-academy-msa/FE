@@ -13,6 +13,7 @@ export * from './seller';
 export * from './sellerProducts';
 export * from './sellerOrders';
 export * from './admin';
+export * from './support';
 export { useLive } from './live';
 export type { LiveState } from './live';
 export { SERVICE_BASE } from './services';
