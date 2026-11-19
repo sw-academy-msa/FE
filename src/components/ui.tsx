@@ -5,6 +5,7 @@ import { ArrowLeft, Bell, Timer, X, Home, CalendarDays, Package, UserRound, Chev
 import type { Product, Order } from '../domain';
 import { money, saleState, stockTotal } from '../domain';
 import { IMAGE_EXPIRED } from '../config';
+import { useStore } from '../store';
 const ToastContext = createContext<(message: string) => void>(() => {});
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [message, setMessage] = useState('');
@@ -33,7 +34,8 @@ export function MenuRow({ label, to, children }: { label: string; to: string; ch
 const signedUrl = (u: string) => /[?&]X-Amz-(Expires|Signature)=/i.test(u);
 export function ProductImage({ src, alt, className = '' }: { src: string; alt: string; className?: string }) {
   const reported = useRef('');
-  const onError = () => { if (typeof src === 'string' && signedUrl(src) && reported.current !== src) { reported.current = src; window.dispatchEvent(new Event(IMAGE_EXPIRED)); } };
+  // 서명 주소가 만료됐거나, 이 탭에서 만든 미리보기(blob:)가 새로고침으로 사라졌으면 새 주소를 받도록 알린다
+  const onError = () => { if (typeof src === 'string' && (signedUrl(src) || src.startsWith('blob:')) && reported.current !== src) { reported.current = src; window.dispatchEvent(new Event(IMAGE_EXPIRED)); } };
   // 사진을 아직 못 받았으면 예시 상품 사진을 쓰지 않고 빈 자리만 보여 준다(내 상품 대신 다른 사진이 먼저 보이던 문제)
   if (!src) return <div role="img" aria-label={alt} className={`block rounded-[4px] bg-[var(--soft)] ${className}`}/>;
   return <img src={typeof src === 'string' && src.startsWith('/images/') ? `.${src}` : src} alt={alt} onError={onError} className={`block rounded-[4px] bg-[var(--blue-soft)] object-cover ${className}`} loading="lazy"/>;
@@ -48,14 +50,20 @@ export function ProductCard({ product: p, now, availableCount, notified, onNotif
   const total = stockTotal(p), left = availableCount ?? total;
   const soldOut = (status === '판매 중' && availableCount === 0) || (status === '판매 종료' && !!p.soldOutAt);
   const urgent = status === '판매 중' && !soldOut && p.endsAt - now <= 3_600_000;
+  // 내가 재고를 확보해 결제 중이거나 이미 산 상품은 품절 대신 내 상태를 보여 준다
+  const st = useStore(), mine = st.activeUserId;
+  const myHold = !!mine && st.holds.some(h => h.userId === mine && h.productId === p.id && (h.status === 'pending' || h.status === 'reserved' && (h.expiresAt ?? Infinity) > now));
+  const myOrder = !!mine && !myHold && st.orders.some(o => o.userId === mine && o.productId === p.id && !['cancelled', 'refunded'].includes(o.status));
   const pct = total ? Math.min(100, Math.max(0, (1 - left / total) * 100)) : 0;
   return <Link to={`/product/${p.id}`} className="block min-w-0">
     <div className="relative">
-      <ProductImage src={p.images[0]} alt={p.name} className={`aspect-square w-full ${soldOut ? 'opacity-50' : ''}`}/>
+      <ProductImage src={p.images[0]} alt={p.name} className={`aspect-square w-full ${soldOut && !myHold ? 'opacity-50' : ''}`}/>
       {status === '판매 중' && !soldOut && <span className="absolute left-2 top-2 flex items-center gap-1 rounded-[4px] bg-black/75 px-1.5 py-1 text-[11px] font-bold tabular-nums text-white"><Timer size={12}/>{clockLeft(p.endsAt - now)}</span>}
       {status === '판매 예정' && <span className="absolute left-2 top-2 flex items-center gap-1 rounded-[4px] bg-black/75 px-1.5 py-1 text-[11px] font-bold text-white"><Bell size={12}/>{openLabel(p.startsAt, now)}</span>}
       {urgent && <span className="absolute bottom-2 left-2 rounded-[4px] bg-[var(--urgent)] px-1.5 py-1 text-[11px] font-bold text-white">마감 임박</span>}
-      {soldOut && <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-[4px] bg-[#333333] px-3 py-1.5 text-[12px] font-bold text-white">SOLD OUT</span>}
+      {myHold ? <span className="absolute inset-x-2 bottom-2 rounded-[4px] bg-[var(--ink)] px-2 py-1.5 text-center text-[12px] font-bold text-white">확보한 재고 · 결제 이어하기</span>
+        : myOrder && soldOut ? <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-[4px] bg-[var(--ink)] px-3 py-1.5 text-[12px] font-bold text-white">구매 완료</span>
+        : soldOut && <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-[4px] bg-[#333333] px-3 py-1.5 text-[12px] font-bold text-white">SOLD OUT</span>}
     </div>
     <p className="mt-2.5 text-[11px] font-bold text-[var(--aux)]">{p.brand}</p>
     <h3 className={`mt-0.5 text-[14px] ${soldOut ? 'text-[var(--meta)]' : ''}`}>{p.name}</h3>

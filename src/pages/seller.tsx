@@ -9,7 +9,7 @@ import type { Order, Product, SellerSettings } from '../domain';
 import { atomic, mutate, useStore } from '../store';
 import { endSession } from '../auth';
 import { addBusinessDays, dateTime, kstDay, kstShort, kstSlot, openDay, useClock } from '../hooks';
-import { Badge, Button, CopyButton, copyText, Toggle, Empty, ErrorBox, Field, Header, InfoRow, LiveStatus, MenuRow, Modal, Note, ORDER_LABELS, ProductImage, ProductSummary, Unavailable, useToast } from '../components/ui';
+import { Badge, Button, clockLeft, CopyButton, copyText, Toggle, Empty, ErrorBox, Field, Header, InfoRow, LiveStatus, MenuRow, Modal, Note, ORDER_LABELS, ProductImage, ProductSummary, Unavailable, useToast } from '../components/ui';
 import { PdfField } from '../components/PdfField';
 import { AddressBookFormPage, AddressBookPage } from './sellerAddresses';
 import type { ProductRevisionDto } from '../api';
@@ -18,6 +18,37 @@ import { api } from '../api';
 import { USE_MOCK } from '../config';
 const hm = (t: number) => new Date(t).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false });
 const md = (t: number) => { const d = new Date(t); return `${d.getMonth() + 1}.${d.getDate()} (${'일월화수목금토'[d.getDay()]})`; };
+/** 판매 현황 요약 — 이번 달 판매·남은 수량(상품 집계), 상품 상태별 수, 처리할 주문(주문 집계), 지금 판매 중인 상품 */
+export function SellerSalesPage() {
+  const s = useStore(), user = activeUser(s), now = useClock();
+  const month = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit' }).format(now);
+  const live = useLive(async signal => (user.seller ? listSellerProducts(user.id, {}, signal) : null), (st, items) => { if (items) mergeProducts(st, items); }, [user.id]);
+  const sales = useApi(async signal => (USE_MOCK || !user.seller ? null : getSalesSummary(month, signal)), [user.id, month]);
+  const orders = useApi(async signal => (USE_MOCK || !user.seller ? null : getSellerOrderSummary({}, signal)), [user.id]);
+  if (!user.seller) return <Unavailable/>;
+  const mine = s.products.filter(p => p.sellerId === user.id && p.reviewStatus !== 'DRAFT');
+  const onSale = mine.filter(p => saleState(p, now) === '판매 중'), sd = sales.data, od = orders.data;
+  const num = (v: number | undefined, unit: string) => (v === undefined ? '-' : `${v.toLocaleString('ko-KR')}${unit}`);
+  const tile = (label: string, value: string, to?: string) => { const body = <><p className="font-number text-[18px] font-bold">{value}</p><p className="muted mt-1 text-[11px]">{label}</p></>; return to ? <Link key={label} to={to} className="rounded-[6px] bg-[var(--canvas)] py-4 text-center">{body}</Link> : <div key={label} className="rounded-[6px] bg-[var(--canvas)] py-4 text-center">{body}</div>; };
+  return <div className="space-y-6">
+    <Header title="판매 현황" subtitle={`${Number(month.slice(5))}월 기준 · 이번 달 시작한 승인 상품`} backTo="/my"/>
+    <LiveStatus state={{ loading: sales.loading, error: sales.error, reload: sales.reload }}/>
+    <section className="space-y-2"><h2 className="text-[15px] font-bold">이번 달 판매</h2>
+      <div className="grid grid-cols-3 gap-2">{tile('판매 수량', num(sd?.confirmedQuantity, '개'))}{tile('결제 대기', num(sd?.reservedQuantity, '개'))}{tile('남은 수량', num(sd?.availableQuantity, '개'))}</div>
+    </section>
+    <section className="space-y-2"><h2 className="text-[15px] font-bold">상품</h2>
+      <div className="grid grid-cols-3 gap-2">{tile('판매 예정', num(sd?.scheduledCount, '개'), '/seller/products?state=판매 예정')}{tile('판매 중', num(sd?.onSaleCount, '개'), '/seller/products?state=판매 중')}{tile('판매 종료', num(sd?.endedCount, '개'), '/seller/products?state=판매 종료')}</div>
+    </section>
+    <section className="space-y-2"><h2 className="text-[15px] font-bold">주문 처리</h2>
+      <div className="grid grid-cols-3 gap-2">{tile('배송 준비', num(od?.preparingOrders, '건'), '/seller/orders')}{tile('배송 중', num(od?.shippingOrders, '건'), '/seller/orders')}{tile('배송 완료', num(od?.deliveredOrders, '건'), '/seller/orders')}</div>
+      {orders.error && <p className="text-[12px] text-[var(--red)]">주문 집계를 불러오지 못했어요. <button type="button" className="font-bold underline" onClick={orders.reload}>다시 시도</button></p>}
+    </section>
+    <section className="space-y-2"><h2 className="text-[15px] font-bold">지금 판매 중</h2>
+      {onSale.map(p => <Link key={p.id} to={`/seller/product/${p.id}`} className="divider flex items-center justify-between gap-3 py-3"><span className="min-w-0 flex-1 truncate text-[14px]">{p.name}</span><span className="muted shrink-0 text-[12px]">{clockLeft(p.endsAt - now)} 남음 ›</span></Link>)}
+      {!onSale.length && !live.loading && <p className="muted py-3 text-[12px]">지금 판매 중인 상품이 없어요.</p>}
+    </section>
+  </div>;
+}
 export function SellerProductsPage() {
   const s = useStore(), user = activeUser(s), now = useClock(); const [params, setParams] = useSearchParams(); const tab = params.get('state') ?? '전체';
   // 실제 모드: 본인 상품 목록과 이번 달 판매 집계를 서버에서 받는다(mock은 store 목업 그대로)
@@ -485,7 +516,7 @@ export function SellerMyPage() {
       <section className="mb-4">
         <p className="muted mb-2 text-[13px] font-bold">판매 관리</p>
         <MenuRow to="/seller/products" label="판매 상품 관리"><span className="muted mr-1 text-[12px]">{ready ? `${productCount}개` : '-'}</span></MenuRow>
-        <MenuRow to="/seller/products?state=판매 중" label="판매 현황"/>
+        <MenuRow to="/seller/sales" label="판매 현황"/>
         <MenuRow to="/seller/orders" label="주문 관리"/>
         <MenuRow to="/seller/inquiries" label="문의 답변"><span className={`mr-1 text-[12px] ${unanswered > 0 ? 'text-[var(--red)]' : 'muted'}`}>{unanswered > 0 ? `${unanswered}건 대기` : ''}</span></MenuRow>
         <MenuRow to="/seller/new" label="새 한정 판매 등록"/>
