@@ -950,7 +950,7 @@ export function SellerSupportPage() {
         {[['판매자 이용약관', '/seller/terms'], ['판매 수수료 안내', '/seller/terms'], ['운영 정책 · 패널티 기준', '/seller/terms']].map(([label, to]) => (
           <Link key={label} to={to} className="divider flex h-[52px] items-center justify-between">
             <span className="text-[13px]">{label}</span>
-            <span className="muted text-[12px]">{label === '판매 수수료 안내' ? '상품별 한정 수량 90% 초과 판매 시 판매 금액의 10%, 그 외 0%' : ''}<ChevronRight size={16} className="inline muted ml-1"/></span>
+            <span className="muted text-[12px]">{label === '판매 수수료 안내' ? '상품별 한정 수량 90% 초과 판매 시 판매 금액의 10%, 그 외 0% (배송비 제외)' : ''}<ChevronRight size={16} className="inline muted ml-1"/></span>
           </Link>
         ))}
       </section>
