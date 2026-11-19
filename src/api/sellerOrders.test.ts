@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { api } from './client';
 import { answerOrderInquiry, completeDelivery, deliverOrder, getFulfillment, getSellerInquiryEditing, getSellerInquiryImageUrl, getSellerOrder, getSellerOrderInquiry, getSellerOrderSummary, listSellerOrderInquiries, listSellerOrderInquiryInbox, listSellerOrders, registerShipment, shipOrder } from './sellerOrders';
 import type { OrderCommandDto } from './types';
+import { feeFor, seedState } from '../domain';
 
 type Call = { url: string; method: string; body?: any };
 function fake(handler: (c: Call) => unknown) {
@@ -23,6 +24,20 @@ const item = (o: object = {}) => ({ orderId: 'o1', orderNumber: 'N1', productId:
 const page = (content: unknown[]) => ({ content, page: 0, size: 100, totalElements: content.length, totalPages: 1 });
 
 describe('판매자 주문 조회', () => {
+  it('200건을 모든 페이지에서 합쳐 판매량과 10% 수수료를 집계한다', async () => {
+    const calls = fake(c => {
+      const p = Number(new URL(c.url, 'http://localhost').searchParams.get('page') ?? 0);
+      return { ...page(Array.from({ length: 100 }, (_, i) => item({ orderId: `o${p * 100 + i}`, items: [{ optionId: 'op1', label: '크림', quantity: 1 }], totalAmount: 1000 }))), page: p, totalPages: 2, totalElements: 200 };
+    });
+    const s = seedState(), p = s.products[0];
+    p.id = 'p1'; p.options = [{ id: 'op1', name: '크림', stock: 200 }];
+    s.orders = await listSellerOrders('s1', { productId: 'p1', state: 'CONFIRMED' });
+    expect(s.orders).toHaveLength(200);
+    expect(new Set(s.orders.map(o => o.id)).size).toBe(200);
+    expect(feeFor(s, p)).toMatchObject({ sold: 200, revenue: 200000, fee: 20000, net: 180000 });
+    expect(calls.map(c => new URL(c.url, 'http://localhost').searchParams.get('page'))).toEqual([null, '1']);
+    expect(calls.every(c => c.url.includes('productId=p1') && c.url.includes('state=CONFIRMED'))).toBe(true);
+  });
   it('목록: content, CONFIRMED만 주문으로, sellerId는 호출한 판매자, 배송 상태 반영', async () => {
     const calls = fake(() => page([item(), item({ orderId: 'o2', delivery: 'SHIPPING' }), item({ orderId: 'o3', state: 'HELD', delivery: null })]));
     const list = await listSellerOrders('s1', { productId: 'p1' });
