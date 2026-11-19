@@ -489,6 +489,12 @@ export function AdminDetailPage() {
     </div>
   );
 }
+/** 상품의 판매자 이름: 승인된 입점 신청(계정 id = 상품 sellerId)의 표시 이름. 모르면 undefined(화면에서 숨긴다) */
+function sellerOf(s: ReturnType<typeof useStore>, sellerId: string): { name: string } | undefined {
+  const app = s.applications.find(a => a.userId === sellerId && a.status === 'approved');
+  if (app) return { name: app.displayName || app.name };
+  const u = s.users.find(x => x.id === sellerId); return u ? { name: u.name } : undefined;
+}
 export function AdminProductListPage() {
   const s = useStore(), user = activeUser(s);
   // 심사 대기/승인 완료 탭은 주소에 남겨 상세를 보고 돌아와도 유지한다
@@ -496,6 +502,7 @@ export function AdminProductListPage() {
   const setTab = (t: 'pending' | 'approved') => { const next = new URLSearchParams(params); if (t === 'approved') next.set('tab', t); else next.delete('tab'); setParams(next, { replace: true }); };
   const kind = params.get('kind') === 'revision' ? 'revision' : 'new'; // 신규 / 수정 심사 탭
   const revisions = useRevisionQueue(user.admin);
+  useLive(sig => user.admin ? listAdminApplications({ status: 'APPROVED' }, sig) : Promise.resolve([]), mergeAdminApplications, [user.admin]); // 판매자 이름(승인된 입점 신청)
   const live = useLive(async sig => user.admin ? (await Promise.all((['IN_REVIEW', 'REJECTED', 'APPROVED'] as const).map(st => listAdminProductReviews(st, sig)))).flat() : [], mergeAdminProductList, [user.admin]);
   if (!user.admin) return <Unavailable message="운영자만 사용할 수 있습니다."/>;
   const products = s.products.filter(p => tab === 'pending' ? !p.published : p.published);
@@ -518,7 +525,7 @@ export function AdminProductListPage() {
         ))}
       </div>
       {products.map(p => {
-        const seller = s.users.find(u => u.id === p.sellerId);
+        const seller = sellerOf(s, p.sellerId);
         const openLabel = `오픈 ${kstShort(p.startsAt)}`;
         const dDay = Math.ceil((p.startsAt - Date.now()) / 86_400_000);
         return (
@@ -562,7 +569,8 @@ export function AdminProductDetailPage() {
   const [urlViewed, setUrlViewed] = useState(false);
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
   const [viewer, setViewer] = useState<number | null>(null), [inspected, setInspected] = useState<string[]>([]); // 전체 화면 사진 + 검수 확인 표시
-  const seller = s.users.find(u => u.id === p?.sellerId);
+  const seller = p ? sellerOf(s, p.sellerId) : undefined;
+  useLive(sig => user.admin ? listAdminApplications({ status: 'APPROVED' }, sig) : Promise.resolve([]), mergeAdminApplications, [user.admin]); // 판매자 이름(승인된 입점 신청)
   const live = useLive(sig => user.admin && id ? getAdminProductReviewWithImages(id, sig) : Promise.resolve(null), (st, x) => { if (x) mergeProducts(st, [x]); }, [id, user.admin]);
   if (!user.admin) return <Unavailable message="운영자만 사용할 수 있습니다."/>;
   if (!p) return live.loading || live.error ? <LiveStatus state={live}/> : <Empty title="상품을 찾을 수 없어요"><Link to="/admin/products" className="btn">심사 목록으로</Link></Empty>;
