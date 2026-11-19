@@ -327,7 +327,7 @@ export function SellerProductPage() {
       </section>
       <div className="rounded-[8px] bg-[var(--soft)] p-5 space-y-2">
         <p className="text-[13px] font-bold">구매 확정 후 D+7 영업일에 입금돼요</p>
-        <p className="text-[12px] text-[#7B7B7B]">반품·교환이 생기면 정산 금액이 달라질 수 있어요.</p>
+        <p className="text-[12px] text-[#7B7B7B]">반품·환불은 STOCKDROP이 처리하지 않아요. 구매자와 직접 협의해 진행해 주세요.</p>
         <p className="text-[12px] text-[#7B7B7B]">정산 내역은 마이페이지 &gt; 정산 계좌에서 볼 수 있어요.</p>
       </div>
     </div>;

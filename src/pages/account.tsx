@@ -969,7 +969,7 @@ export const SELLER_FAQ_ITEMS: FaqItem[] = [
   { question: '정산은 언제 입금되나요?', answer: '구매 확정된 주문은 정산 주기에 맞춰 등록한 정산 계좌로 입금돼요. 정산 계좌는 마이페이지 › 정산 계좌 관리에서 확인할 수 있어요.' },
   { question: '출고 마감 시간을 넘기면 어떻게 되나요?', answer: '상품에 설정한 출고 기한 안에 송장을 등록해 주세요. 기한을 넘기면 구매자에게 지연 안내가 가고, 반복되면 운영 정책에 따라 판매가 제한될 수 있어요.' },
   { question: '판매 심사에서 반려되면 다시 요청할 수 있나요?', answer: '네. 반려 사유를 확인하고 내용을 고친 뒤 판매 상품 관리에서 다시 심사를 요청할 수 있어요.' },
-  { question: '구매자가 반품을 요청하면?', answer: '주문 문의로 반품 요청이 들어와요. 판매자 문의함에서 내용을 확인하고 반품지 안내와 함께 답변해 주세요.' },
+  { question: '구매자가 반품을 요청하면?', answer: '반품·환불은 STOCKDROP이 처리하지 않아요. 주문 문의로 들어온 요청을 확인하고 구매자와 직접 협의해 반품지 안내와 환불을 진행해 주세요.' },
 ];
 
 /** FAQ 펼침 목록 — 질문을 누르면 답이 펼쳐진다. FAQ API가 없어 내용은 목업(TODO(api-gap)) */
@@ -1106,7 +1106,7 @@ export function InquiryDetailPage() {
           </div>
           <div className="rounded-[6px] border border-[var(--line)] p-4 space-y-2">
             <p className="text-[13px] leading-[1.8] whitespace-pre-line">{q.answer}</p>
-            {['반품', '하자', '오배송'].includes(q.kind) && <p className="muted text-[10px]">하자 확인 · 반품 배송비 판매자 부담</p>}
+            {['반품', '하자·파손', '오배송'].includes(q.kind) && <p className="muted text-[10px]">반품·환불은 판매자와 직접 협의해 주세요</p>}
           </div>
           <div className="rounded-[6px] bg-[var(--soft)] p-4 space-y-1">
             <p className="text-[13px] font-semibold">답변으로 해결되지 않았나요?</p>
@@ -1118,7 +1118,7 @@ export function InquiryDetailPage() {
       )}
       <div className="flex gap-2">
         <Button outline className="flex-1" onClick={() => history.back()}>추가 문의</Button>
-        {q.answer && q.orderId && <Button className="flex-1" onClick={() => navigate(`/orders/${q.orderId}`)}>반품 신청하기</Button>}
+        {q.orderId && <Button className="flex-1" onClick={() => navigate(`/orders/${q.orderId}`)}>주문 보기</Button>}
       </div>
       <Link to="/inquiries" className="btn btn-outline w-full">문의 목록으로</Link>
     </div>
