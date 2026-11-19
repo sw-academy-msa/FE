@@ -68,7 +68,8 @@ export async function pushState(): Promise<PushState> {
     const state = await reg?.pushManager.permissionState?.({ userVisibleOnly: true }).catch(() => undefined);
     if (state === 'denied') return 'denied';
     if (state === 'prompt') return 'ask';
-    return (await reg?.pushManager.getSubscription()) ? 'on' : 'reconnect';
+    // 브라우저 구독이 있어도 마지막 서버 등록이 실패했으면 서버는 이 기기를 모른다
+    return (await reg?.pushManager.getSubscription()) && lastPushRegister()?.ok !== false ? 'on' : 'reconnect';
   } catch { return 'reconnect'; }
 }
 

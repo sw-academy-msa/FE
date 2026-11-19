@@ -247,7 +247,9 @@ export function NotificationSettingsPage() {
   const asked = useRef<Promise<NotificationPermission> | null>(null);
   // 이 기기의 백그라운드 알림 상태. 아이폰 설정에서 끄고 돌아오는 경우가 있어 화면을 열 때와 앱으로 돌아올 때마다 다시 확인한다
   const [push, setPush] = useState<PushState>('unsupported');
-  const refreshPush = () => { if (!USE_MOCK) void pushState().then(setPush).catch(() => {}); };
+  // 늦게 끝난 예전 조회가 최신 결과(예: 설정에서 끔)를 덮지 않게 마지막 조회만 반영한다
+  const pushCheck = useRef(0);
+  const refreshPush = () => { if (USE_MOCK) return; const n = ++pushCheck.current; void pushState().then(v => { if (n === pushCheck.current) setPush(v); }).catch(() => {}); };
   useEffect(() => {
     refreshPush();
     const onBack = () => { if (document.visibilityState === 'visible') refreshPush(); };
@@ -257,7 +259,8 @@ export function NotificationSettingsPage() {
   const askPermission = () => {
     if (USE_MOCK) return null;
     const p = asked.current ?? requestPushPermission();
-    if (p) { asked.current = p; p.then(refreshPush, () => {}); }
+    // 진행 중인 요청만 공유한다. 끝나면 비워서 설정에서 바꾸고 돌아온 뒤에는 현재 권한을 다시 본다
+    if (p) { asked.current = p; const done = () => { if (asked.current === p) asked.current = null; refreshPush(); }; p.then(done, done); }
     else if (pushPermission() === 'denied') toast(PUSH_DENIED_TEXT);
     return p;
   };
