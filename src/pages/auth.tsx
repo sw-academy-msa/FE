@@ -13,7 +13,8 @@ import { errorMessage, fieldErrors, fetchMySettings, saveMarketingConsent, saveN
 import { SignupLoginError, ensureSession, flushPendingPrefs, setPendingPrefs, loginHref, homePath, login, logout, normalizeEmail, resetPassword, safeNext, sendCode, signedIn, signup, validEmail, validPassword, verifyCode, demoLogin } from '../auth';
 import { DEMO_ACCOUNTS, DEMO_LOGIN, PUSH_DEBUG, USE_MOCK } from '../config';
 import { PushDebug } from '../components/PushDebug';
-import { PUSH_DENIED_TEXT, canSubscribePush, enablePush, pushPermission, requestPushPermission } from '../push';
+import { PUSH_DENIED_TEXT, canSubscribePush, enablePush, pushPermission, pushState, requestPushPermission } from '../push';
+import type { PushState } from '../push';
 const inputClass = 'w-full min-w-0 border-0 border-b border-[var(--line)] bg-transparent py-3 text-[14px] outline-none placeholder:text-[var(--muted)] focus:border-[var(--ink)] disabled:opacity-50';
 function useAuthNow() { const [now, setNow] = useState(Date.now()); useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, []); return now; }
 const DEMO_NEXT_KEY = 'stockdrop:demo-next';
@@ -244,11 +245,22 @@ export function NotificationSettingsPage() {
   const server = useRef({ recommend: false, shown: false });
   // 알림을 켜는 순간(사용자 동작 안) 권한을 묻는다. iOS는 이때만 팝업을 띄우고, 한 번 거절하면 기기 설정에서만 바꿀 수 있다
   const asked = useRef<Promise<NotificationPermission> | null>(null);
-  const [permission, setPermission] = useState(() => (USE_MOCK ? 'unsupported' : pushPermission()));
+  // 이 기기의 백그라운드 알림 상태. 아이폰 설정에서 끄고 돌아오는 경우가 있어 화면을 열 때와 앱으로 돌아올 때마다 다시 확인한다
+  const [push, setPush] = useState<PushState>('unsupported');
+  // 늦게 끝난 예전 조회가 최신 결과(예: 설정에서 끔)를 덮지 않게 마지막 조회만 반영한다
+  const pushCheck = useRef(0);
+  const refreshPush = () => { if (USE_MOCK) return; const n = ++pushCheck.current; void pushState().then(v => { if (n === pushCheck.current) setPush(v); }).catch(() => {}); };
+  useEffect(() => {
+    refreshPush();
+    const onBack = () => { if (document.visibilityState === 'visible') refreshPush(); };
+    document.addEventListener('visibilitychange', onBack); window.addEventListener('focus', onBack);
+    return () => { document.removeEventListener('visibilitychange', onBack); window.removeEventListener('focus', onBack); };
+  }, []);
   const askPermission = () => {
     if (USE_MOCK) return null;
     const p = asked.current ?? requestPushPermission();
-    if (p) { asked.current = p; p.then(setPermission, () => {}); }
+    // 진행 중인 요청만 공유한다. 끝나면 비워서 설정에서 바꾸고 돌아온 뒤에는 현재 권한을 다시 본다
+    if (p) { asked.current = p; const done = () => { if (asked.current === p) asked.current = null; refreshPush(); }; p.then(done, done); }
     else if (pushPermission() === 'denied') toast(PUSH_DENIED_TEXT);
     return p;
   };
@@ -270,6 +282,14 @@ export function NotificationSettingsPage() {
     return () => { alive = false; };
   }, [logged, attempt]);
   const ready = load === 'ready';
+  const [pushBusy, setPushBusy] = useState(false);
+  /** 백그라운드 알림만 다시 연결한다(설정 저장 없이). 권한은 클릭 순간 먼저 묻는다 */
+  const connectPush = async () => {
+    const early = askPermission(); setPushBusy(true);
+    try { const r = await enablePush(early); if (r === 'granted') toast('백그라운드 알림을 연결했어요.'); else if (r === 'denied') toast(PUSH_DENIED_TEXT); else if (r === 'disabled') toast('지금은 알림을 연결할 수 없어요. 잠시 후 다시 시도해 주세요.'); }
+    catch (e) { toast(`알림을 연결하지 못했어요. ${errorMessage(e)}`); }
+    finally { setPushBusy(false); refreshPush(); }
+  };
   const proceed = async (push = false) => {
     // 서버 저장(await)보다 먼저 권한을 물어야 iOS가 팝업을 띄운다
     const early = push ? askPermission() : null;
@@ -291,7 +311,7 @@ export function NotificationSettingsPage() {
       }
     }
     // 서버 Web Push 구독은 '알림 받기 시작'(사용자 동작)에서만. 실패해도 설정 저장은 끝났으니 다음 화면으로 간다
-    if (push && logged) { try { const r = await enablePush(early); setPermission(pushPermission()); if (r === 'denied') toast(PUSH_DENIED_TEXT); else if (r === 'unsupported') toast('이 브라우저는 푸시 알림을 지원하지 않아요. iPhone은 홈 화면에 추가한 뒤 이용해 주세요.'); } catch (e) { toast(errorMessage(e)); } }
+    if (push && logged) { try { const r = await enablePush(early); refreshPush(); if (r === 'denied') toast(PUSH_DENIED_TEXT); else if (r === 'unsupported') toast('이 브라우저는 푸시 알림을 지원하지 않아요. iPhone은 홈 화면에 추가한 뒤 이용해 주세요.'); } catch (e) { toast(errorMessage(e)); } }
     if (settingsMode) toast('알림 설정을 저장했어요.');
     navigate(next, { replace: true });
   };
@@ -323,7 +343,12 @@ export function NotificationSettingsPage() {
         <div><p>광고성 정보 수신 동의 (선택)</p><p className="muted mt-1 text-[11px] font-normal leading-relaxed">개인 맞춤 알림 서비스를 위해 마케팅 정보 수신에 동의합니다.</p></div>
       </label>
       <p className="muted text-[12px]">맞춤 알림을 받으려면 위 두 가지 모두 동의가 필요해요</p>
-      {permission === 'denied' && <Note title="알림 권한이 꺼져 있어요"><p>{PUSH_DENIED_TEXT} 허용한 뒤 이 화면에서 다시 저장하면 알림을 받을 수 있어요.</p></Note>}
+      {logged && push === 'denied' && <Note title="백그라운드 알림이 꺼져 있어요"><p>{PUSH_DENIED_TEXT} 켠 뒤 이 화면으로 돌아오면 다시 연결할 수 있어요.</p></Note>}
+      {logged && (push === 'ask' || push === 'reconnect') && <div role="status" className="space-y-2 rounded-[6px] bg-[var(--soft)] p-4">
+        <p className="text-[13px] font-bold">백그라운드 알림이 연결되어 있지 않아요</p>
+        <p className="text-[12px] text-[var(--aux)]">앱을 닫아도 알림을 받으려면 알림을 허용해 주세요. 앱 안 알림함은 그대로 받을 수 있어요.</p>
+        <Button outline className="w-full text-[13px]!" disabled={pushBusy} onClick={connectPush}>{pushBusy ? '연결 중…' : push === 'ask' ? '알림 허용하기' : '백그라운드 알림 다시 연결'}</Button>
+      </div>}
       {!pushReady && <Note title="푸시 알림"><p>홈 화면에 추가하면 알림을 받을 수 있어요. 사파리 공유 버튼 → ‘홈 화면에 추가’ 후 홈 화면의 STOCKDROP 앱으로 열어 주세요.</p></Note>}
       {PUSH_DEBUG && <PushDebug/>}
     </div>

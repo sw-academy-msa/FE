@@ -54,6 +54,25 @@ export async function enablePush(asked?: Promise<NotificationPermission> | null)
   return subscribeAndRegister();
 }
 
+/**
+ * 이 기기의 실제 백그라운드 알림 상태. 아이폰 설정에서 알림을 끈 경우까지 보려고 권한 표시값과 브라우저 구독을 함께 본다.
+ * denied: 기기 설정에서 꺼짐(웹앱이 다시 물을 수 없음) / ask: 아직 묻지 않음 / reconnect: 허용됐지만 구독이 없음 / on: 받는 중
+ */
+export type PushState = 'unsupported' | 'denied' | 'ask' | 'reconnect' | 'on';
+export async function pushState(): Promise<PushState> {
+  if (!canSubscribePush()) return 'unsupported';
+  if (Notification.permission === 'denied') return 'denied';
+  if (Notification.permission === 'default') return 'ask';
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    const state = await reg?.pushManager.permissionState?.({ userVisibleOnly: true }).catch(() => undefined);
+    if (state === 'denied') return 'denied';
+    if (state === 'prompt') return 'ask';
+    // 브라우저 구독이 있어도 마지막 서버 등록이 실패했으면 서버는 이 기기를 모른다
+    return (await reg?.pushManager.getSubscription()) && lastPushRegister()?.ok !== false ? 'on' : 'reconnect';
+  } catch { return 'reconnect'; }
+}
+
 /** 로그인·세션 복원 때: 이미 권한이 허용돼 있으면 조용히 다시 등록한다(로그아웃 때 해제했으므로). 실패는 무시 */
 export async function resyncPush() {
   if (!canSubscribePush() || Notification.permission !== 'granted') return;
