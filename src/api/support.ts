@@ -25,13 +25,27 @@ export async function createSupportInquiry(b: { kind: string; title: string; con
   const d = await api.post<SupportInquiryDto>('/v1/support-inquiries', { category: SUPPORT_KINDS[b.kind] ?? 'ETC', title: b.title.trim(), body: b.content.trim(), orderId: b.orderId || undefined }, { service: account });
   return supportFromApi(d, userId);
 }
-/** GET /v1/support-inquiries — 내 1:1 문의(최근 순) */
-export async function listMySupportInquiries(userId: string, signal?: AbortSignal): Promise<Inquiry[]> {
-  return (await api.get<SupportPage>('/v1/support-inquiries', { service: account, signal, query: { size: 100 } })).content.map(d => supportFromApi(d, userId));
+/** 서버 한 페이지 상한(100)씩 마지막 페이지까지 모두 받는다 */
+async function allPages(path: string, signal?: AbortSignal): Promise<SupportInquiryDto[]> {
+  const out: SupportInquiryDto[] = [];
+  for (let page = 0; page < 50; page++) {
+    const r = await api.get<SupportPage>(path, { service: account, signal, query: { page, size: 100 } });
+    out.push(...r.content);
+    if (page + 1 >= r.totalPages) break;
+  }
+  return out;
 }
-/** GET /v1/admin/support-inquiries — 운영자 전체 목록(최근 순) */
+/** GET /v1/support-inquiries — 내 1:1 문의(최근 순, 전체) */
+export async function listMySupportInquiries(userId: string, signal?: AbortSignal): Promise<Inquiry[]> {
+  return (await allPages('/v1/support-inquiries', signal)).map(d => supportFromApi(d, userId));
+}
+/** GET /v1/support-inquiries/{id} — 내 1:1 문의 하나(남의 것·없는 것은 404) */
+export async function getMySupportInquiry(id: string, userId: string, signal?: AbortSignal): Promise<Inquiry> {
+  return supportFromApi(await api.get<SupportInquiryDto>(`/v1/support-inquiries/${enc(id)}`, { service: account, signal }), userId);
+}
+/** GET /v1/admin/support-inquiries — 운영자 전체 목록(최근 순, 전체) */
 export async function listAdminSupportInquiries(signal?: AbortSignal): Promise<Inquiry[]> {
-  return (await api.get<SupportPage>('/v1/admin/support-inquiries', { service: account, signal, query: { size: 100 } })).content.map(d => supportFromApi(d, ''));
+  return (await allPages('/v1/admin/support-inquiries', signal)).map(d => supportFromApi(d, ''));
 }
 /** PUT /v1/admin/support-inquiries/{id}/answer — 한 번만 */
 export async function answerSupportInquiry(id: string, answer: string): Promise<Inquiry> {

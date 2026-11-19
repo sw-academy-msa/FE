@@ -39,7 +39,9 @@ export const getSellerSettlement = (month: string, signal?: AbortSignal) => api.
  * 상품 수량을 모르면(목록 요약 없음) 수수료를 0으로 본다
  */
 export function settlementNet(d: SellerSettlementDto, quantities: Record<string, { total: number; sold: number } | undefined>) {
-  const fee = d.products.reduce((n, p) => { const q = quantities[p.productId]; return n + (q && q.total > 0 && q.sold * 10 > q.total * 9 ? Math.round(p.amount * 0.1) : 0); }, 0);
+  // 수수료 판단에 필요한 상품 수량을 아직 모르면(목록 조회 전 등) 금액을 확정하지 않는다
+  if (d.products.some(p => !quantities[p.productId])) return undefined;
+  const fee = d.products.reduce((n, p) => { const q = quantities[p.productId]!; return n + (q.total > 0 && q.sold * 10 > q.total * 9 ? Math.round(p.amount * 0.1) : 0); }, 0);
   return { gross: d.confirmedAmount, fee, net: d.confirmedAmount - fee };
 }
 

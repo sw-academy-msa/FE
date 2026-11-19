@@ -95,7 +95,7 @@ export interface SellerProductDto {
   brandOrStore: string | null; attributes: { name: string; value: string }[]; optionDimensions: { name: string; values: string[] }[]; dispatchAddress: SellerAddressDto | null; returnAddress: SellerAddressDto | null; addressesCapturedAt: Iso | null;
   faqs: { id: string; question: string; answer: string; suggestionId: string | null; sourceInquiryId: string | null; confirmedBy: string; confirmedAt: Iso }[];
 }
-export interface ProductReviewListItemDto { id: string; name: string; status: ProductStatus; version: number; startsAt: Iso | null; endsAt: Iso | null; createdAt: Iso; updatedAt: Iso; submittedAt: Iso | null;
+export interface ProductReviewListItemDto { id: string; sellerId?: string; name: string; status: ProductStatus; version: number; startsAt: Iso | null; endsAt: Iso | null; createdAt: Iso; updatedAt: Iso; submittedAt: Iso | null;
   /** 관리 목록 요약(백엔드가 내려주기 시작한 필드라 이전 응답에는 없을 수 있다) */ category?: string | null; price?: number | null; totalQuantity?: number; soldQuantity?: number }
 export interface ProductRevisionDto { id: string; productId: string; version: number; status: 'IN_REVIEW' | 'APPROVED' | 'REJECTED'; changes: Record<string, unknown>; shipping: { accountId: string; dispatchAddress: SellerAddressDto; returnAddress: SellerAddressDto }; submittedAt: Iso; reviewedAt: Iso | null; reason: string | null }
 export interface ProductImageUploadDto { imageId: string; uploadUrl: string; contentType: string; sizeBytes: number; expiresAt: Iso }

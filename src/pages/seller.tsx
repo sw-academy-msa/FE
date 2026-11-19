@@ -415,12 +415,12 @@ export function SellerOrderPage() {
   // 실제 모드: 주문 상세(배송지·송장)와 이 주문의 문의를 서버에서 받는다
   const live = useLive(async signal => (id && user.seller ? { o: await getSellerOrder(id, user.id, signal), qs: await listSellerOrderInquiries(id, user.id, signal) } : null), (st, r) => { if (r) { mergeOrders(st, [r.o]); mergeInquiries(st, r.qs); } }, [id]);
   // 출고지: 주문에는 없어 상품의 출고지를 받는다(판매 시작 뒤에는 바뀌지 않는다)
-  const dispatch = useApi(async signal => (USE_MOCK || !order?.productId ? '' : getProductDispatchAddress(order.productId, signal).catch(() => '')), [order?.productId]);
+  const dispatch = useApi(async signal => (USE_MOCK || !order?.productId ? null : { productId: order.productId, address: await getProductDispatchAddress(order.productId, signal).catch(() => '') }), [order?.productId]);
   if (!user.seller) return <Unavailable message="판매자 주문을 찾을 수 없습니다."/>;
   if (!order) return live.loading || live.error ? <LiveStatus state={live}/> : <Unavailable message="판매자 주문을 찾을 수 없습니다."/>;
   // 출고 기한은 상품에 설정한 영업일(토·일 제외)로 계산한다
   const o = order; const paidAt = o.paidAt ?? o.createdAt; const dueStr = o.dispatchDays ? `결제 후 ${o.dispatchDays}영업일 이내 출고 · ${kstDay(addBusinessDays(paidAt, o.dispatchDays))}까지` : '';
-  const dispatchFrom = USE_MOCK ? s.sellerSettings[user.id]?.shippingAddress || '성수 물류창고' : dispatch.data || ''; const doneAt = o.deliveredAt ?? o.processedAt;
+  const dispatchFrom = USE_MOCK ? s.sellerSettings[user.id]?.shippingAddress || '성수 물류창고' : (dispatch.data?.productId === o.productId ? dispatch.data.address : ''); const doneAt = o.deliveredAt ?? o.processedAt;
   const needsTracking = ['paid', 'preparing'].includes(o.status); const orderInquiries = s.inquiries.filter(q => q.orderId === o.id && q.sellerId === user.id);
   return <div className="space-y-5">
     <Header title="주문 상세" subtitle={`주문번호 ${orderNo(o.id)} · ${kstShort(paidAt)} 결제`}/>
@@ -500,7 +500,7 @@ export function SellerMyPage() {
   const activeDrops = sd ? sd.onSaleCount + sd.scheduledCount : products.filter(p => saleState(p, Date.now()) === '판매 중' || saleState(p, Date.now()) === '판매 예정').length;
   const settlement = s.orders.filter(o => o.sellerId === user.id && !['cancelled','refunded'].includes(o.status)).reduce((n, o) => n + o.total - o.shipping, 0);
   const productCount = sd ? sd.productCount : products.length;
-  const net = settle.data ? settlementNet(settle.data, Object.fromEntries(products.map(p => [p.id, p.listQuantity]))).net : undefined;
+  const net = settle.data ? settlementNet(settle.data, Object.fromEntries(products.map(p => [p.id, p.listQuantity])))?.net : undefined;
   const unanswered = s.inquiries.filter(q => q.sellerId === user.id && !q.answer).length;
   const maskedBank = USE_MOCK ? (settings?.account ? `국민 ****${settings.account.slice(-4)}` : '국민 ****1024') : settings?.account ? `${settings.bank} ${settings.account}`.trim() : '';
   return (

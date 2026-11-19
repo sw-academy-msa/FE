@@ -48,6 +48,6 @@ describe('정산 예정 금액', () => {
     const { settlementNet } = await import('./api/sellerOrders');
     const d = { month: '2026-11', confirmedOrders: 3, confirmedAmount: 30000, awaitingOrders: 0, awaitingAmount: 0, products: [{ productId: 'a', productName: 'A', orders: 2, quantity: 2, amount: 20000 }, { productId: 'b', productName: 'B', orders: 1, quantity: 1, amount: 10000 }] };
     expect(settlementNet(d, { a: { total: 10, sold: 10 }, b: { total: 10, sold: 9 } })).toEqual({ gross: 30000, fee: 2000, net: 28000 });
-    expect(settlementNet(d, {})).toEqual({ gross: 30000, fee: 0, net: 30000 });
+    expect(settlementNet(d, {})).toBeUndefined(); // 수량을 모르면 금액을 확정하지 않는다
   });
 });

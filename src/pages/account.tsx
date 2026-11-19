@@ -15,7 +15,7 @@ import { changePassword, restoreSession, validPassword } from '../auth';
 import { USE_MOCK } from '../config';
 import { applicationFailure, applicationProblems, firstProblem, normalizeAccount, normalizePhone, problemSummary } from '../sellerApply';
 import type { ApplyField, ApplyProblems } from '../sellerApply';
-import { answerSupportInquiry, createSupportInquiry, listAdminSupportInquiries, listMySupportInquiries, ApiError, apiPut, apiDelete, approveSellerApplication, decideProductReview, errorMessage, getAdminApplication, getAdminProductReviewWithImages, listAdminApplications, listAdminProductReviews, markApplication, mergeAdminApplications, mergeAdminProductList, mergeProducts, rejectSellerApplication, reviewCertificate, fetchMyApplication, mergeApplication, resubmitApplication, submitApplication, updateMyName, addInquiryMessage, getInquiryImageUrl, getOrderInquiry, listInquiryInbox, mergeInquiries, useLive } from '../api';
+import { getMySupportInquiry, isApiError, answerSupportInquiry, createSupportInquiry, listAdminSupportInquiries, listMySupportInquiries, ApiError, apiPut, apiDelete, approveSellerApplication, decideProductReview, errorMessage, getAdminApplication, getAdminProductReviewWithImages, listAdminApplications, listAdminProductReviews, markApplication, mergeAdminApplications, mergeAdminProductList, mergeProducts, rejectSellerApplication, reviewCertificate, fetchMyApplication, mergeApplication, resubmitApplication, submitApplication, updateMyName, addInquiryMessage, getInquiryImageUrl, getOrderInquiry, listInquiryInbox, mergeInquiries, useLive } from '../api';
 import { failTab, getPdf, openPendingTab } from '../files';
 import { RevisionList, useRevisionQueue } from './revisions';
 import { PhotoViewer } from '../components/PhotoViewer';
@@ -1011,7 +1011,7 @@ export function FaqPage() {
 export function InquiryListPage() {
   const s = useStore(); const navigate = useNavigate(); const [tab, setTab] = useState<'전체' | '판매자 문의' | '1:1 문의'>('전체');
   const live = useLive(sig => listInquiryInbox(s.activeUserId, sig), mergeInquiries, [s.activeUserId]);
-  useLive(sig => (USE_MOCK ? Promise.resolve([]) : listMySupportInquiries(s.activeUserId, sig)), mergeInquiries, [s.activeUserId]); // 1:1 문의
+  const support = useLive(sig => (USE_MOCK ? Promise.resolve([]) : listMySupportInquiries(s.activeUserId, sig)), mergeInquiries, [s.activeUserId]); // 1:1 문의
   const all = s.inquiries.filter(q => q.userId === s.activeUserId);
   const sellerCount = all.filter(q => q.sellerId !== 'stockdrop').length;
   const directCount = all.filter(q => q.sellerId === 'stockdrop').length;
@@ -1025,6 +1025,7 @@ export function InquiryListPage() {
         ))}
       </div>
       <LiveStatus state={live}/>
+      {!USE_MOCK && <LiveStatus state={support}/>}
       {filtered.map(q => (
         <Link key={q.id} to={`/inquiries/${q.id}`} className="divider block py-4 space-y-1.5">
           <div className="flex items-center justify-between gap-2">
@@ -1036,7 +1037,7 @@ export function InquiryListPage() {
           <p className="text-[12px] text-[#949494]">{q.sellerId === 'stockdrop' ? 'StockDrop 운영팀' : q.productName}</p>
         </Link>
       ))}
-      {!filtered.length && !live.loading && !live.error && <Empty title="문의 내역이 없어요" message="문의 내역은 최근 1년까지 보관돼요."/>}
+      {!filtered.length && !live.loading && !live.error && !support.loading && !support.error && <Empty title="문의 내역이 없어요" message="문의 내역은 최근 1년까지 보관돼요."/>}
       {filtered.length > 0 && <p className="pb-4 text-center text-[11px] text-[#949494]">문의 내역은 최근 1년까지 보관돼요</p>}
     </div>
   );
@@ -1055,9 +1056,11 @@ export function InquiryDetailPage() {
   const q = s.inquiries.find(i => i.id === id && i.userId === s.activeUserId);
   // 상세 API는 주문 id가 필요하다: store에 없으면(직접 진입) 문의함에서 찾아 orderId를 얻는다
   const live = useLive(async sig => {
-    if (q?.sellerId === 'stockdrop') return USE_MOCK ? null : (await listMySupportInquiries(s.activeUserId, sig)).find(i => i.id === id) ?? null;
-    const support = !q && !USE_MOCK ? (await listMySupportInquiries(s.activeUserId, sig).catch(() => [])).find(i => i.id === id) : undefined;
-    if (support) return support;
+    if (q?.sellerId === 'stockdrop') return USE_MOCK || !id ? null : getMySupportInquiry(id, s.activeUserId, sig);
+    if (!q && !USE_MOCK && id) {
+      try { return await getMySupportInquiry(id, s.activeUserId, sig); }
+      catch (e) { if (!(isApiError(e) && e.status === 404)) throw e; } // 404: 1:1 문의가 아니다 → 주문 문의에서 찾는다
+    }
     const orderId = q?.orderId ?? (await listInquiryInbox(s.activeUserId, sig)).find(i => i.id === id)?.orderId;
     return orderId && id ? getOrderInquiry(orderId, id, s.activeUserId, sig) : null;
   }, (st, d) => { if (d) mergeInquiries(st, [d]); }, [id, s.activeUserId]);
