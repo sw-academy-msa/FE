@@ -54,6 +54,7 @@ export interface Order {
   carrier?: string; tracking?: string; shippedAt?: number; deliveredAt?: number; deliveredPlace?: string;
   deliveredMemo?: string; processedBy?: string; processedAt?: number;
   /** 결제 확정 시각(없으면 createdAt) · 상품의 출고 기한(영업일) */ paidAt?: number; dispatchDays?: number;
+  /** 구매 확정 시각(구매자 확정 또는 배송 완료 7일 뒤 자동) */ purchaseConfirmedAt?: number;
 }
 /** 화면에 보이는 주문번호. 구매자·판매자·운영자가 같은 값을 보도록 주문 ID 앞 10자리를 쓴다 */
 export const orderNo = (id: string) => id.replace(/-/g, '').slice(0, 10).toUpperCase();
