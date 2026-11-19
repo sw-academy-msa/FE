@@ -48,12 +48,16 @@ export interface OrderListItemDto { orderId: string; orderNumber: string; produc
 export interface OrderDetailDto extends OrderListItemDto {
   address: OrderAddressDto | null; unitPrice: number; shippingFee: number; dispatchBusinessDays: number; expiresAt: Iso | null; confirmedAt: Iso | null;
   carrier: string | null; trackingNumber: string | null; shippedAt: Iso | null; deliveredAt: Iso | null;
+  /** 구매 확정 시각(구매자 확정 또는 배송 완료 7일 뒤 자동). 이전 응답에는 없다 */ purchaseConfirmedAt?: Iso | null;
 }
+/** GET /v1/seller/orders/settlement — 월별 정산 금액(상품 금액, 배송비 제외). confirmed=그달 구매 확정, awaiting=배송 완료 후 확정 전 */
+export interface SellerSettlementDto { month: string; confirmedOrders: number; confirmedAmount: number; awaitingOrders: number; awaitingAmount: number; products: { productId: string; productName: string | null; orders: number; quantity: number; amount: number }[] }
 /** Command 원본 응답(주문 생성·결제 요청·배송지 변경·checkout·fulfillment). RESERVING에서는 값이 null일 수 있다 */
 export interface OrderCommandDto {
   orderId: string; orderNumber: string; version: number; state: OrderState; delivery: DeliveryState | null; productId: string | null; sellerId: string | null;
   productName: string | null; brandOrStore: string | null; items: OrderItemDto[]; address: OrderAddressDto | null; unitPrice: number | null; shippingFee: number | null; totalAmount: number | null;
   dispatchBusinessDays: number | null; expiresAt: Iso | null; serverTime: Iso; paymentAttemptId: string | null; confirmedAt: Iso | null; carrier: string | null; trackingNumber: string | null; failureCode: string | null; termsVersion: string | null;
+  purchaseConfirmedAt?: Iso | null;
   /** 서버가 내려주면 토스 결제창 orderId로 그대로 쓴다(없으면 "SD-" + orderId) */ tossOrderId?: string | null;
 }
 export interface CheckoutTermsDto { version: string; title: string; content: string; effectiveAt: Iso; contentSha256: string }

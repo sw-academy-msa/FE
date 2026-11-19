@@ -8,7 +8,7 @@ import { api } from './client';
 import { inquiryFromCard, orderInquiryFromApi } from './inquiries';
 import { orderFromApi } from './mappers';
 import { orderFromCommand, orderFromListItem } from './orders';
-import type { ContentPage, InquiryCardDto, OrderCommandDto, OrderDetailDto, OrderInquiryDto, OrderListItemDto, OrderState, DeliveryState, SellerOrderSummaryDto } from './types';
+import type { SellerSettlementDto, ContentPage, InquiryCardDto, OrderCommandDto, OrderDetailDto, OrderInquiryDto, OrderListItemDto, OrderState, DeliveryState, SellerOrderSummaryDto } from './types';
 
 const general = 'general' as const, purchase = 'purchase' as const;
 const enc = encodeURIComponent;
@@ -31,6 +31,17 @@ export async function getSellerOrder(id: string, sellerId: string, signal?: Abor
 /** GET /v1/seller/orders/summary — 주문·배송 상태 집계(매출·정산 없음, approximate) */
 export const getSellerOrderSummary = (q: { productId?: string; createdFrom?: string; createdTo?: string } = {}, signal?: AbortSignal) =>
   api.get<SellerOrderSummaryDto>(`${S}/summary`, { service: general, signal, query: q });
+
+/** GET /v1/seller/orders/settlement — 월별 정산 금액(구매 확정 기준, 송금 없음). month=YYYY-MM */
+export const getSellerSettlement = (month: string, signal?: AbortSignal) => api.get<SellerSettlementDto>(`${S}/settlement`, { service: general, signal, query: { month } });
+/**
+ * 정산 예정 금액: 그달 구매 확정 금액에서 수수료를 뺀다. 수수료는 상품별로 한정 수량의 90%를 넘게 팔리면 그 상품 금액의 10%(feeFor와 같은 규칙).
+ * 상품 수량을 모르면(목록 요약 없음) 수수료를 0으로 본다
+ */
+export function settlementNet(d: SellerSettlementDto, quantities: Record<string, { total: number; sold: number } | undefined>) {
+  const fee = d.products.reduce((n, p) => { const q = quantities[p.productId]; return n + (q && q.total > 0 && q.sold * 10 > q.total * 9 ? Math.round(p.amount * 0.1) : 0); }, 0);
+  return { gross: d.confirmedAmount, fee, net: d.confirmedAmount - fee };
+}
 
 /* ── 출고·배송 (Command) ── */
 /** GET /v1/seller/orders/{id}/fulfillment — 출고용 원본. 이 version을 shipment/delivery-completion에 넘긴다 */
