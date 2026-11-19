@@ -28,6 +28,11 @@ describe('다시 분석한 뒤 AI 질문 답', () => {
     const out = carryAiAnswers([faq('a', '세탁 방법은?', '드라이'), faq('b', '실측은?', '68cm'), { id: 'f1', question: '직접', answer: '답', confirmed: true }], prev, next);
     expect(out).toEqual([{ id: 'faq-c', question: '세탁 및 관리 방법을 알려주세요.', answer: '드라이', confirmed: true, suggestionId: 'c' }, { id: 'f1', question: '직접', answer: '답', confirmed: true }]);
   });
+  it('그대로 남는 질문의 답을 옮겨 오는 답이 덮지 않는다', () => {
+    const prev = [{ suggestionId: 'a', checkCode: 'CARE', question: 'Q-a', reason: '' }, { suggestionId: 'b', checkCode: 'CARE', question: 'Q-b', reason: '' }];
+    const out = carryAiAnswers([faq('a', 'Q-a', 'A'), faq('b', 'Q-b', 'B')], prev, [{ suggestionId: 'b', checkCode: 'CARE', question: 'Q-b', reason: '' }]);
+    expect(out).toEqual([faq('b', 'Q-b', 'B')]);
+  });
   it('지금 분석에 없는 질문의 답은 저장하지 않는다(서버가 거절)', () => {
     const d = { ...blankDraft(), faqs: [faq('old', 'Q', 'A'), faq('cur', 'Q2', 'A2')], ai: { status: 'recommended' as const, signature: '', category: '', reason: '', result: { code: 'CLOTHING', category: '숏패딩', photos: 1, questions: [{ suggestionId: 'cur', question: 'Q2', reason: '' }] } } };
     expect(faqsToSave(d).map(f => f.suggestionId)).toEqual(['cur']);

@@ -31,9 +31,12 @@ export function SellerProductsPage() {
     const rows = await Promise.all(editable.split(',').map(async id => [id, (await listRevisions(id, signal).catch(() => [] as ProductRevisionDto[])).sort((a, b) => Date.parse(b.submittedAt) - Date.parse(a.submittedAt))[0]] as const));
     return Object.fromEntries(rows.filter(([, r]) => r));
   }, [editable]);
+  // 한정·판매 수량: 서버 목록 요약(listQuantity)이 있으면 그 값, 없으면 옵션 합계와 이 기기의 주문으로 센다
+  const qtyOf = (p: Product) => { const localSold = s.orders.filter(o => o.productId === p.id && !['cancelled','refunded'].includes(o.status)).reduce((n, o) => n + o.lines.reduce((a, l) => a + l.quantity, 0), 0);
+    return p.listQuantity ? { total: p.listQuantity.total, sold: Math.max(p.listQuantity.sold, localSold) } : { total: p.options.reduce((n, o) => n + o.stock, 0), sold: localSold }; };
   if (!user.seller) return <Unavailable/>; const settings = s.sellerSettings[user.id]; const allProducts = s.products.filter(p => p.sellerId === user.id); const products = allProducts.filter(p => tab === '전체' || (tab === '판매 심사 중' ? p.reviewStatus === 'IN_REVIEW' : saleState(p, now) === tab)); const thisMonth = summary.data?.confirmedQuantity ?? s.orders.filter(o => o.sellerId === user.id && !['cancelled','refunded'].includes(o.status)).reduce((n, o) => n + o.lines.reduce((a, l) => a + l.quantity, 0), 0); const alarmCount = 226; /* TODO(api-gap): 알림 신청 인원 API 없음(목업) */ const endedCount = allProducts.filter(p => saleState(p, now) === '판매 종료').length;
   // 완판: 한정 수량을 모두 판 종료 상품(목록 요약의 판매 수량 기준)
-  const soldOutCount = allProducts.filter(p => saleState(p, now) === '판매 종료' && !!p.listQuantity && p.listQuantity.total > 0 && p.listQuantity.sold >= p.listQuantity.total).length;
+  const soldOutCount = allProducts.filter(p => { const q = qtyOf(p); return saleState(p, now) === '판매 종료' && q.total > 0 && q.sold >= q.total; }).length;
   const chips: [string, number][] = [['전체', allProducts.length], ['판매 중', allProducts.filter(p => saleState(p, now) === '판매 중').length], ['판매 예정', allProducts.filter(p => saleState(p, now) === '판매 예정').length], ['판매 심사 중', allProducts.filter(p => p.reviewStatus === 'IN_REVIEW').length], ['판매 종료', endedCount]];
   return <div className="space-y-0">
     <Header title="판매 상품 관리" backTo="/my" action={<Link to="/seller/new" aria-label="상품 등록"><Plus size={22}/></Link>}/>
@@ -42,9 +45,7 @@ export function SellerProductsPage() {
     <div className="mb-4 flex justify-around rounded-[4px] bg-[var(--canvas)] py-4">{([['이번 달 판매', `${thisMonth}개`], ...(USE_MOCK ? [['알림 신청', `${alarmCount}명`]] : []), ['완판', `${soldOutCount}건`]] as [string,string][]).map(([label, value]) => <div key={label} className="text-center"><p className="font-number text-[16px] font-bold">{value}</p><p className="muted mt-1 text-[11px]">{label}</p></div>)}</div>
     <div className="-mx-4 mb-2 flex gap-1.5 overflow-x-auto px-4">{chips.map(([label, count]) => <button key={label} onClick={() => setParams(label === '전체' ? {} : { state: label }, { replace: true })} className={`h-[30px] shrink-0 rounded-[4px] px-2.5 text-[12px] ${tab === label ? 'bg-[var(--ink)] font-bold text-[var(--surface)]' : 'muted bg-[var(--soft)]'}`}>{label} {count}</button>)}</div>
     {products.map(p => {
-      const status = saleState(p, now); const localSold = s.orders.filter(o => o.productId === p.id && !['cancelled','refunded'].includes(o.status)).reduce((n, o) => n + o.lines.reduce((a, l) => a + l.quantity, 0), 0);
-      // 옵션까지 받은 상품은 옵션 합계, 목록 요약만 받은 상품은 서버의 한정·판매 수량을 쓴다
-      const total = p.options.length ? p.options.reduce((n, o) => n + o.stock, 0) : p.listQuantity?.total ?? 0; const sold = p.listQuantity ? Math.max(p.listQuantity.sold, localSold) : localSold; const remaining = Math.max(0, total - sold); const isLive = status === '판매 중', ended = status === '판매 종료'; const secondsLeft = Math.max(0, Math.floor((p.endsAt - now) / 1000)); const hh = String(Math.floor(secondsLeft/3600)).padStart(2,'0'), mm = String(Math.floor(secondsLeft%3600/60)).padStart(2,'0'), ss = String(secondsLeft%60).padStart(2,'0');
+      const status = saleState(p, now); const { total, sold } = qtyOf(p); const remaining = Math.max(0, total - sold); const isLive = status === '판매 중', ended = status === '판매 종료'; const secondsLeft = Math.max(0, Math.floor((p.endsAt - now) / 1000)); const hh = String(Math.floor(secondsLeft/3600)).padStart(2,'0'), mm = String(Math.floor(secondsLeft%3600/60)).padStart(2,'0'), ss = String(secondsLeft%60).padStart(2,'0');
       return <div key={p.id} className="divider space-y-3 py-4">
         <div className="flex gap-3">
           <ProductImage src={p.images[0]} alt={p.name} className="h-[72px] w-[72px] shrink-0"/>
@@ -411,13 +412,13 @@ function TrackingModal({ order, onClose, onSaved }: { order: Order; onClose: () 
       <p className="muted text-[12px]">{order.lines.map(l=>l.name).join(' / ')}</p>
     </div>
     <Field label="택배사" required><select aria-label="택배사" value={carrier} onChange={e => setCarrier(e.target.value)} className="field">{['CJ대한통운','한진택배','롯데택배','우체국택배'].map(c => <option key={c}>{c}</option>)}</select></Field>
-    <Field label="운송장 번호" required><input aria-label="운송장 번호" inputMode="numeric" value={tracking} onChange={e => { setTracking(e.target.value.replace(/\D/g, '')); setError(''); }} className="field" placeholder="숫자만 입력"/></Field>
+    <Field label="운송장 번호" required><input aria-label="운송장 번호" inputMode="numeric" value={tracking} onChange={e => { setTracking(e.target.value.replace(/\s/g, '')); setError(''); }} className="field" placeholder="송장 번호"/></Field>
     {error && <p className="text-[12px] text-[#EF6253]">{error} 입력한 내용은 그대로 유지돼요.</p>}
-    <Note>'-' 없이 숫자만 입력해 주세요. 등록하면 구매자에게 배송 시작 알림이 발송돼요.</Note>
+    <Note>송장에 적힌 번호를 그대로 입력해 주세요(영문, 숫자, 하이픈). 등록하면 구매자에게 배송 시작 알림이 발송돼요.</Note>
     <ErrorBox message=""/>
     <div className="flex gap-2"><Button outline className="flex-1" disabled={busy} onClick={onClose}>취소</Button><Button className="flex-1" disabled={busy || !tracking.trim()} onClick={async () => { setError(''); setBusy(true); try {
     if (!USE_MOCK) { // 출고용 원본(fulfillment) version으로 송장 등록. 송장은 영문·숫자·하이픈 1~100자
-      if (!/^\d{8,30}$/.test(tracking.trim())) throw new Error('운송장 번호는 숫자 8자리 이상이에요. 송장에 적힌 번호를 확인해 주세요.');
+      if (!/^[A-Za-z0-9-]{1,100}$/.test(tracking.trim())) throw new Error('운송장 번호는 영문, 숫자, 하이픈(-)만 쓸 수 있어요. 송장에 적힌 번호를 확인해 주세요.');
       const updated = await shipOrder(order.id, order.sellerId, carrier, tracking.trim()); mutate(st => mergeOrders(st, [updated])); onSaved(); return;
     }
     if (!/^\d[\d-]{7,}$/.test(tracking.trim())) throw new Error('운송장 번호를 확인해 주세요.'); await atomic(state => { const item = state.orders.find(item => item.id === order.id && item.sellerId === state.activeUserId); if (!item || !['paid','preparing'].includes(item.status)) throw new Error('출고 가능한 주문이 아닙니다.'); item.carrier = carrier; item.tracking = tracking.trim(); item.shippedAt = nowOf(state); item.status = 'shipping'; }); onSaved(); } catch (e) { setError((e as Error).message); } finally { setBusy(false); } }}>등록하기</Button></div>

@@ -84,7 +84,8 @@ export function aiStateOf(token: string, r: { outcome: string; code: string; cat
 /** 실제 모드 AI 분석: 서버에 기본 정보 저장 → 분석 요청 → 폴링. 결과가 오면(화면을 떠났어도) 초안에 반영 */
 async function analyzeReal(userId: string, token: string, prev: AiQuestion[]) {
   // 결과가 오면 예전 질문에 쓴 답을 같은 점검 항목의 새 질문으로 옮긴다(옮길 곳이 없는 답은 지운다)
-  const done = (ai: Draft['ai']) => { const d = getState().drafts[userId]; if (d && d.ai.status === 'analyzing' && d.ai.signature === token) patchDraft(userId, ai.result ? { ai, faqs: carryAiAnswers(d.faqs, prev, ai.result.questions) } : { ai }); };
+  // 실패·지연이면 직전 질문을 계속 보관해 다음 재시도에서도 답을 옮길 수 있게 한다
+  const done = (ai: Draft['ai']) => { const d = getState().drafts[userId]; if (d && d.ai.status === 'analyzing' && d.ai.signature === token) patchDraft(userId, ai.result ? { ai, faqs: carryAiAnswers(d.faqs, prev, ai.result.questions) } : { ai: { ...ai, prev } }); };
   const failed: Draft['ai'] = { status: 'failed', signature: token, category: '', reason: '' };
   try {
     const id = await ensureServerDraft(userId), d = getState().drafts[userId];
@@ -100,8 +101,8 @@ const ANALYSIS_MS = 2500;
 function startAnalysis(userId: string) {
   // 실제 모드: 진행 중인 분석이 있으면 새로 시작하지 않는다(같은 초안에 저장·요청이 겹치면 version만 오른다)
   if (!USE_MOCK && getState().drafts[userId]?.ai.status === 'analyzing') return;
-  const token = Date.now().toString(36), prev = getState().drafts[userId]?.ai.result?.questions ?? [];
-  patchDraft(userId, { ai: { status: 'analyzing', signature: token, category: '', reason: '' } });
+  const cur = getState().drafts[userId]?.ai, token = Date.now().toString(36), prev = cur?.result?.questions ?? cur?.prev ?? [];
+  patchDraft(userId, { ai: { status: 'analyzing', signature: token, category: '', reason: '', prev } });
   if (!USE_MOCK) { void analyzeReal(userId, token, prev); return; }
   setTimeout(() => {
     const state = getState(), d = state.drafts[userId];
@@ -303,11 +304,13 @@ export function WizardPage() {
       const f = e instanceof StageError ? e.fields : fieldErrors(e);
       // 화면 검사를 통과했는데 PRODUCT_INVALID면 서버 값과 화면이 어긋난 것: 상품을 다시 받아 화면을 새로 그린다(검수 확인은 유지)
       if (!Object.keys(f).length && (isApiError(e, 'PRODUCT_INVALID') || e instanceof StageError && e.code === 'PRODUCT_INVALID') && serverId) {
+        let reloaded = false;
         try {
           const fresh = await getSellerProductWithImages(serverId);
           mutate(st => { mergeProducts(st, [fresh]); const m = st.products.find(x => x.id === fresh.id)!; st.drafts[user.id] = { ...fromProduct(m), editingId: d.editingId, serverId: d.serverId, ai: d.ai, inspection: d.inspection }; });
-        } catch { /* 다시 받기 실패: 안내만 */ }
-        setError('심사 요청을 처리하지 못했어요. 저장된 정보로 화면을 새로 불러왔으니 내용을 확인한 뒤 다시 요청해 주세요.');
+          reloaded = true;
+        } catch { /* 다시 받기 실패: 아래 안내 */ }
+        setError(reloaded ? '심사 요청을 처리하지 못했어요. 저장된 정보로 화면을 새로 불러왔으니 내용을 확인한 뒤 다시 요청해 주세요.' : '심사 요청을 처리하지 못했어요. 잠시 후 다시 요청해 주세요. 계속되면 화면을 새로고침해 주세요.');
       } else if (revision && (isApiError(e, 'PRODUCT_STATE') || isApiError(e, 'COMMON_OPTIMISTIC_LOCK_CONFLICT'))) {
         // 편집을 시작한 뒤 상품이 바뀌었거나(다른 수정 승인 등) 이미 심사 중인 수정 요청이 있다. 입력한 내용은 그대로 둔다
         setError('편집하는 사이 상품 정보가 바뀌었거나 이미 심사 중인 수정 요청이 있어요. 상품 관리에서 최신 정보를 확인한 뒤 다시 수정해 주세요.');

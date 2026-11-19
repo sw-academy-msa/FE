@@ -106,7 +106,7 @@ export function ProductPage() {
   const bookmark = () => mutate(state => { const key = `${state.activeUserId}:${p.id}`; state.bookmarks = saved ? state.bookmarks.filter(k => k !== key) : [...state.bookmarks, key]; });
   const block = signedIn(s) ? purchaseBlock(s, p) : null; // 판매자 본인 상품·운영자는 옵션 선택·결제로 못 넘어간다
   // 이 상품을 이미 샀거나 재고를 확보해 결제 중이면 품절 안내 대신 내 주문·결제로 안내한다
-  const myOrder = s.orders.find(o => o.userId === s.activeUserId && o.productId === p.id);
+  const myOrder = s.orders.find(o => o.userId === s.activeUserId && o.productId === p.id && !['cancelled', 'refunded'].includes(o.status));
   const myHold = s.holds.find(h => h.userId === s.activeUserId && h.productId === p.id && (h.status === 'pending' || h.status === 'reserved' && (h.expiresAt ?? Infinity) > now));
   const soldOut = status !== '판매 예정' && qty <= 0; const hms = (t: number) => new Date(t).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
   const headerTitle = status === '판매 예정' ? '판매 대기' : soldOut ? '구매 결과' : '상품 상세';
@@ -267,7 +267,7 @@ export function OrdersPage() {
 export function OrderDetailPage() {
   const { id } = useParams(); const [params, setParams] = useSearchParams(); const s = useStore(), user = activeUser(s); const o = s.orders.find(o => o.id === id && o.userId === user.id); const navigate = useNavigate(); const tracking = params.has('tracking');
   // 결제 완료 축하 화면은 결제 직후 한 번만. 주소의 complete를 바로 지워 뒤로 가기로 다시 보이지 않게 한다
-  const [complete] = useState(() => params.has('complete'));
+  const [complete, setComplete] = useState(() => params.has('complete'));
   useEffect(() => { if (params.has('complete')) { const next = new URLSearchParams(params); next.delete('complete'); setParams(next, { replace: true }); } }, []);
   // 결제 직후엔 조회 모델이 아직 없어 404일 수 있다 — 구매 실패로 보지 않고 checkout에서 받은 주문을 그대로 쓴다
   const live = useLive(async signal => { try { return await getOrder(id!, getState().activeUserId, signal); } catch (e) { if (isApiError(e) && e.status === 404) return null; throw e; } }, (st, d) => { if (d) mergeOrders(st, [d]); }, [id]);
@@ -283,7 +283,7 @@ export function OrderDetailPage() {
     <section className="space-y-2"><h3 className="mb-3 text-[15px] font-bold">주문 및 결제 정보</h3>{o.tracking && <><InfoRow label="택배사" value={o.carrier}/><InfoRow label="운송장 번호" value={<span className="inline-flex items-center gap-1">{o.tracking}<CopyButton value={o.tracking}/></span>}/></>}<InfoRow label="상품금액" value={money(o.total - o.shipping)}/><InfoRow label="고정 배송비" value={money(o.shipping)}/><InfoRow label="최종 결제금액" value={money(o.total)} strong/><InfoRow label="결제 방법" value="카드 결제"/></section>
     <section className="divider space-y-3 py-4"><h3 className="text-[15px] font-bold">배송지</h3><p className="text-[12px]">{o.address.name} · {formatPhone(o.address.phone)}</p><p className="muted text-[12px] leading-relaxed">{o.address.address}{o.address.detail ? ` ${o.address.detail}` : ''}</p>{o.address.request && <p className="muted text-[12px]">요청사항 · {o.address.request}</p>}</section>
     {!complete && <section><h3 className="mb-3 text-[15px] font-bold">주문 진행 내역</h3>{events.map(([time, title, desc], i) => <div key={i} className="divider flex gap-3 py-3"><PackageCheck size={17} className={i ? 'muted' : 'text-[var(--green)]'}/><div className="min-w-0 flex-1"><div className="flex justify-between gap-2"><b className="text-[12px]">{title}</b><span className="muted text-[10px]">{dateTime(time)}</span></div><p className="muted mt-1 text-[11px]">{desc}</p></div></div>)}</section>}
-    {o.status === 'delivered' && !complete ? <section className="space-y-3 rounded-[4px] bg-[var(--blue-soft)] p-4"><h3 className="text-[13px] font-bold">상품에 문제가 있나요?</h3><p className="muted text-[12px]">하자·오배송·반품은 판매자에게 문의해 주세요. 교환은 지원하지 않습니다.</p><Button outline className="w-full" onClick={() => navigate(`/orders/${o.id}/inquiry`)}>판매자 문의 · 반품 문의</Button></section> : <><Note title="상품을 확인해 주세요">취소·반품·하자·오배송은 판매자에게 문의해 주세요. 교환은 지원하지 않습니다.</Note><Button outline className="w-full" onClick={() => navigate(`/orders/${o.id}/inquiry`)}>판매자 문의 · 반품 문의</Button></>}{complete ? <><Link className="btn w-full" to="/">쇼핑 계속하기</Link><Button outline className="w-full" onClick={() => setParams({})}>상세 배송조회</Button></> : <Link className="btn w-full" to="/orders">주문 목록으로</Link>}
+    {o.status === 'delivered' && !complete ? <section className="space-y-3 rounded-[4px] bg-[var(--blue-soft)] p-4"><h3 className="text-[13px] font-bold">상품에 문제가 있나요?</h3><p className="muted text-[12px]">하자·오배송·반품은 판매자에게 문의해 주세요. 교환은 지원하지 않습니다.</p><Button outline className="w-full" onClick={() => navigate(`/orders/${o.id}/inquiry`)}>판매자 문의 · 반품 문의</Button></section> : <><Note title="상품을 확인해 주세요">취소·반품·하자·오배송은 판매자에게 문의해 주세요. 교환은 지원하지 않습니다.</Note><Button outline className="w-full" onClick={() => navigate(`/orders/${o.id}/inquiry`)}>판매자 문의 · 반품 문의</Button></>}{complete ? <><Link className="btn w-full" to="/">쇼핑 계속하기</Link><Button outline className="w-full" onClick={() => { setComplete(false); setParams({}, { replace: true }); }}>상세 배송조회</Button></> : <Link className="btn w-full" to="/orders">주문 목록으로</Link>}
   </div>;
 }
 /** 판매자에게 문의 — Figma "문의" (전체 화면) */

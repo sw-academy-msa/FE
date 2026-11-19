@@ -365,7 +365,7 @@ export function AdminDetailPage() {
   const dDay = Math.ceil((reviewDeadline - Date.now()) / 86_400_000);
   const bothViewed = pdfViewed && (urlViewed || !app.salesUrl);
   // 입점 심사 목록·판매자 목록 어디서 열었든 온 곳으로 돌아간다
-  const back = () => { if (window.history.length > 1) navigate(-1); else navigate('/admin/applications'); };
+  const back = () => { if (window.history.state?.idx > 0) navigate(-1); else navigate('/admin/applications'); };
   return (
     <div className={`pb-32 border-l-4 ${REVIEW_KIND.store.bar} -ml-4 pl-3`}>
       <Header title="입점 심사 상세" back={true} action={<ReviewKindBadge kind="store"/>}/>
@@ -707,7 +707,7 @@ export function AdminProductDetailPage() {
       </div>
       {p.rejectionReason && <Note title="반려 사유">반려 사유 · {p.rejectionReason}</Note>}
       <ErrorBox message={error}/>
-      {viewer !== null && <PhotoViewer images={p.images.filter(Boolean)} start={viewer} onClose={() => setViewer(null)} panel={<div className="space-y-2">
+      {viewer !== null && p.images.some(Boolean) && <PhotoViewer images={p.images.filter(Boolean)} start={viewer} onClose={() => setViewer(null)} panel={<div className="space-y-2">
         <p className="text-[13px] font-bold">물품 검수 확인</p>
         {INSPECTION_ITEMS.map(([k, hint]) => <label key={k} className="flex items-start gap-2 text-[12px]"><input type="checkbox" className="mt-0.5 h-4 w-4" checked={inspected.includes(k)} onChange={() => setInspected(v => (v.includes(k) ? v.filter(x => x !== k) : [...v, k]))}/><span><b>{k}</b> <span className="muted">{hint}</span></span></label>)}
         {!p.published && !p.rejectionReason && <div className="flex gap-2 pt-1"><Button outline className="w-[96px]" onClick={() => { setViewer(null); setReject(true); }}>반려</Button><Button className="flex-1" onClick={() => { setViewer(null); setApproveConfirm(true); }}>승인하기</Button></div>}

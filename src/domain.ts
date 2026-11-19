@@ -70,7 +70,7 @@ export interface Draft {
   maxPerAccount: number; startsAt: string; faqs: Faq[];
   /** 물품 검수에서 체크한 항목(INSPECTION_CHECKS 순서 번호). 화면 시연용 — 서버로 보내지 않는다 */ inspection?: number[];
   /** 택배사·반품 배송비·교환 배송비 입력(숫자는 문자열, 빈 값 = 미입력)과 이 값으로 만든 shippingNotice(판매자가 직접 고칠 수 있다) */ carrier?: string; returnFee?: string; exchangeFee?: string; shippingNotice?: string;
-  ai: { status: AiStatus; signature: string; category: string; reason: string; result?: AiAnalysis; /** 분석을 요청한 시점의 입력 — 이후 바뀌면 이전 AI 질문은 쓸 수 없다 */ input?: AnalysisInput; /** 서버가 자동 재시도 중(RETRY)일 때 표시용 */ retry?: { attempts: number; nextAttemptAt: string | null }; /** 분석 전 단계에서 막힌 칸별 문구(등록 화면 칸 아래 표시) */ fields?: Record<string, string> };
+  ai: { status: AiStatus; signature: string; category: string; reason: string; /** 다시 분석 중·실패·지연 동안 보관하는 직전 분석의 질문(답 이어받기용) */ prev?: AiQuestion[]; result?: AiAnalysis; /** 분석을 요청한 시점의 입력 — 이후 바뀌면 이전 AI 질문은 쓸 수 없다 */ input?: AnalysisInput; /** 서버가 자동 재시도 중(RETRY)일 때 표시용 */ retry?: { attempts: number; nextAttemptAt: string | null }; /** 분석 전 단계에서 막힌 칸별 문구(등록 화면 칸 아래 표시) */ fields?: Record<string, string> };
   /** 단일 화면 등록(Figma 판매 상품 등록): 옵션 축, 색상·사이즈, 조합별 수량, 추가 URL, 타 플랫폼 확인 결과 */
   /** 실제 API: 서버에 만든 초안 상품 id·서버 이미지 id(images와 같은 순서) */ serverId?: string; imageIds?: string[];
   /** 사진 바이트 수(images와 같은 순서) — AI 분석 30MB 한도 확인용 */ imageSizes?: number[];
@@ -88,11 +88,12 @@ export interface AiQuestion { checkCode?: string; /** 서버 질문 id — FAQ �
  */
 export function carryAiAnswers(faqs: Faq[], prev: AiQuestion[], next: AiQuestion[]): Faq[] {
   const sid = (q: AiQuestion) => q.suggestionId ?? q.question;
-  const nextIds = new Set(next.map(sid)), used = new Set<string>();
+  const nextIds = new Set(next.map(sid));
+  // 지금 질문에 그대로 남는 답의 질문 id를 먼저 예약한다(옮겨 오는 답이 기존 답을 덮지 않게)
+  const used = new Set(faqs.flatMap(f => (f.suggestionId && nextIds.has(f.suggestionId) ? [f.suggestionId] : [])));
   const out: Faq[] = [];
   for (const f of faqs) {
-    if (!f.suggestionId) { out.push(f); continue; }
-    if (nextIds.has(f.suggestionId)) { used.add(f.suggestionId); out.push(f); continue; }
+    if (!f.suggestionId || nextIds.has(f.suggestionId)) { out.push(f); continue; }
     if (!f.answer.trim()) continue;
     const old = prev.find(q => sid(q) === f.suggestionId);
     const to = next.find(q => !used.has(sid(q)) && (old?.checkCode && q.checkCode === old.checkCode || q.question.trim() === f.question.trim()));

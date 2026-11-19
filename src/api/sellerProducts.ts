@@ -280,7 +280,7 @@ export async function submitListing(d: Draft, id: string): Promise<Product> {
   p = await withStage('가격·배송 저장 실패', () => savePricingShipping(id, v(), { price: d.price, shippingFee: d.shipping, dispatchBusinessDays: d.dispatchDays, perAccountLimit: d.maxPerAccount, shippingNotice: d.shippingNotice?.trim() || undefined, dispatchAddressId: d.dispatchAddressId, returnAddressId: d.returnAddressId }));
   p = await withStage('판매 일정 저장 실패', () => saveSchedule(id, v(), startIso(d)));
   const faqs = faqsToSave(d);
-  if (faqs.length) p = await withStage('FAQ 저장 실패', () => withFaqRetry(() => saveRegistrationFaqs(id, v(), faqs), faqs.some(f => f.suggestionId)));
+  if (faqs.length || d.faqs.length) p = await withStage('FAQ 저장 실패', () => withFaqRetry(() => saveRegistrationFaqs(id, v(), faqs), faqs.some(f => f.suggestionId)));
   return withStage('심사 요청 실패', () => submitReview(id, v()));
 }
 /**
