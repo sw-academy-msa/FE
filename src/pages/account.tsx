@@ -245,7 +245,7 @@ function UrlCard({ url, viewed, onView }: { url: string; viewed: boolean; onView
   );
 }
 /** 두 심사를 한눈에 구분: 입점 심사(판매자 신청)=파랑, 판매 심사(상품)=주황 */
-export const REVIEW_KIND = { store: { label: '입점 심사', cls: 'bg-[#EAF1FF] text-[#2F6FED]', bar: 'border-l-[#2F6FED]' }, sale: { label: '판매 심사', cls: 'bg-[#FFF1E5] text-[#D9730D]', bar: 'border-l-[#D9730D]' } } as const;
+export const REVIEW_KIND = { store: { label: '입점 심사', cls: 'bg-[#EAF1FF] text-[#2F6FED]' }, sale: { label: '판매 심사', cls: 'bg-[#FFF1E5] text-[#D9730D]' } } as const;
 export function ReviewKindBadge({ kind }: { kind: keyof typeof REVIEW_KIND }) { return <span className={`inline-flex h-[20px] shrink-0 items-center rounded-[4px] px-2 text-[11px] font-bold ${REVIEW_KIND[kind].cls}`}>{REVIEW_KIND[kind].label}</span>; }
 /** 판매 심사 대기: 승인·반려 전 상품 */
 const salePending = (p: { published: boolean; rejectionReason?: string; reviewStatus?: string }) => USE_MOCK ? !p.published && !p.rejectionReason : p.reviewStatus === 'IN_REVIEW';
@@ -312,7 +312,7 @@ export function AdminListPage() {
   const apps = all.filter(a => inTab(a, tab)).sort((a, b) => a.submittedAt - b.submittedAt);
   const reviewDeadline = (sub: number) => sub + 2 * 86_400_000;
   return (
-    <div className={`border-l-4 ${REVIEW_KIND.store.bar} -ml-4 pl-3`}>
+    <div>
       <Header title="입점 심사 목록" subtitle="판매자 신청 · 사업자등록증과 신청 정보를 확인하고 승인해 주세요." action={<ReviewKindBadge kind="store"/>}/>
       <div className="mb-3 flex gap-5 border-b border-[var(--line)]">
         {(USE_MOCK ? ['pending', 'approved'] as const : ['pending', 'correction', 'approved'] as const).map(t => (
@@ -376,7 +376,7 @@ export function AdminDetailPage() {
   // 입점 심사 목록·판매자 목록 어디서 열었든 온 곳으로 돌아간다
   const back = () => { if (window.history.state?.idx > 0) navigate(-1); else navigate('/admin/applications'); };
   return (
-    <div className={`pb-32 border-l-4 ${REVIEW_KIND.store.bar} -ml-4 pl-3`}>
+    <div className="pb-32">
       <Header title="입점 심사 상세" back={true} action={<ReviewKindBadge kind="store"/>}/>
       {/* Meta: 심사 중일 때만 결과 안내 기한을 보여 준다 */}
       <div className="mb-4 flex items-center gap-2">
@@ -522,7 +522,7 @@ export function AdminProductListPage() {
   const pendingCount = s.products.filter(p => !p.published).length;
   const approvedCount = s.products.filter(p => p.published).length;
   return (
-    <div className={`border-l-4 ${REVIEW_KIND.sale.bar} -ml-4 pl-3`}>
+    <div>
       <Header title="판매 심사 목록" subtitle="상품 · 판매 정보와 물품 상태를 확인하고 승인해 주세요." back={true} action={<ReviewKindBadge kind="sale"/>}/>
       <div className="mb-3 grid grid-cols-2 gap-1 rounded-[6px] bg-[var(--soft)] p-1 text-[13px]" role="tablist">
         {([['new', '신규', pendingCount], ['revision', '수정', revisions.data?.length ?? 0]] as [string, string, number][]).map(([k, label, cnt]) => (
@@ -661,7 +661,7 @@ export function AdminProductDetailPage() {
   }
   // 상품 승인 화면
   return (
-    <div className={`pb-32 border-l-4 ${REVIEW_KIND.sale.bar} -ml-4 pl-3`}>
+    <div className="pb-32">
       <Header title="판매 심사 상세" back={true} action={<ReviewKindBadge kind="sale"/>}/>
       {/* Meta */}
       {p.published
