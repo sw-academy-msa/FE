@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { api } from './client';
-import { addInquiryMessage, createOrderInquiry, createProductInquiry, getInquiryImageUrl, listInquiryInbox, listProductInquiries, mergeInquiries, orderInquiryFromApi, uploadInquiryImage } from './inquiries';
+import { addInquiryMessage, createOrderInquiry, createProductInquiry, getInquiryImageUrl, getProductInquiry, listInquiryInbox, listProductInquiries, mergeInquiries, orderInquiryFromApi, uploadInquiryImage } from './inquiries';
 import type { State } from '../domain';
 
 type Call = { url: string; method: string; body: unknown; auth: string | null };
@@ -19,6 +19,22 @@ const dto = { id: 'i1', orderId: 'o1', category: '하자·파손', messages: [{ 
 describe('문의 API', () => {
   it('변환: 첫 구매자 메시지=question, 마지막 판매자 메시지=answer', () => {
     expect(orderInquiryFromApi(dto, 'u')).toMatchObject({ id: 'i1', orderId: 'o1', kind: '하자·파손', question: '질문', answer: '답변', imageIds: ['m1'] });
+  });
+  it('변환: 구매자 추가 질문이 마지막이면 이전 답변이 있어도 답변 대기', () => {
+    const more = { ...dto, messages: [...dto.messages, { seller: false, body: '추가', createdAt: '2026-01-03T00:00:00Z' }] };
+    expect(orderInquiryFromApi(more, 'u')).toMatchObject({ question: '질문', answer: undefined });
+    expect(orderInquiryFromApi(more, 'u').messages).toHaveLength(3);
+  });
+  it('상품 문의 단건: 단건 API가 없어 본인 목록을 마지막 페이지까지 찾는다', async () => {
+    const row = (id: string) => ({ id, question: id, answer: id === 'p3' ? '답' : null, createdAt: '2026-01-01T00:00:00Z', answeredAt: null });
+    const calls = fake(c => (c.url.includes('page=0') ? { items: [row('p1')], totalPages: 2 } : { items: [row('p3')], totalPages: 2 }));
+    expect(await getProductInquiry('pr', 'p3', 'u')).toMatchObject({ id: 'p3', productId: 'pr', answer: '답', kind: '상품 문의' });
+    expect(calls.map(c => `${c.method} ${path(c)}`)).toEqual(['GET /products/pr/inquiries?page=0&size=100', 'GET /products/pr/inquiries?page=1&size=100']);
+  });
+  it('상품 문의 단건: 없으면 다시 시도 안내 오류', async () => {
+    const calls = fake(() => ({ items: [], totalPages: 0 }));
+    await expect(getProductInquiry('pr', 'none', 'u')).rejects.toThrow('잠시 후 다시 시도');
+    expect(calls).toHaveLength(1);
   });
   it('상품 문의: 조회는 items, 등록은 body {question}', async () => {
     const calls = fake(c => (c.method === 'GET' ? { items: [{ id: 'p1', question: 'q', answer: null, createdAt: '2026-01-01T00:00:00Z', answeredAt: null }] } : { id: 'p2', question: 'x', answer: null, createdAt: '2026-01-01T00:00:00Z', answeredAt: null }));

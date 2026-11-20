@@ -11,7 +11,7 @@ import { loginHref, signedIn } from '../auth';
 import { trackViewItem } from '../analytics';
 import { addressLine, listAddresses, toAddress } from './address';
 import { ExpiredCheckout } from './checkoutExpired';
-import { confirmPurchase, changeShippingAddress, createOrder, createOrderInquiry, retryWhileUnavailable, errorMessage, getCheckout, getCheckoutTerms, getOrder, getProduct, isApiError, fetchUnreadCount, listNotifications, listOrders, markAllNotificationsRead, markNotificationRead, notificationPath, useApi, listProducts, mergeCheckout, mergeInquiries, mergeOrderList, mergeOrders, mergeProducts, openTossPayment, uploadInquiryImage, deleteInquiryImage, useLive } from '../api';
+import { confirmPurchase, changeShippingAddress, createOrder, createOrderInquiry, createProductInquiry, listProductInquiries, retryWhileUnavailable, errorMessage, getCheckout, getCheckoutTerms, getOrder, getProduct, isApiError, fetchUnreadCount, listNotifications, listOrders, markAllNotificationsRead, markNotificationRead, notificationPath, useApi, listProducts, mergeCheckout, mergeInquiries, mergeOrderList, mergeOrders, mergeProducts, openTossPayment, uploadInquiryImage, deleteInquiryImage, useLive } from '../api';
 import type { CheckoutTermsDto, InboxItem } from '../api';
 import { USE_MOCK } from '../config';
 import { CompositionInput } from '../components/CompositionInput';
@@ -128,11 +128,37 @@ export function ProductPage() {
     <section className="space-y-3 py-3"><h2 className="text-[15px] font-bold">상품 정보</h2><p className="whitespace-pre-line text-[12px] leading-[1.8]">{p.description}</p>{p.extras.map((e, i) => <InfoRow key={i} label={e.key} value={e.value}/>)}<InfoRow label="재고 처분 사유" value={p.reason}/></section>
     {(() => { const faqs = p.faqs.filter(f => f.confirmed); const sel = faqs.find(f => f.id === selectedFaq); return faqs.length ? <section className="divider space-y-3 py-4"><h2 className="text-[15px] font-bold">판매자 확인 FAQ</h2><div className="flex flex-wrap gap-2">{faqs.map(f => <button key={f.id} onClick={() => setSelectedFaq(selectedFaq === f.id ? null : f.id)} className={`rounded-full border px-3 py-1.5 text-[11px] font-semibold transition-colors ${selectedFaq === f.id ? 'border-[var(--ink)] bg-[var(--ink)] text-[var(--surface)]' : 'border-[var(--line)]'}`}>{f.question}</button>)}</div>{sel && <div className="rounded-[6px] bg-[var(--blue-soft)] p-3"><p className="text-[11px] font-semibold">A.</p><p className="mt-1 whitespace-pre-line text-[12px] leading-relaxed">{sel.answer}</p></div>}</section> : null; })()}
 <p className="muted text-[10px] leading-relaxed">교환은 지원하지 않습니다. 반품·환불은 STOCKDROP이 처리하지 않으며, 주문 내역의 판매자 문의로 판매자와 직접 협의해 주세요.</p>
+    <ProductInquirySection product={p} blocked={!!block}/>
     {soldOut && <section className="space-y-3"><h2 className="text-[15px] font-bold">{myOrder ? '비슷한 상품' : '놓친 상품과 비슷한 상품'}</h2><div className="grid grid-cols-2 gap-x-2 gap-y-4">{s.products.filter(r => r.published && r.id !== p.id && r.category === p.category && r.endsAt > now).slice(0, 4).map(r => <ProductCard key={r.id} product={r} now={now}/>)}</div>{s.products.some(r => r.published && r.id !== p.id && r.category === p.category && r.endsAt > now) && <Link className="btn btn-outline w-full" to={`/?category=${encodeURIComponent(categoryGroup(p.category) ?? '')}`}>전체보기</Link>}</section>}
     <div className="sticky bottom-[76px] z-20 -mx-4 border-t border-[var(--line)] bg-[var(--surface)] px-4 py-3">{block ? <div className="space-y-2 text-center"><p className="text-[13px] font-bold">{PURCHASE_BLOCK_TEXT[block]}</p>{block === 'own' ? <Link className="btn w-full" to={`/seller/product/${p.id}`}>판매 현황 보기</Link> : <Link className="btn btn-outline w-full" to="/admin">운영자 마이페이지</Link>}</div> : myHold ? <Link className="btn w-full" to={`/checkout/${myHold.id}`}>{myHold.status === 'pending' ? '결제 결과 확인하기' : `${countdown(myHold.expiresAt, now)} 안에 결제 이어하기`}</Link> : soldOut && myOrder ? <Link className="btn w-full" to={`/orders/${myOrder.id}`}>주문 상세 보기</Link> : soldOut ? <div className="flex gap-2"><Link className="btn flex-1" to="/">홈으로</Link><Link className="btn btn-outline flex-1" to={`/?category=${encodeURIComponent(categoryGroup(p.category) ?? '')}`}>비슷한 상품 보기</Link></div> : <Button buy className="w-full" disabled={status !== '판매 중' || qty <= 0} onClick={() => signedIn(s) ? setOptionsOpen(true) : navigate(loginHref(`/product/${p.id}`))}>{status === '판매 예정' ? '판매 시작 전 · 구매할 수 없어요' : status === '판매 종료' ? '판매가 종료되었습니다' : qty <= 0 ? '일시 품절 · 재고를 확인해 주세요' : `남은 ${qty}개 · 선착순 구매하기`}</Button>}</div>
     {optionsOpen && !block && <OptionSheet product={p} initial={rebuy} resume={resume} onClose={() => setOptionsOpen(false)}/>}
     {extPopup && <Modal title="외부 사이트로 이동할까요?" onClose={() => setExtPopup(false)}><div className="space-y-4"><p className="muted text-[12px]">STOCKDROP을 벗어나 판매처 페이지가 새 창으로 열려요.</p><div className="rounded-[4px] bg-[var(--blue-soft)] p-3"><p className="text-[12px] font-bold">{p.brand}</p><p className="muted mt-1 break-all text-[10px]">{p.originalUrl}</p></div><p className="muted text-[10px]">판매처의 가격·배송·교환 조건은 STOCKDROP과 다를 수 있어요.</p><div className="flex gap-2"><Button outline className="flex-1" onClick={() => setExtPopup(false)}>취소</Button><Button className="flex-1" onClick={() => { window.open(externalHref(p.originalUrl, p.id), '_blank', 'noopener,noreferrer'); setExtPopup(false); }}>이동하기</Button></div></div></Modal>}
   </div>;
+}
+
+/** 상품 상세의 상품 문의: 기존 생성 API로 새 문의를 남기고 본인 문의만 보여 준다. 상품 문의에는 추가 메시지 API가 없어 새 문의로만 묻는다. */
+function ProductInquirySection({ product: p, blocked }: { product: Product; blocked: boolean }) {
+  const s = useStore(), toast = useToast(), navigate = useNavigate(); const live = signedIn(s) && !blocked;
+  const [question, setQuestion] = useState(''), [busy, setBusy] = useState(false), [error, setError] = useState('');
+  const mine = useLive(signal => USE_MOCK || !live ? Promise.resolve([]) : listProductInquiries(p.id, s.activeUserId, signal), (st, items) => mergeInquiries(st, items), [p.id, s.activeUserId, live]);
+  const items = s.inquiries.filter(i => i.productId === p.id && !i.orderId && i.userId === s.activeUserId && i.sellerId !== 'stockdrop').sort((a, b) => b.createdAt - a.createdAt);
+  if (blocked) return null; // 판매자 본인 상품과 운영자는 문의하지 않는다
+  async function submit() {
+    const text = question.trim(); if (!text || busy) return; setError(''); setBusy(true);
+    try {
+      if (USE_MOCK) mutate(st => { st.inquiries.unshift({ id: uid('q-'), userId: st.activeUserId, sellerId: p.sellerId, productId: p.id, productName: p.name, kind: '상품 문의', question: text, public: false, createdAt: nowOf(st) }); });
+      else { const q = await createProductInquiry(p.id, text, s.activeUserId); mutate(st => mergeInquiries(st, [q])); }
+      setQuestion(''); toast('문의가 판매자에게 전달되었습니다.');
+    } catch (e) { setError(errorMessage(e)); } finally { setBusy(false); }
+  }
+  return <section className="divider space-y-3 py-4">
+    <h2 className="text-[15px] font-bold">상품 문의</h2>
+    {!signedIn(s) ? <Link className="btn btn-outline w-full" to={loginHref(`/product/${p.id}`)}>로그인하고 문의하기</Link> : <>
+      <Field label="문의 내용" hint="판매자가 답변하면 알림으로 안내해 드려요. 내 문의는 나만 볼 수 있어요." error={error}><textarea aria-label="상품 문의 내용" className="field field-box" rows={3} maxLength={2000} value={question} onChange={e => setQuestion(e.target.value.slice(0, 2000))} placeholder="상품에 대해 궁금한 점을 입력해 주세요"/></Field>
+      <Button outline className="w-full" disabled={busy || !question.trim()} onClick={submit}>{busy ? '보내는 중…' : '문의 남기기'}</Button>
+      {mine.error ? <LiveStatus state={mine}/> : items.length > 0 && <div className="space-y-2"><p className="text-[12px] font-bold">내 문의</p>{items.map(i => <button key={i.id} onClick={() => navigate(`/inquiries/${encodeURIComponent(i.id)}?productId=${encodeURIComponent(p.id)}`)} className="flex w-full items-center justify-between gap-3 rounded-[6px] border border-[var(--line)] p-3 text-left"><span className="line-clamp-1 text-[12px]">{i.question}</span><span className={`shrink-0 rounded px-2 py-0.5 text-[10px] font-semibold ${i.answer ? 'bg-[var(--positive-soft)] text-[var(--positive)]' : 'bg-[var(--blue-soft)] text-[var(--muted)]'}`}>{i.answer ? '답변 완료' : '답변 대기'}</span></button>)}</div>}
+    </>}
+  </section>;
 }
 
 /** 같은 상품·옵션·수량으로 새 주문(재고 확보)을 시작하고 결제 화면 id를 돌려준다. 실제 모드는 addressId가 없으면 기본 배송지 */
