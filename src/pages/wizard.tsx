@@ -11,7 +11,7 @@ import { imageData } from '../files';
 import { Button, Empty, ErrorBox, Header, LiveStatus, Modal, Note, ProductImage, Unavailable, useToast } from '../components/ui';
 import { useClock } from '../hooks';
 import { categoryTree } from '../categoryTree';
-import { INSPECTION_CHECKS, INSPECTION_PHOTOS, analysisInputOf, analysisStale, carryAiAnswers } from '../domain';
+import { INSPECTION_CHECKS, INSPECTION_PHOTOS, analysisInputOf, analysisStale, aiResultPatch } from '../domain';
 import { kstTime } from './checkoutExpired';
 import { COLOR_AXIS, defaultAxesFor, optionPresetFor } from '../optionPresets';
 import { IMAGE_EXPIRED, QUICK_SCHEDULE, USE_MOCK } from '../config';
@@ -86,7 +86,7 @@ export function aiStateOf(token: string, r: { outcome: string; code: string; cat
 async function analyzeReal(userId: string, token: string, prev: AiQuestion[]) {
   // 결과가 오면 예전 질문에 쓴 답을 같은 점검 항목의 새 질문으로 옮긴다(옮길 곳이 없는 답은 지운다)
   // 실패·지연이면 직전 질문을 계속 보관해 다음 재시도에서도 답을 옮길 수 있게 한다
-  const done = (ai: Draft['ai']) => { const d = getState().drafts[userId]; if (d && d.ai.status === 'analyzing' && d.ai.signature === token) patchDraft(userId, ai.result ? { ai, faqs: carryAiAnswers(d.faqs, prev, ai.result.questions) } : { ai: { ...ai, prev } }); };
+  const done = (ai: Draft['ai']) => { const d = getState().drafts[userId]; if (d && d.ai.status === 'analyzing' && d.ai.signature === token) patchDraft(userId, aiResultPatch(d, ai, prev)); }; // 결과는 기다리지 않고 바로 반영(이 분석이 아직 진행 중일 때 한 번만)
   const failed: Draft['ai'] = { status: 'failed', signature: token, category: '', reason: '' };
   try {
     const id = await ensureServerDraft(userId), d = getState().drafts[userId];
@@ -112,7 +112,7 @@ function startAnalysis(userId: string) {
     if (state.aiOutcome === 'failed' || !d.images.length) { patchDraft(userId, { ai: { status: 'failed', signature: token, category: '', reason: '' } }); return; }
     const r = mockAiAnalysis(d), outcome = state.aiOutcome === 'uncertain' ? 'UNCLEAR' : state.aiOutcome === 'unsupported' ? 'NOT_APPLICABLE' : 'RECOMMENDED';
     const ai = { ...aiStateOf(token, { ...r, outcome }, d.images.length), input: analysisInputOf(d) };
-    patchDraft(userId, ai.result ? { ai, faqs: carryAiAnswers(d.faqs, prev, ai.result.questions) } : { ai });
+    patchDraft(userId, aiResultPatch(d, ai, prev));
   }, ANALYSIS_MS);
 }
 function useDraft() {
@@ -368,6 +368,11 @@ export function WizardPage() {
 
     {stale && <section role="status" className="space-y-2 rounded-[6px] bg-[var(--red-soft)] p-4"><p className="text-[13px] font-bold text-[var(--red)]">정보가 바뀌어 AI 질문을 다시 받아야 해요</p><p className="text-[12px] text-[var(--red)]">분석한 뒤에 상품명·설명·브랜드·카테고리·처분 사유·사진 중 하나가 바뀌었어요. 다시 분석하면 입력이 같을 땐 기존 결과, 다르면 새 분석을 받아요.</p><Button outline className="w-full" disabled={d.ai.status === 'analyzing' || uploading} onClick={runAnalysis}>다시 분석</Button></section>}
 
+    {d.ai.status === 'recommended' && d.ai.result && d.ai.notice && !d.ai.noticeSeen && <div role="status" aria-label="AI 분석 반영 안내" className="space-y-2 rounded-[6px] bg-[var(--soft)] p-4">
+      <p className="flex items-center gap-1.5 text-[13px] font-bold"><Sparkles size={14}/>{d.ai.notice === 'applied' ? 'AI 분석 결과를 반영했어요' : '직접 고른 카테고리는 그대로 두었어요'}</p>
+      <p className="text-[12px] leading-relaxed text-[var(--aux)]">{d.ai.notice === 'applied' ? `카테고리 ${d.ai.result.category}` : `AI 추천 카테고리는 ${d.ai.result.category}예요`}{d.ai.result.questions.length ? ` · 점검 질문 ${d.ai.result.questions.length}개를 해당 입력칸 옆에 보여 드려요` : ''}</p>
+      <div className="flex gap-3 text-[12px] font-bold">{d.ai.notice === 'kept' && <button type="button" className="underline" onClick={() => patch({ category: d.ai.result!.category, aiCategory: d.ai.result!.category, ai: { ...d.ai, notice: 'applied', noticeSeen: true } })}>AI 추천으로 바꾸기</button>}<button type="button" className="text-[var(--aux)] underline" onClick={() => patch({ ai: { ...d.ai, noticeSeen: true } })}>닫기</button></div>
+    </div>}
     <section data-field="category"><Label hint="· AI 추천 또는 직접 선택">카테고리</Label>
       {!d.category && d.ai.status === 'uncertain' && d.ai.reason && <p role="status" className="pb-1 text-[12px] text-[var(--aux)]">{d.ai.reason}</p>}
       <button type="button" onClick={openCategory} className="flex h-12 w-full items-center gap-2 border-b border-[var(--line)] text-left">
@@ -553,7 +558,7 @@ export function AiAnalysisPage() {
   if (d.ai.status === 'failed' || !d.ai.result) return <Navigate to={`/seller/new/ai/failed${suffix}`} replace/>;
   const r = d.ai.result, chosen = r.category;
   const back = () => navigate(`/seller/new${suffix}`);
-  return <AiFrame footer={<div className="flex gap-2"><Button outline className="w-[128px] text-[15px]!" onClick={() => { startAnalysis(user.id); navigate(`/seller/new/ai/analyzing${suffix}`, { replace: true }); }}>다시 분석</Button><Button className="flex-1 text-[15px]!" onClick={() => { patch({ category: chosen }); back(); }}>이 카테고리로 적용</Button></div>}>
+  return <AiFrame footer={<div className="flex gap-2"><Button outline className="w-[128px] text-[15px]!" onClick={() => { startAnalysis(user.id); navigate(`/seller/new/ai/analyzing${suffix}`, { replace: true }); }}>다시 분석</Button>{d.category === chosen ? <Button className="flex-1 text-[15px]!" onClick={back}>등록 화면으로</Button> : <Button className="flex-1 text-[15px]!" onClick={() => { patch({ category: chosen, aiCategory: chosen }); back(); }}>이 카테고리로 적용</Button>}</div>}>
     <div className="space-y-2"><div className="relative"><ProductImage src={d.images[0]} alt="분석한 대표 사진" className="h-[240px] w-full"/><span className="absolute left-3 top-3 flex items-center gap-1 rounded-[4px] bg-black/70 px-2 py-1 text-[11px] font-bold text-white"><Sparkles size={12}/>AI 분석 완료</span></div><p className="text-[12px] text-[var(--meta)]">등록한 사진 {r.photos}장을 분석했어요</p></div>
     <div className="space-y-1"><p className="text-[12px] font-bold text-[var(--meta)]">AI 추천 카테고리</p><p className="text-[22px] font-bold">{r.category}</p></div>
     <section><h2 className="mb-1 text-[14px] font-bold">카테고리 선택</h2><LiveStatus state={meta}/>
@@ -567,7 +572,8 @@ export function AiAnalysisPage() {
 
 export function AiAnalyzingPage() {
   const { user, d, suffix } = useDraft(); const navigate = useNavigate();
-  useEffect(() => { if (d && d.ai.status !== 'analyzing') navigate(d.ai.status === 'uncertain' ? `/seller/new${suffix}` : `/seller/new/ai${d.ai.status === 'failed' || d.ai.status === 'delayed' ? '/failed' : ''}${suffix}`, { replace: true }); }, [d?.ai.status]);
+  // 성공(추천)·판단 불가는 결과가 이미 반영된 등록 화면으로, 실패·지연은 안내 화면으로
+  useEffect(() => { if (d && d.ai.status !== 'analyzing') navigate(d.ai.status === 'failed' || d.ai.status === 'delayed' ? `/seller/new/ai/failed${suffix}` : `/seller/new${suffix}`, { replace: true }); }, [d?.ai.status]);
   if (!user.seller) return <Unavailable message="승인된 판매자만 상품을 등록할 수 있습니다."/>;
   if (!d) return null;
   return <AiFrame footer={<Button outline className="w-full text-[15px]!" onClick={() => navigate(`/seller/new${suffix}`)}>기다리지 않고 등록 계속하기</Button>}>
@@ -576,7 +582,7 @@ export function AiAnalyzingPage() {
     <div className="space-y-3"><h1 className="text-[24px] font-bold leading-[1.45] tracking-[-.7px]">등록한 사진 {d.images.length}장을<br/>분석하고 있어요</h1>{d.ai.retry ? <p role="status" className="text-[13px] text-[var(--aux)]">잠시 후 다시 분석해요{d.ai.retry.nextAttemptAt ? ` (다음 시도 ${kstTime(parseServerTime(d.ai.retry.nextAttemptAt)).slice(0, 5)})` : ''} · {d.ai.retry.attempts}번째 시도 중</p> : <p className="text-[13px] text-[var(--aux)]">보통 10초 안에 끝나요.</p>}</div>
     <div className="h-1 w-full overflow-hidden rounded-full bg-[var(--line)]"><div className="h-1 w-[60%] rounded-full bg-[var(--ink)]"/></div>
     <div className="space-y-3.5">{([['카테고리', 60], ['점검 질문', 44]] as const).map(([label, w]) => <div key={label} className="flex items-center justify-between"><span className="text-[12px] text-[var(--muted)]">{label}</span><span className="h-3 rounded-[2px] bg-[var(--soft)]" style={{ width: `${w}%` }}/></div>)}</div>
-    <div className="flex gap-2 rounded-[6px] bg-[var(--soft)] p-4"><Info size={15} className="mt-[2px] shrink-0 text-[var(--aux)]"/><p className="text-[12px] leading-[1.6] text-[var(--aux)]">분석을 기다리지 않아도 돼요. 상품 등록은 계속 진행할 수 있고, 결과는 확인한 뒤에만 반영돼요.</p></div>
+    <div className="flex gap-2 rounded-[6px] bg-[var(--soft)] p-4"><Info size={15} className="mt-[2px] shrink-0 text-[var(--aux)]"/><p className="text-[12px] leading-[1.6] text-[var(--aux)]">분석을 기다리지 않아도 돼요. 분석이 끝나면 추천 카테고리와 점검 질문이 등록 화면에 바로 반영돼요. 직접 고른 카테고리는 바꾸지 않아요.</p></div>
   </AiFrame>;
 }
 
