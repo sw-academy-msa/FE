@@ -17,7 +17,6 @@ export interface Product {
   /** 공개 상품 상세의 구매 안내 */ purchaseNotice?: string;
   /** 판매 시작 알림 신청 인원 — 백엔드 요청 필드 (docs/backend-api-requests.md) */ notifySubscribers?: number;
   /** 선착순 마감(완판) 시각 — 백엔드 요청 필드 */ soldOutAt?: number;
-  /** 홈 최신순: 실제 모드는 공개 목록(NEWEST) 응답 순서, mock 모드는 공개 승인 시각 (homeList.ts) */ listRank?: number; publishedAt?: number;
   /** 판매에 참여(구매 시도)한 인원 — 백엔드 요청 필드 */ participants?: number;
   /** 타 플랫폼 판매가 확인 결과 — 백엔드 요청 필드 */ reference?: ReferenceListing;
   /** 판매자 API 상품: 낙관적 잠금 version, 심사 상태, 서버 이미지 id(images와 같은 순서) */ version?: number; reviewStatus?: 'DRAFT' | 'IN_REVIEW' | 'REJECTED' | 'APPROVED'; imageIds?: string[]; /** 서버 이미지 바이트 수(imageIds와 같은 순서) */ imageSizes?: number[];
