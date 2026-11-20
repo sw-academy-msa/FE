@@ -5,7 +5,7 @@ import { HOME_PAGE_SIZE, pageDots } from '../homeList';
 
 const GAP = 16;
 /**
- * 상품 10개씩 좌우로 넘기는 페이지. 가로 스크롤 스냅(브라우저 기본 스와이프)이라 세로 스크롤과 겹치지 않고 아이폰 관성 스와이프도 그대로다.
+ * 상품 HOME_PAGE_SIZE(8)개씩 좌우로 넘기는 페이지. 가로 스크롤 스냅(브라우저 기본 스와이프)이라 세로 스크롤과 겹치지 않고 아이폰 관성 스와이프도 그대로다.
  * 아래 점(현재 페이지 강조, 최대 7개)과 이전/다음 버튼으로도 넘긴다(키보드, 화면 낭독기). 보던 페이지는 부모가 주소에 둔다.
  */
 export function HomePager<T extends { id: string }>({ items, page, onPage, render }: { items: T[]; page: number; onPage: (page: number) => void; render: (item: T) => ReactNode }) {

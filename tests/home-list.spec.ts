@@ -23,14 +23,14 @@ test('관리자가 새로 승인한 상품이 홈 목록 맨 위에 온다(mock�
   expect((await cardIds(page))[0]).toBe('basket');
 });
 
-test('전체 목록은 10개씩 좌우로 넘기는 페이지이고 아래 점으로 표시하며, 상세에 갔다 오면 보던 페이지, 탭을 바꾸면 첫 페이지', async ({ page }) => {
+test('전체 목록은 8개씩 좌우로 넘기는 페이지이고 아래 점으로 표시하며, 상세에 갔다 오면 보던 페이지, 탭을 바꾸면 첫 페이지', async ({ page }) => {
   await page.setViewportSize({ width: 402, height: 874 });
   // 같은 카테고리 상품 25개를 더한다(새로 올라온 순서: n25가 가장 최근)
   await editState(page, s => { const base = s.products.find((x: any) => x.id === 'cardigan'); for (let i = 1; i <= 25; i++) s.products.push({ ...structuredClone(base), id: `n${i}`, name: `새 상품 ${i}`, publishedAt: 1_000_000 + i }); });
   await page.goto('/#/');
   const all = await page.evaluate(() => JSON.parse(localStorage.getItem('stockdrop:v1')!).products.filter((p: any) => p.published).length);
-  const pages = Math.ceil(all / 10);
-  await expect.poll(async () => (await cardIds(page)).length).toBe(10);
+  const pages = Math.ceil(all / 8);
+  await expect.poll(async () => (await cardIds(page)).length).toBe(8);
   expect((await cardIds(page)).slice(0, 3)).toEqual(['n25', 'n24', 'n23']);
   // 점: 페이지 수만큼(최대 7), 첫 점이 현재
   const dots = pager(page).getByRole('button', { name: /^\d+페이지$/ });
@@ -39,17 +39,17 @@ test('전체 목록은 10개씩 좌우로 넘기는 페이지이고 아래 점�
   await expect(pager(page).getByRole('button', { name: '이전 페이지' })).toBeDisabled();
   expect(await noOverflow(page)).toBe(true);
 
-  // 손으로 옆으로 밀면(가로 스크롤) 다음 10개, 주소에 p=2
+  // 손으로 옆으로 밀면(가로 스크롤) 다음 8개, 주소에 p=2
   await page.getByTestId('home-products').evaluate(el => el.scrollBy({ left: el.clientWidth + 16 }));
   await expect(page).toHaveURL(/[?&]p=2/);
   await expect(pager(page).getByRole('button', { name: '2페이지' })).toHaveAttribute('aria-current', 'page');
-  await expect.poll(async () => (await cardIds(page))[0]).toBe('n15');
+  await expect.poll(async () => (await cardIds(page))[0]).toBe('n17');
   // 세로 스크롤은 그대로(페이지가 바뀌지 않는다)
   await page.mouse.wheel(0, 400); await page.waitForTimeout(300); await expect(page).toHaveURL(/[?&]p=2/);
 
   // 다음 버튼(키보드)과 점 누르기
   await pager(page).getByRole('button', { name: '다음 페이지' }).focus(); await page.keyboard.press('Enter');
-  await expect(page).toHaveURL(/[?&]p=3/); await expect.poll(async () => (await cardIds(page))[0]).toBe('n5');
+  await expect(page).toHaveURL(/[?&]p=3/); await expect.poll(async () => (await cardIds(page))[0]).toBe('n9');
   await page.waitForTimeout(800); await expect(page).toHaveURL(/[?&]p=3/); // 넘기는 중에 앞 페이지로 되돌아가지 않는다
   await pager(page).getByRole('button', { name: '1페이지' }).click();
   await expect(page).not.toHaveURL(/[?&]p=/); await expect.poll(async () => (await cardIds(page))[0]).toBe('n25');
@@ -66,6 +66,6 @@ test('전체 목록은 10개씩 좌우로 넘기는 페이지이고 아래 점�
   // 카테고리 탭을 바꾸면 첫 페이지로
   await page.getByRole('group', { name: '상품 카테고리' }).getByRole('button', { name: '의류', exact: true }).click();
   await expect(page).not.toHaveURL(/[?&]p=/);
-  await expect.poll(async () => (await cardIds(page)).length).toBe(10);
+  await expect.poll(async () => (await cardIds(page)).length).toBe(8);
   expect(await noOverflow(page)).toBe(true);
 });

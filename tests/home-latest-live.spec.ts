@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 
-// 실제 API 모드 개발 서버에서 가짜 HTTP 응답으로 홈 최신순과 10개씩 페이지를 확인한다
+// 실제 API 모드 개발 서버에서 가짜 HTTP 응답으로 홈 최신순과 8개씩 페이지를 확인한다
 test.skip(process.env.STOCKDROP_REAL_TEST !== 'true', '실제 API 모드 로컬 서버 전용');
 test.use({ viewport: { width: 402, height: 874 } });
 
@@ -39,14 +39,14 @@ test('홈은 서버 최신순(NEWEST) 응답 순서로, 예전에 받아 둔 상
   expect(sv.queries.every(q => /sort=NEWEST/.test(q) && /size=100/.test(q))).toBe(true);
 });
 
-test('실제 모드도 10개씩 페이지로 넘기고 아래 점으로 표시한다', async ({ page }) => {
+test('실제 모드도 8개씩 페이지로 넘기고 아래 점으로 표시한다', async ({ page }) => {
   const sv = { list: Array.from({ length: 23 }, (_, i) => `p${i + 1}`), queries: [] as string[] };
   await serve(page, sv); await login(page);
-  await expect.poll(async () => (await ids(page)).length).toBe(10);
+  await expect.poll(async () => (await ids(page)).length).toBe(8);
   expect((await ids(page))[0]).toBe('p1');
   const nav = page.getByRole('navigation', { name: '상품 페이지' });
   await expect(nav.getByRole('button', { name: /^\d+페이지$/ })).toHaveCount(3);
   await nav.getByRole('button', { name: '3페이지' }).click();
-  await expect(page).toHaveURL(/[?&]p=3/); await expect.poll(() => ids(page)).toEqual(['p21', 'p22', 'p23']);
+  await expect(page).toHaveURL(/[?&]p=3/); await expect.poll(() => ids(page)).toEqual(['p17', 'p18', 'p19', 'p20', 'p21', 'p22', 'p23']);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
 });
