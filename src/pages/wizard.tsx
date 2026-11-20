@@ -13,7 +13,7 @@ import { useClock } from '../hooks';
 import { categoryTree } from '../categoryTree';
 import { INSPECTION_CHECKS, INSPECTION_PHOTOS, analysisInputOf, analysisStale, aiResultPatch } from '../domain';
 import { kstTime } from './checkoutExpired';
-import { COLOR_AXIS, defaultAxesFor, optionPresetFor } from '../optionPresets';
+import { COLOR_AXIS, optionPresetFor } from '../optionPresets';
 import { IMAGE_EXPIRED, QUICK_SCHEDULE, USE_MOCK } from '../config';
 import { AiDelayedError } from '../api/sellerProducts';
 import { parseServerTime } from '../api';
@@ -32,7 +32,7 @@ function fromProduct(p: Product): Draft {
   for (const o of p.options) { const parts = o.name.split(' / '); const c = axes.color ? parts[0] : '', s = axes.color && axes.size ? parts[1] : axes.size ? o.name : ''; stock[optionKey(basic ? '' : c, basic ? '' : s)] = o.stock; }
   return { ...blankDraft(), editingId: p.id, editingVersion: p.version, name: p.name, brand: p.brand, description: p.description, images: [...p.images], imageIds: p.imageIds && [...p.imageIds], imageSizes: p.imageSizes && [...p.imageSizes], category: p.category, sizeName: size?.name, originalUrl: p.originalUrl, extras: structuredClone(p.extras), reason: p.reason, dimensions: structuredClone(p.dimensions), noOptions: basic, options: structuredClone(p.options), price: p.price, shipping: p.shipping, shippingNotice: p.shippingNotice ?? '', dispatchDays: p.dispatchDays, maxPerAccount: p.maxPerAccount, startsAt: p.startsAt ? localDateTime(p.startsAt) : blankDraft().startsAt, faqs: structuredClone(p.faqs), axes, colors, sizes, stock, reference: p.reference ?? lookupReference(p.originalUrl) };
 }
-function freshDraft(now: number): Draft { const start = new Date(now + 3_600_000); start.setMinutes(0, 0, 0); return { ...blankDraft(now), startsAt: localDateTime(start.getTime()), axes: { size: true, color: true }, colors: [], sizes: [], stock: {} }; }
+function freshDraft(now: number): Draft { const start = new Date(now + 3_600_000); start.setMinutes(0, 0, 0); return { ...blankDraft(now), startsAt: localDateTime(start.getTime()), axes: { size: false, color: false }, colors: [], sizes: [], stock: {} }; }
 /** 초안 변경 — options·dimensions를 항상 축·수량에서 다시 계산 */
 function patchDraft(userId: string, value: Partial<Draft>) {
   mutate(state => {
@@ -169,13 +169,6 @@ export function WizardPage() {
   // AI 분석이 저장·조건 단계에서 막혔으면 해당 칸 아래에 표시한다
   const aiFields = d?.ai.status === 'failed' ? d.ai.fields : undefined;
   useEffect(() => { if (aiFields) setFieldErr(aiFields); }, [aiFields && JSON.stringify(aiFields)]);
-  // 카테고리가 정해지면 옵션 기본값을 카테고리에 맞춘다(옵션 값을 아직 넣지 않았을 때만). 칫솔·수납함처럼 색상·사이즈가 없는 상품은 옵션 없이 시작
-  useEffect(() => {
-    const cur = getState().drafts[user.id]; if (!cur?.axes || cur.editingId) return;
-    if ((cur.colors?.length ?? 0) || (cur.sizes?.length ?? 0) || Object.values(cur.stock ?? {}).some(Boolean)) return;
-    const want = defaultAxesFor(cur.category, meta.data); if (!want) return;
-    if (cur.axes.color !== want.color || cur.axes.size !== want.size || (want.sizeName && cur.sizeName !== want.sizeName)) patch({ axes: { color: want.color, size: want.size }, ...(want.sizeName ? { sizeName: want.sizeName } : {}) });
-  }, [d?.category, meta.data]);
   // 칸 아래 오류는 그 칸을 고치면 바로 지운다(아래 render에서 recheck를 채운다)
   const recheck = useRef<(() => void) | null>(null);
   useEffect(() => { recheck.current?.(); }, [d]);
@@ -325,7 +318,7 @@ export function WizardPage() {
   // 고른 카테고리에 맞는 추천 옵션 이름. 이미 입력한 옵션 이름(카테고리를 바꾸기 전 것)도 칩으로 남겨 지우지 않는다
   const preset = optionPresetFor(d.category, meta.data), sizeName = d.sizeName || '사이즈';
   const secondNames = [...preset.second, ...(preset.second.includes(sizeName) ? [] : [sizeName])];
-  const chip = (on: boolean, label: string, onClick: () => void) => <button type="button" onClick={onClick} className={`inline-flex h-8 items-center gap-1 rounded-full px-3.5 text-[13px] ${on ? 'bg-[var(--ink)] font-bold text-white' : 'border border-[var(--border)] text-[var(--aux)]'}`}>{on && <Check size={13} strokeWidth={2.5}/>}{label}</button>;
+  const chip = (on: boolean, label: string, onClick: () => void) => <button type="button" aria-pressed={on} onClick={onClick} className={`inline-flex h-8 items-center gap-1 rounded-full px-3.5 text-[13px] ${on ? 'bg-[var(--ink)] font-bold text-white' : 'border border-[var(--border)] text-[var(--aux)]'}`}>{on && <Check size={13} strokeWidth={2.5}/>}{label}</button>;
   const qtyRow = (label: string, key: string, last: boolean) => <div key={key} className={`flex h-[52px] items-center justify-between ${last ? '' : 'border-b border-[var(--line)]'}`}><span className="text-[15px]">{label}</span><Stepper label={label} value={stock[key] ?? 0} onChange={n => setStock(key, n)}/></div>;
 
   return <div className="space-y-6 pb-4">
