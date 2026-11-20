@@ -120,7 +120,7 @@ export function createApiClient(initial: ClientConfig = {}) {
 
   async function request<T>(method: string, path: string, o: RequestOptions = {}): Promise<T> {
     if (cfg.mock) throw new ApiError('mock 모드에서는 서버를 호출하지 않아요.', 0, MOCK_CODE);
-    const expected = session;
+    let expected = session;
     const check = () => {
       if (o.signal?.aborted) throw new DOMException('요청이 취소됐어요.', 'AbortError');
       if (o.auth !== false) checkSession(expected);
@@ -140,7 +140,7 @@ export function createApiClient(initial: ClientConfig = {}) {
       if (renewed) res = await send(method, path, o);
       check();
       // 재발급이 거절됐거나(401·403 등) 재시도에도 401이면 세션 종료. 네트워크 단절·서버 오류로 재발급을 못 한 경우는 로그아웃하지 않는다
-      if ((renewed || rejected) && res.status === 401) { setAccessToken(null); cfg.onSessionExpired?.(); return parse<T>(res, o.responseType); }
+      if ((renewed || rejected) && res.status === 401) { setAccessToken(null); expected = session; cfg.onSessionExpired?.(); }
     }
     try { return await parse<T>(res, o.responseType); }
     finally { check(); }

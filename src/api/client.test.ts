@@ -20,6 +20,18 @@ function setup(handler: (call: Call, n: number) => Response | Promise<Response>,
 const path = (call: Call) => call.url.replace('/api', '');
 
 describe('로그아웃 직후 재로그인 경합', () => {
+  it('현재 세션 만료 오류를 읽는 중에도 새 로그인으로 바뀌면 이전 오류를 전달하지 않는다', async () => {
+    let finish!: (value: unknown) => void;
+    const response = fail(401, 'OLD_SESSION');
+    vi.spyOn(response, 'json').mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    const { client } = setup(c => path(c) === '/old' ? response : path(c) === '/v1/auth/csrf' ? csrf() : fail(401, 'REFRESH_EXPIRED'));
+    client.setAccessToken('old');
+    const pending = client.get('/old').catch(e => e);
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+    client.setAccessToken('new'); finish({ code: 'OLD_SESSION', message: '이전 로그인' });
+    expect(await pending).toMatchObject({ name: 'AbortError' });
+    expect(client.getAccessToken()).toBe('new');
+  });
   it.each([true, false])('오류 본문 파싱 중 세션 변경 여부(%s)를 확인하고 현재 세션의 오류는 보존한다', async changed => {
     let finish!: (value: unknown) => void;
     const response = fail(403, 'FORBIDDEN');
