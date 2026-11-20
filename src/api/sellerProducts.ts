@@ -6,7 +6,7 @@
  * 실제 모드 전용: mock 모드는 화면이 기존 로컬 동작(publishDraft 등)을 그대로 쓴다.
  */
 import type { Draft, Inquiry, Product } from '../domain';
-import { CATEGORY_PATHS, analysisStale, optionKey } from '../domain';
+import { CATEGORY_PATHS, OPTION_LABEL_MAX, analysisStale, comboKey, comboLabel, listingOptions, optionCombos, optionModel } from '../domain';
 import { ApiError, api } from './client';
 import { allSellerPages } from './sellerPaging';
 import { ms } from './mappers';
@@ -238,14 +238,12 @@ export async function answerProductInquiry(sellerId: string, productId: string, 
 }
 
 /* ── 화면 초안(Draft) → 서버 단계 값 ── */
-/** 옵션 축·수량 → 서버 dimensions/variants. 수량 0인 조합은 보내지 않고(≥1 필수), 차원 값도 쓰이는 값만 보낸다 */
+/** 옵션 단계와 수량 → 서버 dimensions/variants. 수량 0인 조합은 보내지 않고(≥1 필수), 차원 값도 쓰이는 값만 보낸다 */
 export function optionPayload(d: Draft) {
-  const axes = d.axes ?? { size: false, color: false }, colors = d.colors ?? [], sizes = d.sizes ?? [], stock = d.stock ?? {}, sn = d.sizeName || '사이즈'; // 색상 말고 다른 축 이름(카테고리 추천 또는 직접 입력)
+  const { dims, stock } = optionModel(d); // 판매자가 정한 옵션 이름 그대로(예전 색상 x 사이즈 초안도 같은 이름으로 바꿔 읽음)
   type Row = { name: string; selections: Record<string, string>; qty: number };
-  const rows: Row[] = axes.color && axes.size ? colors.flatMap(c => sizes.map(s => ({ name: `${c} / ${s}`, selections: { 색상: c, [sn]: s }, qty: stock[optionKey(c, s)] ?? 0 })))
-    : axes.color ? colors.map(c => ({ name: c, selections: { 색상: c }, qty: stock[optionKey(c, '')] ?? 0 }))
-    : axes.size ? sizes.map(s => ({ name: s, selections: { [sn]: s }, qty: stock[optionKey('', s)] ?? 0 }))
-    : [{ name: '기본', selections: { 옵션: '기본' }, qty: stock[optionKey('', '')] ?? 0 }]; // 추측(명세 없음): 옵션 없음 = 차원 '옵션' 값 '기본' 하나
+  const rows: Row[] = optionCombos(dims).map(vals => ({ name: comboLabel(vals), qty: stock[comboKey(vals)] ?? 0,
+    selections: dims.length ? Object.fromEntries(dims.map((x, i) => [x.name, vals[i]])) : { 옵션: '기본' } })); // 추측(명세 없음): 옵션 없음 = 차원 '옵션' 값 '기본' 하나
   const used = rows.filter(r => r.qty >= 1);
   const dimensions = [...new Set(used.flatMap(r => Object.keys(r.selections)))].map(name => ({ name, values: [...new Set(used.map(r => r.selections[name]))] }));
   // 서버가 준 옵션 id만 유지(화면이 만든 임시 id `opt-…`는 새 옵션)
@@ -370,6 +368,7 @@ export function listingProblems(d: Draft, o: { categories: string[]; now: number
   if (!Number.isInteger(d.price) || d.price <= 0) f.price = '한정 판매가를 입력해 주세요.';
   else if (d.reference && d.price >= d.reference.price) f.price = '등록한 URL의 판매가보다 낮아야 심사를 요청할 수 있어요.';
   if (!optionPayload(d).variants.length) f.options = '옵션별 한정 수량을 1개 이상 입력해 주세요.';
+  else if (listingOptions(d).some(o => o.stock > 0 && o.name.length > OPTION_LABEL_MAX)) f.options = `옵션 값을 이은 이름은 ${OPTION_LABEL_MAX}자까지 쓸 수 있어요. 옵션 값을 줄여 주세요.`;
   const start = new Date(d.startsAt).getTime();
   if (!Number.isFinite(start) || start <= o.now) f.startsAt = '판매 시작 시각이 지났어요. 지금보다 뒤로 바꿔 주세요.';
   if (!Number.isInteger(d.dispatchDays) || d.dispatchDays <= 0) f.dispatchDays = '출고 기한을 선택해 주세요.';

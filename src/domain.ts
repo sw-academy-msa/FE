@@ -80,7 +80,11 @@ export interface Draft {
   /** 실제 API: 서버에 만든 초안 상품 id·서버 이미지 id(images와 같은 순서) */ serverId?: string; imageIds?: string[];
   /** 사진 바이트 수(images와 같은 순서) — AI 분석 30MB 한도 확인용 */ imageSizes?: number[];
   /** 실제 API: 판매자 주소록에서 고른 출고지·반품지 id(없으면 서버가 기본 주소를 쓴다) */ dispatchAddressId?: string; returnAddressId?: string;
-  axes?: { size: boolean; color: boolean }; /** 색상 말고 다른 옵션 축의 이름(기본 '사이즈') */ sizeName?: string; colors?: string[]; sizes?: string[]; stock?: Record<string, number>; extraUrls?: string[]; reference?: ReferenceListing;
+  /** 판매자가 이름을 정한 옵션 단계(최대 OPTION_DIM_MAX). 빈 배열이면 옵션 없음 */ optionDims?: OptionDim[];
+  /** 조합별 한정 수량. 키는 comboKey(조합 값 배열) */ stock?: Record<string, number>;
+  /** 예전 구조(첫 단계 '색상' 고정 × 이름 정하는 두 번째 단계, 수량 키 '색상|값'). optionModel이 새 구조로 바꿔 읽는다 */
+  axes?: { size: boolean; color: boolean }; sizeName?: string; colors?: string[]; sizes?: string[];
+  extraUrls?: string[]; reference?: ReferenceListing;
 }
 export interface ReferenceListing { platform: string; title: string; price: number; image?: string }
 /** AI 분석 결과(RECOMMENDED). 서버는 outcome·추천 카테고리 코드·구매자 관점 질문만 준다 — 신뢰도·대안·속성은 없다 */
@@ -174,7 +178,7 @@ export function parseRejection(reason: string | undefined): { field: string; rea
 export const PURCHASE_BLOCK_TEXT = { admin: '운영자 계정은 구매할 수 없어요', own: '내가 판매하는 상품이에요' } as const;
 export const defaultAddress: Address = { name: '김서윤', phone: '010-1234-5678', address: '서울시 성동구 연무장길 00', detail: '501호', request: '문 앞에 놓아 주세요.' };
 export function blankDraft(now = Date.now()): Draft {
-  return { step: 1, name: '', brand: '', description: '', images: [], category: '', originalUrl: '', extras: [{ key: '', value: '' }], reason: '', dimensions: [{ name: '색상', values: '' }], noOptions: false, options: [], price: 0, shipping: 3000, dispatchDays: 2, maxPerAccount: 2, startsAt: localDateTime(now + 3_600_000), faqs: [], ai: { status: 'before', signature: '', category: '', reason: '' } };
+  return { step: 1, name: '', brand: '', description: '', images: [], category: '', originalUrl: '', extras: [{ key: '', value: '' }], reason: '', dimensions: [], noOptions: false, options: [], price: 0, shipping: 3000, dispatchDays: 2, maxPerAccount: 2, startsAt: localDateTime(now + 3_600_000), faqs: [], ai: { status: 'before', signature: '', category: '', reason: '' } };
 }
 export function inputSignature(d: Pick<Draft, 'name' | 'description' | 'images'>) { return JSON.stringify([d.name.trim(), d.description.trim(), d.images]); }
 export function unsupportedInput(name: string, description: string): boolean {
@@ -307,19 +311,45 @@ export function seedState(now = Date.now(), demoSales = false, mockSignedIn = tr
 }
 
 /* ── 단일 화면 상품 등록 (Figma 판매 상품 등록 / 판매 정보 수정) ───────────────────────── */
+/**
+ * 옵션 단계. 판매자가 '직접 추가'로 이름(색상, 사이즈, 맛 등 무엇이든)과 값을 정한다.
+ * 서버(ProductCommandService 옵션 저장)는 단계 수 제한이 없고, 이름과 값은 빈칸 불가 200자 이하, 이름은 서로 다르고 한 단계 안 값도 서로 달라야 한다.
+ * 조합 이름(값을 ' / '로 이은 것)은 500자 이하. 화면은 조합 수가 곱으로 늘어 최대 3단계까지 받는다(사용자 결정).
+ */
+export interface OptionDim { name: string; values: string[] }
+export const OPTION_DIM_MAX = 3, OPTION_TEXT_MAX = 200, OPTION_LABEL_MAX = 500;
+export const comboKey = (values: string[]) => JSON.stringify(values);
+export const comboLabel = (values: string[]) => (values.length ? values.join(' / ') : '기본');
+/** 예전 수량 키(색상|두 번째 값). 예전 초안과 테스트를 읽을 때만 쓴다 */
 export const optionKey = (color: string, size: string) => `${color}|${size}`;
-/** 옵션 축·색상·사이즈·수량에서 판매 옵션(이름·재고)을 만든다. 같은 이름의 옵션은 id를 유지한다. */
+/** 이름이나 값의 문제(없으면 ''). what: '옵션 이름' 또는 '옵션 값' */
+export function optionNameProblem(v: string, others: string[], what: string) {
+  if (!v.trim()) return `${what}을 입력해 주세요.`;
+  if (v.trim().length > OPTION_TEXT_MAX) return `${what}은 ${OPTION_TEXT_MAX}자까지 입력할 수 있어요.`;
+  return others.includes(v.trim()) ? `이미 있는 ${what}이에요.` : '';
+}
+/** 초안의 옵션 단계와 수량. 예전 구조(색상 x 이름 정하는 단계, 키 '색상|값')는 같은 이름과 수량의 새 구조로 바꿔 읽는다 */
+export function optionModel(d: Pick<Draft, 'optionDims' | 'stock' | 'axes' | 'sizeName' | 'colors' | 'sizes'>): { dims: OptionDim[]; stock: Record<string, number> } {
+  if (d.optionDims) return { dims: d.optionDims, stock: d.stock ?? {} };
+  const axes = d.axes ?? { size: false, color: false };
+  const dims: OptionDim[] = [...(axes.color ? [{ name: '색상', values: [...(d.colors ?? [])] }] : []), ...(axes.size ? [{ name: d.sizeName || '사이즈', values: [...(d.sizes ?? [])] }] : [])];
+  const stock: Record<string, number> = {};
+  for (const [k, n] of Object.entries(d.stock ?? {})) {
+    const [c = '', s = ''] = k.split('|');
+    if (!axes.color && !axes.size && (c || s)) continue;
+    stock[comboKey([...(axes.color ? [c] : []), ...(axes.size ? [s] : [])])] = n;
+  }
+  return { dims, stock };
+}
+/** 단계 값의 모든 조합(단계 순서대로). 단계가 없으면 빈 조합 하나(기본), 값이 없는 단계가 있으면 조합 없음 */
+export const optionCombos = (dims: OptionDim[]) => dims.reduce<string[][]>((acc, dim) => acc.flatMap(a => dim.values.map(v => [...a, v])), [[]]);
+/** 옵션 단계와 수량에서 판매 옵션(이름과 재고)을 만든다. 같은 이름의 옵션은 id를 유지한다. */
 export function listingOptions(d: Draft): Option[] {
-  const axes = d.axes ?? { size: false, color: false }, colors = d.colors ?? [], sizes = d.sizes ?? [], stock = d.stock ?? {};
-  const pairs: [string, string, string][] = axes.color && axes.size ? colors.flatMap(c => sizes.map(s => [`${c} / ${s}`, c, s] as [string, string, string]))
-    : axes.color ? colors.map(c => [c, c, ''] as [string, string, string])
-    : axes.size ? sizes.map(s => [s, '', s] as [string, string, string])
-    : [['기본', '', '']];
-  return pairs.map(([name, c, s]) => ({ id: d.options.find(o => o.name === name)?.id ?? `opt-${name}`, name, stock: stock[optionKey(c, s)] ?? 0 }));
+  const { dims, stock } = optionModel(d);
+  return optionCombos(dims).map(vals => { const name = comboLabel(vals); return { id: d.options.find(o => o.name === name)?.id ?? `opt-${name}`, name, stock: stock[comboKey(vals)] ?? 0 }; });
 }
 export function listingDimensions(d: Draft): Dimension[] {
-  const axes = d.axes ?? { size: false, color: false };
-  return [...(axes.color ? [{ name: '색상', values: (d.colors ?? []).join(', ') }] : []), ...(axes.size ? [{ name: d.sizeName || '사이즈', values: (d.sizes ?? []).join(', ') }] : [])];
+  return optionModel(d).dims.map(x => ({ name: x.name, values: x.values.join(', ') }));
 }
 export function validateListing(d: Draft, now: number) {
   if (unsupportedInput(d.name, d.description) || d.ai.status === 'unsupported') throw new DomainError('지원하지 않는 상품은 등록할 수 없습니다.');

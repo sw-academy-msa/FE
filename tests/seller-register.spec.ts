@@ -1,8 +1,14 @@
 import { test, expect } from '@playwright/test';
+import type { Page } from '@playwright/test';
 import path from 'node:path';
 import { blockExternal } from './session';
 
 // 판매자 계정으로 기본 목업을 연 상태에서 시작한다
+async function addOption(page: Page, name: string) { await page.getByRole('button', { name: '직접 추가', exact: true }).click(); await page.getByLabel('직접 추가', { exact: true }).fill(name); await page.keyboard.press('Enter'); }
+async function addValue(page: Page, dim: string, v: string) { await page.getByRole('button', { name: dim + ' 추가', exact: true }).click(); await page.getByLabel(dim + ' 추가', { exact: true }).fill(v); await page.keyboard.press('Enter'); }
+const group = (page: Page, i: number, name: string) => page.getByRole('group', { name: '옵션 ' + i + '단계 ' + name, exact: true });
+const qty = (page: Page, label: string) => page.getByLabel(label + ' 수량', { exact: true });
+
 test.beforeEach(async ({ page }) => {
   await blockExternal(page);
   await page.goto('/#/');
@@ -58,13 +64,10 @@ test('판매 상품 등록 단일 화면 → AI 분석 적용 → 판매 심사 
   await page.getByLabel('한정 판매가').fill('49000');
   await expect(page.getByText('45% 저렴')).toBeVisible();
 
-  // 옵션은 옵션 없음으로 시작하니 색상과 사이즈 칩을 직접 켠다
-  await page.getByRole('button', { name: '색상', exact: true }).first().click(); await page.getByRole('button', { name: '사이즈', exact: true }).first().click();
-  await page.getByRole('button', { name: '색상', exact: true }).last().click();
-  await page.getByLabel('색상', { exact: true }).fill('차콜'); await page.keyboard.press('Enter');
-  await page.getByRole('button', { name: '사이즈 추가' }).click();
-  await page.getByLabel('사이즈 추가').fill('S'); await page.keyboard.press('Enter');
-  for (let i = 0; i < 5; i++) await page.getByLabel('S 증가').click();
+  // 옵션은 옵션 없음으로 시작하고 판매자가 이름을 정해 직접 추가한다
+  await addOption(page, '색상'); await addValue(page, '색상', '차콜');
+  await addOption(page, '사이즈'); await addValue(page, '사이즈', 'S');
+  for (let i = 0; i < 5; i++) await page.getByLabel('차콜 / S 증가').click();
   await expect(page.getByText('50개')).toHaveCount(0);
   await expect(page.getByText('차콜 5')).toBeVisible();
 
@@ -92,24 +95,95 @@ test('판매 상품 등록 단일 화면 → AI 분석 적용 → 판매 심사 
   expect(p.shippingNotice).toBe('CJ대한통운 / 반품 배송비 3,000원');
 });
 
-test('옵션별 한정 수량은 옵션 없음으로 시작하고, 판매자가 켠 옵션은 카테고리가 정해져도 그대로다', async ({ page }) => {
+test('옵션은 옵션 없음과 직접 추가만으로 시작하고, 이름 세 단계까지 추가와 고치기와 삭제를 한다', async ({ page }) => {
+  await page.setViewportSize({ width: 402, height: 874 });
   await page.goto('/#/seller/new'); await page.reload();
-  const chip = (name: string) => page.getByRole('button', { name, exact: true }).first();
-  await expect(chip('옵션 없음')).toHaveAttribute('aria-pressed', 'true');
-  await expect(chip('색상')).toHaveAttribute('aria-pressed', 'false');
-  await expect(chip('사이즈')).toHaveAttribute('aria-pressed', 'false');
+  const options = page.locator('[data-field="options"]');
+  await expect(options.getByRole('button', { name: '옵션 없음', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(options.getByRole('button', { name: '직접 추가', exact: true })).toBeVisible();
+  // 색상, 카테고리 추천 칩, 빠른 선택은 처음부터 없다
+  for (const n of ['색상', '사이즈', '사이즈(mm)', '규격', '묶음 수량', '크기', '용량']) await expect(options.getByRole('button', { name: n, exact: true })).toHaveCount(0);
+  await expect(options.getByText('빠른 선택')).toHaveCount(0);
+  await expect(options.getByRole('group')).toHaveCount(0);
   await expect(page.getByText('기본 수량')).toBeVisible();
-  // 판매자가 색상만 켠 뒤 AI 분석이 의류 카테고리를 채워도 켠 옵션은 그대로, 사이즈가 저절로 켜지지 않는다
-  await chip('색상').click();
-  await expect(chip('색상')).toHaveAttribute('aria-pressed', 'true'); await expect(chip('옵션 없음')).toHaveAttribute('aria-pressed', 'false');
-  await page.getByLabel('상품 사진 업로드').setInputFiles(['seller-register-1.jpg'].map(f => path.join(process.cwd(), 'public/images', f)));
-  await page.getByLabel('상품명').fill('울 블렌드 오버핏 니트 (차콜)'); await page.getByLabel('짧은 설명').fill('새 상품, 택 그대로'); await page.getByLabel('처분 사유').fill('시즌 종료 후 남은 재고');
-  await page.getByRole('button', { name: 'AI로 카테고리 분석하기' }).click();
-  await expect(page.getByText('패션 › 상의 › 니트/스웨터', { exact: true })).toBeVisible();
-  await expect(chip('색상')).toHaveAttribute('aria-pressed', 'true');
-  await expect(chip('사이즈')).toHaveAttribute('aria-pressed', 'false');
-  // 추천 칩과 빠른 선택은 그대로 남아 판매자가 켤 수 있다
-  await chip('사이즈').click(); await expect(chip('사이즈')).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByRole('button', { name: '사이즈 추가' })).toBeVisible();
-  await chip('옵션 없음').click(); await expect(page.getByText('기본 수량')).toBeVisible();
+
+  // 이름은 판매자가 정한다. 같은 이름은 막는다
+  await addOption(page, '맛'); await expect(group(page, 1, '맛')).toBeVisible();
+  await addOption(page, '맛'); await expect(page.getByRole('alert')).toHaveText('이미 있는 옵션 이름이에요.');
+  await addOption(page, '용량');
+  await addValue(page, '맛', '딸기'); await addValue(page, '맛', '초코'); await addValue(page, '용량', '250ml');
+  await addValue(page, '맛', '딸기'); await expect(page.getByRole('alert')).toHaveText('이미 있는 옵션 값이에요.');
+  await expect(page.getByText('맛 × 용량별 수량')).toBeVisible();
+  // 수량은 직접 입력하거나 버튼으로 고친다
+  await qty(page, '딸기 / 250ml').fill('12');
+  await page.getByLabel('초코 / 250ml 증가').click(); await page.getByLabel('초코 / 250ml 증가').click();
+  await expect(page.getByText('딸기 12 · 초코 2')).toBeVisible();
+  await expect(page.getByText('14개').first()).toBeVisible();
+
+  // 두 단계일 때 이름과 값을 눌러 고친다(수량은 그대로 따라간다)
+  await page.getByRole('button', { name: '맛 값 딸기 고치기' }).click();
+  await page.getByLabel('맛 값 딸기 고치기').fill('바나나'); await page.keyboard.press('Enter');
+  await expect(qty(page, '바나나 / 250ml')).toHaveValue('12');
+  await page.getByRole('button', { name: '옵션 이름 용량 고치기' }).click();
+  await page.getByLabel('옵션 이름 용량 고치기').fill('맛'); await page.keyboard.press('Enter');
+  await expect(page.getByRole('alert')).toHaveText('이미 있는 옵션 이름이에요.');
+  await page.getByLabel('옵션 이름 용량 고치기').fill('사이즈'); await page.keyboard.press('Enter');
+  await expect(group(page, 2, '사이즈')).toBeVisible(); await expect(page.getByText('맛 × 사이즈별 수량')).toBeVisible();
+
+  // 세 단계까지. 세 단계에서도 값과 수량을 고칠 수 있다
+  await addOption(page, '포장'); await addValue(page, '포장', '박스');
+  await expect(options.getByRole('button', { name: '직접 추가', exact: true })).toHaveCount(0);
+  await expect(page.getByText('옵션은 3단계까지 추가할 수 있어요')).toBeVisible();
+  await qty(page, '바나나 / 250ml / 박스').fill('3');
+  await page.getByRole('button', { name: '포장 값 박스 고치기' }).click();
+  await page.getByLabel('포장 값 박스 고치기').fill('선물 상자'); await page.keyboard.press('Enter');
+  await expect(qty(page, '바나나 / 250ml / 선물 상자')).toHaveValue('3');
+  await page.getByRole('button', { name: '옵션 이름 포장 고치기' }).click();
+  await page.getByLabel('옵션 이름 포장 고치기').fill('포장 방식'); await page.keyboard.press('Enter');
+  await expect(group(page, 3, '포장 방식')).toBeVisible();
+  // 긴 값도 402px 화면을 넘지 않는다
+  await addValue(page, '포장 방식', '아주 긴 포장 설명이 들어간 옵션 값 예시입니다 화면을 넘지 않아야 해요');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+
+  // 값 삭제는 그 값의 수량도 지운다
+  await page.getByRole('button', { name: '포장 방식 값 선물 상자 삭제' }).click();
+  await expect(qty(page, '바나나 / 250ml / 선물 상자')).toHaveCount(0);
+  await page.getByRole('button', { name: /^포장 방식 값 아주 긴 .* 삭제$/ }).click();
+  await expect(page.getByText('옵션 값을 추가하면 조합별 수량을 넣을 수 있어요')).toBeVisible();
+  // 값이 없는 단계는 바로 지워지고 앞 단계 수량은 그대로다
+  await page.getByRole('button', { name: '포장 방식 옵션 삭제' }).click();
+  await expect(qty(page, '바나나 / 250ml')).toHaveValue('12');
+  // 값이 있는 단계를 지우면 확인한 뒤 값과 수량을 함께 지운다
+  await page.getByRole('button', { name: '맛 옵션 삭제' }).click();
+  await expect(page.getByRole('dialog', { name: "'맛' 옵션을 지울까요?" })).toBeVisible();
+  await page.getByRole('button', { name: '취소', exact: true }).click(); await expect(group(page, 1, '맛')).toBeVisible();
+  await page.getByRole('button', { name: '맛 옵션 삭제' }).click(); await page.getByRole('button', { name: '삭제', exact: true }).click();
+  await expect(group(page, 1, '사이즈')).toBeVisible(); await expect(qty(page, '250ml')).toHaveValue('0');
+  // 옵션 없음을 누르면 확인 뒤 모두 지운다
+  await options.getByRole('button', { name: '옵션 없음', exact: true }).click(); await page.getByRole('button', { name: '삭제', exact: true }).click();
+  await expect(options.getByRole('group')).toHaveCount(0); await expect(page.getByText('기본 수량')).toBeVisible();
+  await expect(options.getByRole('button', { name: '옵션 없음', exact: true })).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('저장된 상품과 예전 색상 x 사이즈 초안을 열면 같은 이름과 수량으로 보이고 그대로 저장된다', async ({ page }) => {
+  // 저장된 상품(종류 x 구성 두 단계, 첫 단계가 색상이 아님)
+  await page.goto('/#/seller/new?edit=notebook'); await page.reload();
+  await expect(group(page, 1, '종류')).toBeVisible(); await expect(group(page, 2, '구성')).toBeVisible();
+  await expect(qty(page, '무지 / 2권 세트')).toHaveValue('18'); await expect(qty(page, '도트 / 2권 세트')).toHaveValue('12');
+  // 예전 로컬 초안(색상 x 이름 정한 두 번째 단계, 수량 키 '색상|값')
+  await page.goto('/#/seller/products');
+  await page.evaluate(() => {
+    const s = JSON.parse(localStorage.getItem('stockdrop:v1')!);
+    s.drafts.seller = { ...s.drafts.seller, editingId: undefined, optionDims: undefined, axes: { color: true, size: true }, sizeName: '묶음 수량', colors: ['블랙'], sizes: ['3개입', '5개입'], stock: { '블랙|3개입': 5, '블랙|5개입': 1 } };
+    localStorage.setItem('stockdrop:v1', JSON.stringify(s));
+  });
+  await page.reload(); await page.goto('/#/seller/new');
+  await expect(group(page, 1, '색상')).toBeVisible(); await expect(group(page, 2, '묶음 수량')).toBeVisible();
+  await expect(qty(page, '블랙 / 3개입')).toHaveValue('5'); await expect(qty(page, '블랙 / 5개입')).toHaveValue('1');
+  await page.getByLabel('블랙 / 5개입 증가').click();
+  const d = await page.evaluate(() => JSON.parse(localStorage.getItem('stockdrop:v1')!).drafts.seller);
+  expect(d.optionDims).toEqual([{ name: '색상', values: ['블랙'] }, { name: '묶음 수량', values: ['3개입', '5개입'] }]);
+  expect(d.axes).toBeUndefined();
+  expect(d.options.map((o: { name: string; stock: number }) => [o.name, o.stock])).toEqual([['블랙 / 3개입', 5], ['블랙 / 5개입', 2]]);
+  expect(d.dimensions).toEqual([{ name: '색상', values: '블랙' }, { name: '묶음 수량', values: '3개입, 5개입' }]);
 });

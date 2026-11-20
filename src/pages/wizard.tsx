@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { CompositionInput } from '../components/CompositionInput';
 import type { ReactNode } from 'react';
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, Calendar, Check, ChevronDown, ChevronRight, Hash, Image as ImageIcon, Info, Link2, Minus, Package, Plus, ShieldCheck, Sparkles, Timer } from 'lucide-react';
-import { activeUser, blankDraft, listingDimensions, listingOptions, localDateTime, lookupReference, mockAiAnalysis, money, nowOf, optionKey, publishDraft, unsupportedInput } from '../domain';
-import type { AiQuestion, Draft, Product } from '../domain';
+import { AlertCircle, ArrowLeft, Calendar, Check, ChevronDown, ChevronRight, Hash, Image as ImageIcon, Info, Link2, Minus, Package, Plus, ShieldCheck, Sparkles, Timer, X } from 'lucide-react';
+import { activeUser, blankDraft, listingDimensions, listingOptions, localDateTime, lookupReference, mockAiAnalysis, money, nowOf, publishDraft, unsupportedInput, OPTION_DIM_MAX, OPTION_TEXT_MAX, comboKey, comboLabel, optionCombos, optionModel, optionNameProblem } from '../domain';
+import type { AiQuestion, Draft, OptionDim, Product } from '../domain';
 import type { RegistrationMetadataDto } from '../api/types';
 import { atomic, getState, mutate, useStore } from '../store';
 import { imageData } from '../files';
@@ -13,32 +13,33 @@ import { useClock } from '../hooks';
 import { categoryTree } from '../categoryTree';
 import { INSPECTION_CHECKS, INSPECTION_PHOTOS, analysisInputOf, analysisStale, aiResultPatch } from '../domain';
 import { kstTime } from './checkoutExpired';
-import { COLOR_AXIS, optionPresetFor } from '../optionPresets';
 import { IMAGE_EXPIRED, QUICK_SCHEDULE, USE_MOCK } from '../config';
 import { AiDelayedError } from '../api/sellerProducts';
 import { parseServerTime } from '../api';
 import { getProductImageUrl, FIELD_LABELS, REVISION_FIELDS, StageError, sourceUrlProblem, MOCK_REGISTRATION_METADATA, PRODUCT_STATE_MESSAGE, SHIPPING_NOTICE_MAX, ATTRIBUTE_VALUE_MAX, attributeName, composeShippingNotice, warnCriteria, analysisProblems, analyzeDraft, criteriaFor, listAddressBook, listingProblems, createProductDraft, deleteProductImage, errorMessage, fieldErrors, isApiError, getRegistrationMetadata, getSellerProductWithImages, mergeProducts, reorderProductImages, submitListing, submitRevisionFromDraft, uploadProductImage, useApi, useLive } from '../api';
 
 /* ── 초안 ─────────────────────────────────────────────────────────────────────── */
-const SWATCH: Record<string, string> = { 차콜: '#3F3F3F', 오트밀: '#E6DCC6', 크림: '#F3EBDC', 네이비: '#2B3A55', 블랙: '#222222', 화이트: '#FFFFFF', 내추럴: '#E8DCC8', 그레이: '#9A9A9A', 베이지: '#E3D3B8' };
 const WEEK = ['일', '월', '화', '수', '목', '금', '토'];
+/** 저장된 상품 → 초안. 옵션 단계는 서버 optionDimensions 이름과 값 그대로(예전 색상 x 사이즈 상품도 같은 이름으로 열린다) */
 function fromProduct(p: Product): Draft {
-  const color = p.dimensions.find(d => d.name === '색상'), size = p.dimensions.find(d => d.name !== '색상');
   const split = (v?: string) => (v ?? '').split(',').map(x => x.trim()).filter(Boolean);
   const basic = p.options.length === 1 && p.options[0].name === '기본';
-  const axes = basic ? { size: false, color: false } : color || size ? { size: !!size, color: !!color } : { size: true, color: false };
-  const colors = split(color?.values), sizes = size ? split(size.values) : !color && !basic ? p.options.map(o => o.name) : [];
+  // 서버 조합 이름은 값 안의 '/'와 역슬래시를 역슬래시로 이스케이프하고 ' / '로 잇는다
+  const parts = (label: string) => label.split(' / ').map(x => x.replace(/\\(.)/g, '$1'));
+  let optionDims = basic ? [] : p.dimensions.map(x => ({ name: x.name, values: split(x.values) })).filter(x => x.values.length);
+  if (!basic && !optionDims.length && p.options.length) optionDims = [{ name: '옵션', values: p.options.map(o => parts(o.name).join(' / ')) }];
   const stock: Record<string, number> = {};
-  for (const o of p.options) { const parts = o.name.split(' / '); const c = axes.color ? parts[0] : '', s = axes.color && axes.size ? parts[1] : axes.size ? o.name : ''; stock[optionKey(basic ? '' : c, basic ? '' : s)] = o.stock; }
-  return { ...blankDraft(), editingId: p.id, editingVersion: p.version, name: p.name, brand: p.brand, description: p.description, images: [...p.images], imageIds: p.imageIds && [...p.imageIds], imageSizes: p.imageSizes && [...p.imageSizes], category: p.category, sizeName: size?.name, originalUrl: p.originalUrl, extras: structuredClone(p.extras), reason: p.reason, dimensions: structuredClone(p.dimensions), noOptions: basic, options: structuredClone(p.options), price: p.price, shipping: p.shipping, shippingNotice: p.shippingNotice ?? '', dispatchDays: p.dispatchDays, maxPerAccount: p.maxPerAccount, startsAt: p.startsAt ? localDateTime(p.startsAt) : blankDraft().startsAt, faqs: structuredClone(p.faqs), axes, colors, sizes, stock, reference: p.reference ?? lookupReference(p.originalUrl) };
+  for (const o of p.options) stock[comboKey(basic ? [] : optionDims.length === 1 ? [parts(o.name).join(' / ')] : parts(o.name))] = o.stock;
+  return { ...blankDraft(), editingId: p.id, editingVersion: p.version, name: p.name, brand: p.brand, description: p.description, images: [...p.images], imageIds: p.imageIds && [...p.imageIds], imageSizes: p.imageSizes && [...p.imageSizes], category: p.category, originalUrl: p.originalUrl, extras: structuredClone(p.extras), reason: p.reason, dimensions: structuredClone(p.dimensions), noOptions: basic, options: p.options.map(o => ({ ...o, name: basic ? o.name : parts(o.name).join(' / ') })), price: p.price, shipping: p.shipping, shippingNotice: p.shippingNotice ?? '', dispatchDays: p.dispatchDays, maxPerAccount: p.maxPerAccount, startsAt: p.startsAt ? localDateTime(p.startsAt) : blankDraft().startsAt, faqs: structuredClone(p.faqs), optionDims, stock, reference: p.reference ?? lookupReference(p.originalUrl) };
 }
-function freshDraft(now: number): Draft { const start = new Date(now + 3_600_000); start.setMinutes(0, 0, 0); return { ...blankDraft(now), startsAt: localDateTime(start.getTime()), axes: { size: false, color: false }, colors: [], sizes: [], stock: {} }; }
-/** 초안 변경 — options·dimensions를 항상 축·수량에서 다시 계산 */
+function freshDraft(now: number): Draft { const start = new Date(now + 3_600_000); start.setMinutes(0, 0, 0); return { ...blankDraft(now), startsAt: localDateTime(start.getTime()), optionDims: [], stock: {} }; }
+/** 초안 변경 — options·dimensions를 항상 옵션 단계와 수량에서 다시 계산. 예전 구조(색상 x 사이즈) 초안은 처음 고칠 때 같은 이름과 수량의 새 구조로 바꾼다 */
 function patchDraft(userId: string, value: Partial<Draft>) {
   mutate(state => {
     const d = state.drafts[userId] ?? freshDraft(nowOf(state));
+    if (!d.optionDims) { const m = optionModel(d); d.optionDims = m.dims; d.stock = m.stock; delete d.axes; delete d.sizeName; delete d.colors; delete d.sizes; }
     Object.assign(d, value);
-    d.options = listingOptions(d); d.dimensions = listingDimensions(d); d.noOptions = !d.axes?.size && !d.axes?.color;
+    d.options = listingOptions(d); d.dimensions = listingDimensions(d); d.noOptions = !d.optionDims?.length;
     state.drafts[userId] = d;
   });
 }
@@ -123,7 +124,7 @@ function useDraft() {
       const existing = state.drafts[user.id];
       if (editId) { if (USE_MOCK && existing?.editingId !== editId) { const p = state.products.find(p => p.id === editId && p.sellerId === user.id); if (p && nowOf(state) < p.startsAt) state.drafts[user.id] = fromProduct(p); } }
       else if (!existing || existing.editingId) state.drafts[user.id] = freshDraft(nowOf(state));
-      else if (!existing.axes) state.drafts[user.id] = { ...existing, axes: { size: true, color: true }, colors: [], sizes: [], stock: {} };
+      else if (!existing.axes && !existing.optionDims) state.drafts[user.id] = { ...existing, optionDims: [], stock: {} };
     });
   }, [editId, user.id, user.seller]);
   const d = s.drafts[user.id];
@@ -136,11 +137,18 @@ const Label = ({ children, hint }: { children: ReactNode; hint?: string }) => <p
 function Stepper({ value, onChange, label }: { value: number; onChange: (n: number) => void; label: string }) {
   return <div className="flex h-8 items-center rounded-[6px] border border-[var(--border)]"><button type="button" aria-label={`${label} 감소`} disabled={value <= 0} onClick={() => onChange(Math.max(0, value - 1))} className="grid h-8 w-9 place-items-center disabled:opacity-30"><Minus size={14}/></button><input aria-label={`${label} 수량`} inputMode="numeric" value={value} onChange={e => onChange(Math.max(0, Math.floor(Number(e.target.value.replace(/\D/g, '')) || 0)))} className="w-9 bg-transparent text-center text-[14px] font-bold outline-none"/><button type="button" aria-label={`${label} 증가`} onClick={() => onChange(value + 1)} className="grid h-8 w-9 place-items-center"><Plus size={14}/></button></div>;
 }
-function InlineAdd({ label, onAdd, className = '' }: { label: string; onAdd: (v: string) => void; className?: string }) {
+function InlineAdd({ label, onAdd, className = '', maxLength }: { label: string; onAdd: (v: string) => void; className?: string; maxLength?: number }) {
   const [open, setOpen] = useState(false), [value, setValue] = useState('');
   if (!open) return <button type="button" onClick={() => setOpen(true)} className={`flex items-center gap-1 text-[13px] text-[var(--aux)] ${className}`}><Plus size={14}/>{label}</button>;
   const submit = () => { if (value.trim()) onAdd(value.trim()); setValue(''); setOpen(false); };
-  return <input autoFocus aria-label={label} value={value} onChange={e => setValue(e.target.value)} onBlur={submit} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); submit(); } if (e.key === 'Escape') setOpen(false); }} className={`h-9 rounded-[6px] border border-[var(--border)] px-3 text-[13px] outline-none ${className}`} placeholder={label}/>;
+  return <input autoFocus aria-label={label} maxLength={maxLength} value={value} onChange={e => setValue(e.target.value)} onBlur={submit} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); submit(); } if (e.key === 'Escape') setOpen(false); }} className={`h-9 rounded-[6px] border border-[var(--border)] px-3 text-[13px] outline-none ${className}`} placeholder={label}/>;
+}
+/** 눌러서 고치는 글자(옵션 이름과 값). onSave가 false면(규칙 위반) 입력을 닫지 않는다 */
+function EditText({ value, label, onSave, className = '' }: { value: string; label: string; onSave: (v: string) => boolean; className?: string }) {
+  const [edit, setEdit] = useState<string | null>(null);
+  if (edit === null) return <button type="button" aria-label={`${label} 고치기`} onClick={() => setEdit(value)} className={`text-left ${className}`}>{value}</button>;
+  const done = () => { if (edit.trim() === value || onSave(edit)) setEdit(null); };
+  return <input autoFocus aria-label={`${label} 고치기`} maxLength={OPTION_TEXT_MAX} value={edit} onChange={e => setEdit(e.target.value)} onBlur={done} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); done(); } if (e.key === 'Escape') setEdit(null); }} className="h-8 w-32 min-w-0 rounded-[6px] border border-[var(--border)] px-2 text-[13px] outline-none"/>;
 }
 const dateLabel = (v: string) => { const t = new Date(v); return Number.isFinite(t.getTime()) ? `${t.getMonth() + 1}월 ${t.getDate()}일 (${WEEK[t.getDay()]})` : '날짜 선택'; };
 const hhmm = (h: number, m: number) => `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
@@ -157,7 +165,7 @@ export function WizardPage() {
     const m = st.products.find(x => x.id === p.id)!;
     if (canEdit(m, nowOf(st))) st.drafts[user.id] = fromProduct(m);
   }, [editId]);
-  const [error, setError] = useState(''), [uploading, setUploading] = useState(false), [progress, setProgress] = useState(''), [photoError, setPhotoError] = useState(''), [retryFiles, setRetryFiles] = useState<File[]>([]), [fieldErr, setFieldErr] = useState<Record<string, string>>({}), [busy, setBusy] = useState(false), [photo, setPhoto] = useState<number | null>(null), [activeColor, setActiveColor] = useState(0);
+  const [error, setError] = useState(''), [uploading, setUploading] = useState(false), [progress, setProgress] = useState(''), [photoError, setPhotoError] = useState(''), [retryFiles, setRetryFiles] = useState<File[]>([]), [fieldErr, setFieldErr] = useState<Record<string, string>>({}), [busy, setBusy] = useState(false), [photo, setPhoto] = useState<number | null>(null), [optErr, setOptErr] = useState(''), [dropDim, setDropDim] = useState<number | 'all' | null>(null);
   const picking = params.get('pick') === 'category', meta = useRegistrationMeta();
   // 초안 사진은 5분짜리 임시 주소라 시간이 지나면 깨진다 → 서버에서 열람 주소를 새로 받아 바꾼다
   const imgIds = d?.imageIds?.join(','), imgOwner = d?.editingId ?? d?.serverId, lastImg = useRef(0);
@@ -180,8 +188,8 @@ export function WizardPage() {
   // 실제 모드는 서버 편집 원본(status 포함)을 받기 전엔 판단하지 않는다(목록·알림에서 온 status 없는 상품으로 잘못 막던 문제)
   if (editId && !USE_MOCK && (live.loading || live.error || !editing?.reviewStatus)) return <LiveStatus state={live}/>;
   if (editId && (!editing || !canEdit(editing, now))) return <Empty title={editing ? editBlocker(editing, now)! : '상품을 찾을 수 없어요'}><Link to="/seller/products" className="btn">상품 관리로</Link></Empty>;
-  if (!d || !d.axes || (editId && d.editingId !== editId)) return <LiveStatus state={live}/>;
-  const axes = d.axes, colors = d.colors ?? [], sizes = d.sizes ?? [], stock = d.stock ?? {};
+  if (!d || !(d.optionDims || d.axes) || (editId && d.editingId !== editId)) return <LiveStatus state={live}/>;
+  const { dims, stock } = optionModel(d), combos = optionCombos(dims);
   // 승인 상품 수정 심사: 설명·판매가·배송비·판매 시작·출고지·반품지만 바꾼다(REVISION_FIELDS). 상품명·사진은 읽기 전용, 나머지 칸은 숨긴다
   const revision = editing?.reviewStatus === 'APPROVED';
   const rejected = editing?.reviewStatus === 'REJECTED', startPassed = rejected && !(new Date(d.startsAt).getTime() > now);
@@ -193,8 +201,7 @@ export function WizardPage() {
   // AI 예상 답변은 확인 전 초안(confirmed=false)으로 채워 두고, 판매자가 고치거나 확인을 체크한 답만 FAQ로 저장한다
   const aiFaq = (q: AiQuestion) => d.faqs.find(f => f.suggestionId && f.suggestionId === (q.suggestionId ?? q.question));
   const setAiAnswer = (q: AiQuestion, answer: string, confirmed = true) => { const sid = q.suggestionId ?? q.question; patch({ faqs: d.faqs.some(f => f.suggestionId === sid) ? d.faqs.map(f => (f.suggestionId === sid ? { ...f, answer, confirmed } : f)) : [...d.faqs, { id: `faq-${sid}`, question: q.question, answer, confirmed, suggestionId: sid }] }); };
-  const color = colors[Math.min(activeColor, colors.length - 1)] ?? '';
-  const colorTotal = (c: string) => axes.size ? sizes.reduce((n, sz) => n + (stock[optionKey(c, sz)] ?? 0), 0) : stock[optionKey(c, '')] ?? 0;
+  const firstTotal = (v: string) => combos.filter(c => c[0] === v).reduce((n, c) => n + (stock[comboKey(c)] ?? 0), 0);
   const total = d.options.reduce((n, o) => n + o.stock, 0);
   const blocked = unsupportedInput(d.name, d.description);
   const reference = d.reference;
@@ -315,11 +322,21 @@ export function WizardPage() {
     } finally { setBusy(false); }
   }
   const FieldError = ({ name }: { name: string }) => fieldErr[name] ? <p role="alert" className="mt-1.5 text-[12px] text-[var(--red)]">{fieldErr[name]}</p> : null;
-  // 고른 카테고리에 맞는 추천 옵션 이름. 이미 입력한 옵션 이름(카테고리를 바꾸기 전 것)도 칩으로 남겨 지우지 않는다
-  const preset = optionPresetFor(d.category, meta.data), sizeName = d.sizeName || '사이즈';
-  const secondNames = [...preset.second, ...(preset.second.includes(sizeName) ? [] : [sizeName])];
+  // 옵션 단계: 판매자가 '직접 추가'로 이름을 정하고 값을 넣는다. 이름과 값은 눌러서 고치고 X로 지운다
+  const optCheck = (v: string, others: string[], what: string) => { const p = optionNameProblem(v, others, what); setOptErr(p); return !p; };
+  const dimsWith = (i: number, f: (x: OptionDim) => OptionDim) => dims.map((x, j) => (j === i ? f(x) : x));
+  // i단계 값을 바꾸거나(문자열) 지운(null) 조합의 수량을 옮긴다. 단계 수가 다른 예전 수량은 그대로 둔다
+  const remapStock = (i: number, f: (v: string) => string | null) => Object.fromEntries(Object.entries(stock).flatMap(([k, n]) => { const vals = JSON.parse(k) as string[]; if (vals.length !== dims.length) return [[k, n]]; const nv = f(vals[i]); return nv === null ? [] : [[comboKey(vals.map((x, j) => (j === i ? nv : x))), n]]; }));
+  const addDim = (v: string) => { if (dims.length < OPTION_DIM_MAX && optCheck(v, dims.map(x => x.name), '옵션 이름')) patch({ optionDims: [...dims, { name: v.trim(), values: [] }] }); };
+  const renameDim = (i: number, v: string) => { if (!optCheck(v, dims.filter((_, j) => j !== i).map(x => x.name), '옵션 이름')) return false; patch({ optionDims: dimsWith(i, x => ({ ...x, name: v.trim() })) }); return true; };
+  const addValue = (i: number, v: string) => { if (optCheck(v, dims[i].values, '옵션 값')) patch({ optionDims: dimsWith(i, x => ({ ...x, values: [...x.values, v.trim()] })) }); };
+  const renameValue = (i: number, old: string, v: string) => { if (!optCheck(v, dims[i].values.filter(x => x !== old), '옵션 값')) return false; const nv = v.trim(); patch({ optionDims: dimsWith(i, x => ({ ...x, values: x.values.map(y => (y === old ? nv : y)) })), stock: remapStock(i, y => (y === old ? nv : y)) }); return true; };
+  const deleteValue = (i: number, v: string) => { setOptErr(''); patch({ optionDims: dimsWith(i, x => ({ ...x, values: x.values.filter(y => y !== v) })), stock: remapStock(i, y => (y === v ? null : y)) }); };
+  // 단계를 지우면 그 값과 조합 수량도 지운다. 값이 있으면 먼저 확인한다(값이 없는 단계는 수량에 영향이 없어 바로 지운다)
+  const removeDims = (i: number | 'all') => { const gone = i === 'all' ? dims : [dims[i]]; setDropDim(null); setOptErr(''); patch({ optionDims: i === 'all' ? [] : dims.filter((_, j) => j !== i), ...(gone.some(x => x.values.length) ? { stock: {} } : {}) }); };
+  const askRemove = (i: number | 'all') => { if ((i === 'all' ? dims : [dims[i]]).some(x => x.values.length)) setDropDim(i); else removeDims(i); };
   const chip = (on: boolean, label: string, onClick: () => void) => <button type="button" aria-pressed={on} onClick={onClick} className={`inline-flex h-8 items-center gap-1 rounded-full px-3.5 text-[13px] ${on ? 'bg-[var(--ink)] font-bold text-white' : 'border border-[var(--border)] text-[var(--aux)]'}`}>{on && <Check size={13} strokeWidth={2.5}/>}{label}</button>;
-  const qtyRow = (label: string, key: string, last: boolean) => <div key={key} className={`flex h-[52px] items-center justify-between ${last ? '' : 'border-b border-[var(--line)]'}`}><span className="text-[15px]">{label}</span><Stepper label={label} value={stock[key] ?? 0} onChange={n => setStock(key, n)}/></div>;
+  const qtyRow = (label: string, key: string, last: boolean) => <div key={key} className={`flex min-h-[52px] items-center justify-between gap-3 py-2 ${last ? '' : 'border-b border-[var(--line)]'}`}><span className="min-w-0 break-all text-[15px]">{label}</span><Stepper label={label} value={stock[key] ?? 0} onChange={n => setStock(key, n)}/></div>;
 
   return <div className="space-y-6 pb-4">
     <Header title={editId ? '판매 정보 수정' : '한정 판매 등록'} bare/>
@@ -418,17 +435,18 @@ export function WizardPage() {
 
     {!revision && <>
     <section className="space-y-3" data-field="options"><Label hint="· 필수">옵션별 한정 수량</Label>
-      <div className="flex flex-wrap items-center gap-2"><span className="mr-1 text-[12px] text-[var(--aux)]">옵션</span>{chip(axes.color, COLOR_AXIS, () => patch({ axes: { ...axes, color: !axes.color } }))}{secondNames.map(n => chip(axes.size && sizeName === n, n, () => patch(axes.size && sizeName === n ? { axes: { ...axes, size: false } } : { axes: { ...axes, size: true }, sizeName: n })))}<InlineAdd label="직접 추가" className="h-8 rounded-full border border-[var(--border)] px-3" onAdd={v => { if (v !== COLOR_AXIS) patch({ axes: { ...axes, size: true }, sizeName: v }); }}/>{chip(!axes.size && !axes.color, '옵션 없음', () => patch({ axes: { size: false, color: false } }))}</div>
-      {axes.color && <div className="flex flex-wrap gap-2">{colors.map((c, i) => <button type="button" key={c} onClick={() => setActiveColor(i)} className={`flex h-10 items-center gap-1.5 rounded-[6px] px-3.5 border-[1.5px] ${c === color ? 'border-[var(--ink)]' : 'border-[var(--border)]'}`}><span className="h-3.5 w-3.5 rounded-full border border-black/10" style={{ background: SWATCH[c] ?? '#DEDEDE' }}/><span className={`text-[14px] ${c === color ? 'font-bold' : 'text-[var(--aux)]'}`}>{c}</span><span className="text-[12px] text-[var(--meta)]">{colorTotal(c)}개</span></button>)}<InlineAdd label="색상" className="h-10 rounded-[6px] border border-[var(--border)] px-3.5" onAdd={v => { if (!colors.includes(v)) { patch({ colors: [...colors, v] }); setActiveColor(colors.length); } }}/></div>}
-      {(axes.size || (!axes.color && !axes.size) || (axes.color && color)) && <div className="rounded-[6px] border border-[var(--line)] px-4">
-        {axes.size ? <>
-          <div className="flex h-12 items-center justify-between border-b border-[var(--line)]"><p className="text-[13px] font-bold">{axes.color ? `${color || '색상'} · ${sizeName}별 수량` : `${sizeName}별 수량`}</p><p className="text-[13px] font-bold text-[var(--aux)]">{axes.color ? colorTotal(color) : total}개</p></div>
-          {sizes.map((sz, i) => qtyRow(sz, optionKey(axes.color ? color : '', sz), i === sizes.length - 1))}
-          {(preset.quick[sizeName] ?? []).length > 0 && <div className="flex flex-wrap items-center gap-1.5 border-t border-[var(--line)] py-3"><span className="mr-1 text-[12px] text-[var(--aux)]">빠른 선택</span>{preset.quick[sizeName].map(v => <button type="button" key={v} aria-pressed={sizes.includes(v)} onClick={() => patch({ sizes: sizes.includes(v) ? sizes : [...sizes, v] })} className={`h-7 rounded-full px-3 text-[12px] ${sizes.includes(v) ? 'bg-[var(--ink)] font-bold text-white' : 'border border-[var(--border)] text-[var(--aux)]'}`}>{v}</button>)}</div>}
-          <div className="border-t border-[var(--line)] py-3.5"><InlineAdd label={`${sizeName} 추가`} onAdd={v => { if (!sizes.includes(v)) patch({ sizes: [...sizes, v] }); }}/></div>
-        </> : axes.color ? qtyRow(`${color} 수량`, optionKey(color, ''), true) : qtyRow('기본 수량', optionKey('', ''), true)}
-      </div>}
-      <div className="flex items-center justify-between rounded-[6px] bg-[var(--soft)] px-4 py-3.5"><div><p className="text-[13px] font-bold">총 한정 수량</p>{axes.color && colors.length > 0 && <p className="mt-0.5 text-[12px] text-[var(--meta)]">{colors.map(c => `${c} ${colorTotal(c)}`).join(' · ')}</p>}</div><p className="text-[18px] font-bold">{total}개</p></div>
+      <div className="flex flex-wrap items-center gap-2"><span className="mr-1 text-[12px] text-[var(--aux)]">옵션</span>{chip(!dims.length, '옵션 없음', () => { if (dims.length) askRemove('all'); })}{dims.length < OPTION_DIM_MAX ? <InlineAdd label="직접 추가" maxLength={OPTION_TEXT_MAX} className="h-8 rounded-full border border-[var(--border)] px-3" onAdd={addDim}/> : <span className="text-[12px] text-[var(--meta)]">옵션은 {OPTION_DIM_MAX}단계까지 추가할 수 있어요</span>}</div>
+      {dims.map((x, i) => <div key={i} role="group" aria-label={`옵션 ${i + 1}단계 ${x.name}`} className="space-y-2.5 rounded-[6px] border border-[var(--line)] px-3.5 py-3">
+        <div className="flex items-center gap-2"><span className="shrink-0 text-[11px] text-[var(--meta)]">{i + 1}단계</span><EditText value={x.name} label={`옵션 이름 ${x.name}`} onSave={v => renameDim(i, v)} className="min-w-0 flex-1 break-all text-[14px] font-bold"/><button type="button" aria-label={`${x.name} 옵션 삭제`} onClick={() => askRemove(i)} className="grid h-8 w-8 shrink-0 place-items-center text-[var(--aux)]"><X size={16}/></button></div>
+        <div className="flex flex-wrap items-center gap-2">{x.values.map(v => <span key={v} className="inline-flex h-9 max-w-full items-center gap-0.5 rounded-[6px] border border-[var(--border)] pl-3"><EditText value={v} label={`${x.name} 값 ${v}`} onSave={nv => renameValue(i, v, nv)} className="min-w-0 truncate text-[13px]"/><button type="button" aria-label={`${x.name} 값 ${v} 삭제`} onClick={() => deleteValue(i, v)} className="grid h-8 w-8 shrink-0 place-items-center text-[var(--aux)]"><X size={13}/></button></span>)}<InlineAdd label={`${x.name} 추가`} maxLength={OPTION_TEXT_MAX} className="h-9 rounded-[6px] border border-[var(--border)] px-3" onAdd={v => addValue(i, v)}/></div>
+      </div>)}
+      {optErr && <p role="alert" className="text-[12px] text-[var(--red)]">{optErr}</p>}
+      <div className="rounded-[6px] border border-[var(--line)] px-4">
+        {dims.length > 0 && <div className="flex min-h-12 items-center justify-between gap-3 border-b border-[var(--line)] py-2"><p className="min-w-0 break-all text-[13px] font-bold">{dims.map(x => x.name).join(' × ')}별 수량</p><p className="shrink-0 text-[13px] font-bold text-[var(--aux)]">{total}개</p></div>}
+        {!dims.length ? qtyRow('기본 수량', comboKey([]), true) : combos.length ? combos.map((vals, k) => qtyRow(comboLabel(vals), comboKey(vals), k === combos.length - 1)) : <p className="py-4 text-[13px] text-[var(--meta)]">옵션 값을 추가하면 조합별 수량을 넣을 수 있어요</p>}
+      </div>
+      <div className="flex items-center justify-between gap-3 rounded-[6px] bg-[var(--soft)] px-4 py-3.5"><div className="min-w-0"><p className="text-[13px] font-bold">총 한정 수량</p>{dims.length >= 2 && dims[0].values.length > 0 && <p className="mt-0.5 break-all text-[12px] text-[var(--meta)]">{dims[0].values.map(v => `${v} ${firstTotal(v)}`).join(' · ')}</p>}</div><p className="shrink-0 text-[18px] font-bold">{total}개</p></div>
+      {dropDim !== null && <Modal title={dropDim === 'all' ? '옵션을 모두 지울까요?' : `'${dims[dropDim]?.name}' 옵션을 지울까요?`} onClose={() => setDropDim(null)}><div className="space-y-4"><p className="text-[13px] text-[var(--aux)]">입력한 옵션 값과 한정 수량도 함께 지워져요.</p><div className="flex gap-2"><Button outline className="flex-1" onClick={() => setDropDim(null)}>취소</Button><Button className="flex-1" onClick={() => removeDims(dropDim)}>삭제</Button></div></div></Modal>}
       <p className="text-[12px] text-[var(--meta)]">판매가 시작되면 옵션과 수량을 바꿀 수 없어요</p>
       <FieldError name="options"/>
     </section>
