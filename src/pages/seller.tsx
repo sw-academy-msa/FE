@@ -12,6 +12,7 @@ import { addBusinessDays, dateTime, kstDay, kstShort, kstSlot, openDay, useClock
 import { Badge, Button, clockLeft, CopyButton, copyText, Toggle, Empty, ErrorBox, Field, Header, InfoRow, LiveStatus, MenuRow, Modal, Note, ORDER_LABELS, ProductImage, ProductSummary, Unavailable, useToast } from '../components/ui';
 import { PdfField } from '../components/PdfField';
 import { AddressBookFormPage, AddressBookPage } from './sellerAddresses';
+import { SalesRestrictionBanner } from './sellerReview';
 import type { ProductRevisionDto } from '../api';
 import { getSellerSettlement, settlementNet, getProductDispatchAddress, answerOrderInquiry, listSellerOrderInquiries, answerProductInquiry, deleteSellerLogo, deliverOrder, errorMessage, getSalesSummary, getSellerOrder, getSellerInquiryImageUrl, getSellerOrderInquiry, getSellerOrderSummary, getSellerProduct, getSellerProductWithImages, listRevisions, listSellerOrderInquiryInbox, listSellerOrders, listSellerProductInquiries, listSellerProducts, mergeInquiries, mergeOrders, mergeProducts, shipOrder, useLive, fetchSellerLogo, fetchSellerMe, fetchSellerStore, fetchWithdrawalEligibility, updateSellerAddresses, updateSellerBank, updateSellerContact, updateSellerStore, uploadSellerLogo, useApi, withdrawAccount } from '../api';
 import { api } from '../api';
@@ -557,6 +558,7 @@ export function SellerMyPage() {
           </Link>
         ))}
       </div>
+      <SalesRestrictionBanner/>
       <section className="mb-4">
         <p className="muted mb-2 text-[13px] font-bold">판매 관리</p>
         <MenuRow to="/seller/products" label="판매 상품 관리"><span className="muted mr-1 text-[12px]">{ready ? `${productCount}개` : '-'}</span></MenuRow>
@@ -569,6 +571,7 @@ export function SellerMyPage() {
       <section className="mb-4">
         <p className="muted mb-2 mt-4 text-[13px] font-bold">판매자 정보</p>
         <MenuRow to="/seller/settings/business" label="사업자 서류 · 담당자 정보"/>
+        {!USE_MOCK && <MenuRow to="/seller/review" label="사업자등록증 재심사"/>}
         <MenuRow to="/seller/settings/bank" label="정산 계좌 관리"><span className="muted mr-1 text-[12px]">{maskedBank}</span></MenuRow>
         <MenuRow to="/seller/settings/addresses" label="출고지 · 반품지 관리"/>
       </section>
@@ -583,6 +586,7 @@ export function SellerMyPage() {
       <section className="mb-4">
         <p className="muted mb-2 mt-4 text-[13px] font-bold">설정</p>
         <MenuRow to={SETTINGS_HREF('/my')} label="알림 설정"/>
+        {!USE_MOCK && <MenuRow to="/my/interests" label="관심사와 맞춤 추천"/>}
         <MenuRow to="/seller/support" label="이용 안내 · 고객지원"/>
       </section>
       <div className="text-center"><LogoutButton/></div>

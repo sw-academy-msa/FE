@@ -17,14 +17,14 @@ export const SERVER_DOC = 'server:';
 
 /* ── 변환 ── */
 /** 보완 요청 항목 이름 → 화면(ApplicationPage)이 쓰는 항목 이름 */
-const FIELD_LABEL: Record<CorrectionField, string> = { CERTIFICATE: '사업자등록증 PDF', STORE_NAME: '판매자 표시 이름', CONTACT: '담당자', BANK_ACCOUNT: '정산 계좌번호', DISPATCH_ADDRESS: '출고지', RETURN_ADDRESS: '반품 주소' };
+export const FIELD_LABEL: Record<CorrectionField, string> = { CERTIFICATE: '사업자등록증 PDF', STORE_NAME: '판매자 표시 이름', CONTACT: '담당자', BANK_ACCOUNT: '정산 계좌번호', DISPATCH_ADDRESS: '출고지', RETURN_ADDRESS: '반품 주소' };
 const addrLine = (a?: SellerAddressDto | null) => [a?.roadAddress, a?.detailAddress].filter(Boolean).join(' ');
 
 /** 신청 응답(+보완 요청) → 화면 Application. CHANGES_REQUESTED·REJECTED는 화면의 'rejected', 나머지 미지 상태는 심사 중 */
 export function applicationFromApi(d: SellerApplicationDto, userId: string, correction?: CorrectionRequestDto | null): Application {
-  const status = d.status === 'APPROVED' ? 'approved' : d.status === 'REJECTED' || d.status === 'CHANGES_REQUESTED' ? 'rejected' : 'pending';
+  const status = d.status === 'APPROVED' ? 'approved' : d.status === 'REJECTED' || d.status === 'CHANGES_REQUESTED' || d.status === 'EXPIRED' ? 'rejected' : 'pending';
   const submittedAt = ms(d.submittedAt) ?? 0;
-  const items = correction?.items?.map(i => ({ field: FIELD_LABEL[i.field] ?? i.field, reason: i.reason }))
+  const items = correction?.items?.map(i => ({ field: FIELD_LABEL[i.field] ?? i.field, reason: i.reason, code: i.field }))
     ?? (d.status === 'REJECTED' ? [{ field: '입점 심사', reason: d.rejectionReason ?? '' }] : undefined);
   return {
     id: d.applicationId, userId, displayName: d.sellerDisplayName ?? '', name: d.contactName, email: d.contactEmail, phone: d.contactPhone,
@@ -32,6 +32,7 @@ export function applicationFromApi(d: SellerApplicationDto, userId: string, corr
     bank: d.bankName, account: d.maskedBankAccount, shippingAddress: addrLine(d.dispatchAddress), returnAddress: addrLine(d.returnAddress),
     status, submittedAt, reviewedAt: ms(d.reviewedAt), approvedAt: status === 'approved' ? ms(d.reviewedAt) : undefined, // 추측(명세 없음): 승인 시각 = reviewedAt
     rejectedAt: status === 'rejected' ? ms(d.reviewedAt) : undefined, deadlineAt: ms(correction?.deadline), rejectionItems: items,
+    apiStatus: d.status, correctionState: correction?.state,
   };
 }
 /** 본인 신청을 store에 반영(있으면 교체, 없으면 추가). 서버에 없는 사업자 정보는 기존 값 유지 */
@@ -71,7 +72,8 @@ export async function fetchMyApplication(userId: string, signal?: AbortSignal): 
   let d: SellerApplicationDto;
   try { d = await api.get<SellerApplicationDto>(`${APPS}/me`, { service: account, signal }); }
   catch (e) { if (e instanceof ApiError && e.code === 'SELLER_APPLICATION_NOT_FOUND') return null; throw e; }
-  const correction = d.status === 'CHANGES_REQUESTED' ? await fetchCorrectionRequest(d.applicationId, signal) : null;
+  // 보완 요청 중이면 요청 항목이 꼭 필요하다(실패하면 조회 실패). 기한 만료는 안내용이라 못 읽어도 넘어간다
+  const correction = d.status === 'CHANGES_REQUESTED' ? await fetchCorrectionRequest(d.applicationId, signal) : d.status === 'EXPIRED' ? await fetchCorrectionRequest(d.applicationId, signal).catch(() => null) : null;
   return applicationFromApi(d, userId, correction);
 }
 /** GET /seller-applications/me/history — 없으면 [] */
@@ -84,11 +86,25 @@ export async function fetchApplication(id: string, userId: string, signal?: Abor
 }
 /** GET /seller-applications/{id}/certificate — PDF 바이너리 */
 export const fetchApplicationCertificate = (id: string, signal?: AbortSignal) => api.get<Blob>(`${APPS}/${enc(id)}/certificate`, { service: account, signal, responseType: 'blob' });
-/** POST /seller-applications/{id}/resubmissions — 운영자가 요청한 항목만. contact는 CONTACT 요청 시, certificate는 CERTIFICATE 요청 시. 추측(명세 없음): {id}는 applicationId, application 파트는 contact가 있을 때만 보낸다 */
-export function resubmitApplication(id: string, o: { contact?: { name: string; email: string; phone: string }; certificate?: Blob; fileName?: string }) {
+/** 보완 제출 본문(서버 SellerCorrectionSubmissionRequest). 요청받은 항목만 채우고 나머지는 보내지 않는다(서버가 요청 항목과 정확히 맞는지 검사) */
+export interface CorrectionPatch {
+  sellerDisplayName?: string;
+  contact?: { name: string; email: string; phone: string };
+  bankAccount?: { bankName: string; number: string };
+  dispatchAddress?: { postalCode: string; roadAddress: string; detailAddress?: string };
+  returnAddress?: { postalCode: string; roadAddress: string; detailAddress?: string };
+}
+const addrPart = (a?: CorrectionPatch['dispatchAddress']) => a && addr(a.postalCode.trim(), a.roadAddress.trim(), a.detailAddress?.trim());
+/** POST /seller-applications/{id}/resubmissions — multipart. application 파트는 서버 필수라 항상 보내고, certificate는 CERTIFICATE 요청 때만 보낸다(그 밖에 보내면 400) */
+export function resubmitApplication(id: string, patch: CorrectionPatch, certificate?: Blob, fileName?: string) {
   const fd = new FormData();
-  if (o.contact) fd.append('application', jsonPart({ contact: o.contact }));
-  if (o.certificate) fd.append('certificate', o.certificate, o.fileName ?? 'business-registration.pdf');
+  const body = JSON.parse(JSON.stringify({
+    sellerDisplayName: patch.sellerDisplayName?.trim(), contact: patch.contact,
+    bankAccount: patch.bankAccount && { bankName: patch.bankAccount.bankName.trim(), number: patch.bankAccount.number.replace(/\D/g, '') },
+    dispatchAddress: addrPart(patch.dispatchAddress), returnAddress: addrPart(patch.returnAddress),
+  })); // undefined 항목은 빼고 보낸다
+  fd.append('application', jsonPart(body));
+  if (certificate) fd.append('certificate', certificate, fileName ?? 'business-registration.pdf');
   return api.upload<{ applicationId: string; status: string }>('POST', `${APPS}/${enc(id)}/resubmissions`, fd, { service: account });
 }
 
@@ -107,12 +123,12 @@ export const updateSellerBank = (f: Pick<SellerSettings, 'bank' | 'account' | 'h
 /** PUT /sellers/me/addresses — 출고·반품 동시 변경(기존 호환 API) */
 export const updateSellerAddresses = (f: SellerSettings) =>
   api.put<null>(`${ME}/addresses`, { dispatchAddress: addr(f.shippingPostal ?? '', f.shippingAddress, f.shippingDetail), returnAddress: addr(f.returnPostal ?? '', f.returnAddress, f.returnDetail) }, { service: account });
-/** POST /sellers/me/certificate-reviews — 사업자등록증 재심사 신청(BUYER JWT). 화면 없음(TODO(api-gap)) */
+/** POST /sellers/me/certificate-reviews — 사업자등록증 재심사 신청(BUYER JWT, 화면: pages/sellerReview.tsx). 승인 전까지 새 판매 업무가 제한된다(salesRestricted) */
 export function requestCertificateReview(pdf: Blob, fileName = 'business-registration.pdf') {
   const fd = new FormData(); fd.append('certificate', pdf, fileName);
   return api.upload<{ applicationId: string; status: string }>('POST', `${ME}/certificate-reviews`, fd, { service: account });
 }
-/** GET /sellers/me/review-status (BUYER JWT) — 화면 없음 */
+/** GET /sellers/me/review-status (BUYER JWT) — 판매 제한 여부, 최신 신청(재심사 포함), 최신 보완 요청 */
 export const fetchReviewStatus = (signal?: AbortSignal) => api.get<{ salesRestricted: boolean; application: SellerApplicationDto; correction: CorrectionRequestDto | null }>(`${ME}/review-status`, { service: account, signal });
 
 /* ── 주소록 (실제 모드 화면: pages/sellerAddresses.tsx. 호환용 PUT /addresses는 mock 화면에서만 쓴다) ── */

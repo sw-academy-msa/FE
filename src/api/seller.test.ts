@@ -54,13 +54,16 @@ describe('입점 신청', () => {
     fake(() => ({ error: { status: 500, code: 'X' } }));
     await expect(fetchMyApplication('u')).rejects.toBeInstanceOf(ApiError);
   });
-  it('보완 제출: 요청 항목만', async () => {
+  it('보완 제출: 서버가 요구하는 application 파트를 항상 보내고 요청 항목만 담는다', async () => {
     const calls = fake(() => ({ data: { applicationId: 'ap2', status: 'PENDING' } }));
     await resubmitApplication('ap1', { contact: { name: '홍', email: 'h@x.kr', phone: '010' } });
-    await resubmitApplication('ap1', { certificate: new Blob(['x']) });
-    expect(calls.map(path)).toEqual(['POST /seller-applications/ap1/resubmissions', 'POST /seller-applications/ap1/resubmissions']);
-    expect(calls[0].form!.has('certificate')).toBe(false); expect(JSON.parse(await (calls[0].form!.get('application') as Blob).text())).toEqual({ contact: { name: '홍', email: 'h@x.kr', phone: '010' } });
-    expect(calls[1].form!.has('application')).toBe(false); expect(calls[1].form!.has('certificate')).toBe(true);
+    await resubmitApplication('ap1', {}, new Blob(['x']));
+    await resubmitApplication('ap1', { sellerDisplayName: ' 새 이름 ', bankAccount: { bankName: '신한은행', number: '110-123-456789' }, dispatchAddress: { postalCode: '04066', roadAddress: '서울 도로 1', detailAddress: '' }, returnAddress: { postalCode: '48058', roadAddress: '부산 도로 2', detailAddress: '2층' } });
+    expect(calls.map(path)).toEqual(Array(3).fill('POST /seller-applications/ap1/resubmissions'));
+    const part = async (i: number) => JSON.parse(await (calls[i].form!.get('application') as Blob).text());
+    expect(calls[0].form!.has('certificate')).toBe(false); expect(await part(0)).toEqual({ contact: { name: '홍', email: 'h@x.kr', phone: '010' } });
+    expect(await part(1)).toEqual({}); expect(calls[1].form!.has('certificate')).toBe(true);
+    expect(await part(2)).toEqual({ sellerDisplayName: '새 이름', bankAccount: { bankName: '신한은행', number: '110123456789' }, dispatchAddress: { postalCode: '04066', roadAddress: '서울 도로 1' }, returnAddress: { postalCode: '48058', roadAddress: '부산 도로 2', detailAddress: '2층' } });
   });
 });
 
