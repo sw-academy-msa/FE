@@ -39,8 +39,10 @@ export interface Application {
   document: DocumentFile; bank: string; account: string; shippingAddress: string; returnAddress: string;
   status: 'pending' | 'approved' | 'rejected'; submittedAt: number; approvedAt?: number; approvedBy?: string;
   rejectedAt?: number; reviewedAt?: number; deadlineAt?: number;
+  /** 실제 모드 서버 상태(PENDING·APPROVED·REJECTED·CHANGES_REQUESTED·EXPIRED)와 보완 요청 상태(OPEN·SUBMITTED·EXPIRED 등) */ apiStatus?: string; correctionState?: string;
   /** 사업자 정보(상호·대표자·등록번호·업태) — 백엔드 요청 필드 (docs/backend-api-requests.md) */ business?: BusinessInfo;
-  rejectionItems?: { field: string; reason: string; fixed?: boolean }[];
+  /** code: 실제 모드 보완 요청 항목의 서버 값(CERTIFICATE·STORE_NAME·CONTACT·BANK_ACCOUNT·DISPATCH_ADDRESS·RETURN_ADDRESS) */
+  rejectionItems?: { field: string; reason: string; fixed?: boolean; code?: string }[];
   /** 타 플랫폼 판매 URL — 신청 API 필드 확인 필요 (docs/backend-api-requests.md) */ salesUrl?: string;
 }
 export interface Line { optionId: string; name: string; quantity: number }
