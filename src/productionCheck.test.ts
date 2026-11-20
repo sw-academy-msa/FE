@@ -22,16 +22,23 @@ describe('표시 형식', () => {
 
 describe('다시 분석한 뒤 AI 질문 답', () => {
   const faq = (sid: string, q: string, a: string): Faq => ({ id: `faq-${sid}`, question: q, answer: a, confirmed: true, suggestionId: sid });
-  it('같은 점검 항목의 새 질문으로 답을 옮기고, 옮길 곳 없는 답은 지운다', () => {
-    const prev = [{ suggestionId: 'a', checkCode: 'CARE', question: '세탁 방법은?', reason: '' }, { suggestionId: 'b', checkCode: 'SIZE', question: '실측은?', reason: '' }];
-    const next = [{ suggestionId: 'c', checkCode: 'CARE', question: '세탁 및 관리 방법을 알려주세요.', reason: '' }];
-    const out = carryAiAnswers([faq('a', '세탁 방법은?', '드라이'), faq('b', '실측은?', '68cm'), { id: 'f1', question: '직접', answer: '답', confirmed: true }], prev, next);
-    expect(out).toEqual([{ id: 'faq-c', question: '세탁 및 관리 방법을 알려주세요.', answer: '드라이', confirmed: true, suggestionId: 'c' }, { id: 'f1', question: '직접', answer: '답', confirmed: true }]);
+  it('같은 문구의 새 질문으로 답을 옮기고, 옮길 곳 없는 답은 지운다', () => {
+    const next = [{ suggestionId: 'c', question: '흠집이 있나요?', reason: '' }];
+    const out = carryAiAnswers([faq('a', '흠집이 있나요? ', '작은 흠집'), faq('b', '포장은?', '새 박스'), { id: 'f1', question: '직접', answer: '답', confirmed: true }], next);
+    expect(out).toEqual([{ id: 'faq-c', question: '흠집이 있나요?', answer: '작은 흠집', confirmed: true, suggestionId: 'c' }, { id: 'f1', question: '직접', answer: '답', confirmed: true }]);
   });
   it('그대로 남는 질문의 답을 옮겨 오는 답이 덮지 않는다', () => {
-    const prev = [{ suggestionId: 'a', checkCode: 'CARE', question: 'Q-a', reason: '' }, { suggestionId: 'b', checkCode: 'CARE', question: 'Q-b', reason: '' }];
-    const out = carryAiAnswers([faq('a', 'Q-a', 'A'), faq('b', 'Q-b', 'B')], prev, [{ suggestionId: 'b', checkCode: 'CARE', question: 'Q-b', reason: '' }]);
+    const out = carryAiAnswers([faq('a', 'Q-b', 'A'), faq('b', 'Q-b', 'B')], [{ suggestionId: 'b', question: 'Q-b', reason: '' }]);
     expect(out).toEqual([faq('b', 'Q-b', 'B')]);
+  });
+  it('확인 전 AI 예상 답변은 옮기지 않고 새 예상 답변으로 다시 채운다', () => {
+    const draft: Faq = { ...faq('a', 'Q', '예전 초안'), confirmed: false };
+    const out = carryAiAnswers([draft], [{ suggestionId: 'n', question: 'Q', reason: '', suggestedAnswer: '새 초안' }, { suggestionId: 'm', question: 'Q2', reason: '' }]);
+    expect(out).toEqual([{ id: 'faq-n', question: 'Q', answer: '새 초안', confirmed: false, suggestionId: 'n' }]);
+  });
+  it('확인 전 AI 예상 답변은 저장하지 않고, 확인한 답만 저장한다', () => {
+    const d = { ...blankDraft(), faqs: [{ ...faq('s1', 'Q1', 'AI 초안'), confirmed: false }, faq('s2', 'Q2', '확인한 답')], ai: { status: 'recommended' as const, signature: '', category: '', reason: '', result: { code: 'CLOTHING', category: '숏패딩', photos: 1, questions: [{ suggestionId: 's1', question: 'Q1', reason: '' }, { suggestionId: 's2', question: 'Q2', reason: '' }] } } };
+    expect(faqsToSave(d).map(f => f.suggestionId)).toEqual(['s2']);
   });
   it('지금 분석에 없는 질문의 답은 저장하지 않는다(서버가 거절)', () => {
     const d = { ...blankDraft(), faqs: [faq('old', 'Q', 'A'), faq('cur', 'Q2', 'A2')], ai: { status: 'recommended' as const, signature: '', category: '', reason: '', result: { code: 'CLOTHING', category: '숏패딩', photos: 1, questions: [{ suggestionId: 'cur', question: 'Q2', reason: '' }] } } };

@@ -263,12 +263,12 @@ const detailsOf = (d: Draft) => ({ attributes: d.extras.filter(e => e.key.trim()
 export const sameBasic = (b: ReturnType<typeof basicInfoOf>, p: Product) => (b.name ?? '') === p.name && (b.description ?? '') === p.description && (b.brandOrStore ?? '') === p.brand && (b.sourceUrl ?? '') === p.originalUrl && (b.category ?? '') === p.category;
 export const sameDetails = (x: ReturnType<typeof detailsOf>, p: Product) => (x.disposalReason ?? '') === p.reason && JSON.stringify(x.attributes) === JSON.stringify(p.extras.map(e => ({ name: e.key, value: e.value })));
 
-/** 저장할 FAQ: 직접 쓴 FAQ + AI 질문 답(suggestionId, question은 AI 질문 원문). 분석 뒤 입력이 바뀌었으면 그 분석의 질문 답은 쓸 수 없어 뺀다 */
+/** 저장할 FAQ: 직접 쓴 FAQ + 판매자가 확인한 AI 질문 답(suggestionId, question은 AI 질문 원문). 확인 전 AI 예상 답변과 분석 뒤 입력이 바뀐 분석의 질문 답은 뺀다 */
 export function faqsToSave(d: Draft): FaqInput[] {
   // AI 질문 답은 지금 분석 결과의 질문에 대한 것만 보낸다(입력이 바뀌었거나 다시 분석해 없어진 질문은 서버가 거절한다)
   const stale = analysisStale(d), current = new Set((d.ai.result?.questions ?? []).map(q => q.suggestionId ?? q.question));
   // 분석 결과를 모르는 초안(서버에서 다시 받은 상품)은 서버에 저장된 답을 그대로 둔다
-  return d.faqs.filter(f => f.question.trim() && f.answer.trim() && !(f.suggestionId && d.ai.result && (stale || !current.has(f.suggestionId))))
+  return d.faqs.filter(f => f.confirmed !== false && f.question.trim() && f.answer.trim() && !(f.suggestionId && d.ai.result && (stale || !current.has(f.suggestionId))))
     .map(f => ({ id: f.id.startsWith('faq-') ? undefined : f.id, question: f.question, answer: f.answer, ...(f.suggestionId ? { suggestionId: f.suggestionId } : {}) }));
 }
 /** 분석이 막 끝난 직후 1~2초는 FAQ 저장이 거절될 수 있다 → 1초 간격으로 2번 더(총 3번). AI 질문 답이 없으면 재시도하지 않는다 */
@@ -399,5 +399,5 @@ export async function analyzeDraft(d: Draft, id: string, o?: Parameters<typeof p
   const accepted = await at_('AI 분석 요청 실패', () => requestAiAnalysis(id, fresh.version ?? 0));
   const r = await at_('AI 분석 결과 확인 실패', () => pollAiAnalysis(accepted.requestId, o));
   // 추천 코드(예 CLOTHING)는 registration-metadata로 등록 카테고리 이름으로 바꾼다(목록에 없으면 '' → 직접 선택)
-  return { outcome: r.outcome, code: r.recommendedCategory ?? '', category: categoryForCode(meta, r.recommendedCategory), questions: (r.questions ?? []).map(q => ({ checkCode: q.checkCode, suggestionId: q.suggestionId, question: q.question, reason: q.reason })), categories: meta.categories };
+  return { outcome: r.outcome, code: r.recommendedCategory ?? '', category: categoryForCode(meta, r.recommendedCategory), questions: (r.questions ?? []).map(q => ({ suggestionId: q.suggestionId, question: q.question, reason: q.reason, ...(q.suggestedAnswer?.trim() ? { suggestedAnswer: q.suggestedAnswer.trim() } : {}) })), categories: meta.categories };
 }

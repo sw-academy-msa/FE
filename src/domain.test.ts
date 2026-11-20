@@ -83,11 +83,15 @@ describe('AI 분석 결과 자동 반영', () => {
     expect(p).not.toHaveProperty('category'); expect(p.ai?.notice).toBe('kept');
     expect(aiResultPatch({ ...mine, category: '가디건' }, result('가디건'), []).ai?.notice).toBe('applied');
   });
-  it('다시 분석하면 같은 점검 항목(checkCode)의 새 질문으로 답을 옮긴다', () => {
-    const prev = [{ checkCode: 'SIZE', suggestionId: 'old', question: '사이즈?', reason: '' }];
-    const d = { ...blankDraft(NOW), faqs: [{ id: 'f', question: '사이즈?', answer: '정사이즈', confirmed: true, suggestionId: 'old' }] };
-    const p = aiResultPatch(d, result('니트', [{ checkCode: 'SIZE', suggestionId: 'new', question: '사이즈는 어떤가요?', reason: '' }]), prev);
-    expect(p.faqs).toEqual([expect.objectContaining({ answer: '정사이즈', suggestionId: 'new' })]);
+  it('다시 분석하면 판매자가 확인한 답을 같은 문구의 새 질문으로 옮기고 새 예상 답변이 덮지 않는다', () => {
+    const prev = [{ suggestionId: 'old', question: '흠집이 있나요?', reason: '' }];
+    const d = { ...blankDraft(NOW), faqs: [{ id: 'f', question: '흠집이 있나요?', answer: '모서리에 작은 흠집', confirmed: true, suggestionId: 'old' }] };
+    const p = aiResultPatch(d, result('니트', [{ suggestionId: 'new', question: '흠집이 있나요?', reason: '', suggestedAnswer: 'AI 초안' }]), prev);
+    expect(p.faqs).toEqual([expect.objectContaining({ answer: '모서리에 작은 흠집', confirmed: true, suggestionId: 'new' })]);
+  });
+  it('첫 분석 결과의 예상 답변은 확인 전 초안으로 채운다', () => {
+    const p = aiResultPatch(blankDraft(NOW), result('니트', [{ suggestionId: 's1', question: '포장 상태는?', reason: '박스 훼손', suggestedAnswer: '박스 모서리가 눌려 있어요' }, { suggestionId: 's2', question: '색 차이?', reason: '' }]), []);
+    expect(p.faqs).toEqual([{ id: 'faq-s1', question: '포장 상태는?', answer: '박스 모서리가 눌려 있어요', confirmed: false, suggestionId: 's1' }]);
   });
   it('결과가 없는 분석(판단 불가, 실패)은 카테고리를 건드리지 않고 직전 질문을 보관한다', () => {
     const prev = [{ question: 'q', reason: '' }];

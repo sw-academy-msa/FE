@@ -20,7 +20,7 @@ describe('판매 정보 수정 가능 여부(서버 status 기준)', () => {
 });
 
 describe('AI 결과(outcome) → 초안 상태', () => {
-  const q = [{ checkCode: 'C1', question: '실측?', reason: '사진만으로 모름' }];
+  const q = [{ suggestionId: 's1', question: '사진 속 흠집은 어느 정도인가요?', reason: '첫 사진 모서리', suggestedAnswer: '판매자 확인 필요' }];
   it('RECOMMENDED는 추천 카테고리·질문만 담는다(신뢰도·대안 없음)', () => {
     expect(aiStateOf('t', { outcome: 'RECOMMENDED', code: 'CLOTHING', category: '의류', questions: q }, 2)).toEqual({ status: 'recommended', signature: 't', category: '', reason: '', result: { code: 'CLOTHING', category: '의류', photos: 2, questions: q } });
   });
