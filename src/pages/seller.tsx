@@ -2,7 +2,7 @@ import { LogoutButton, SETTINGS_HREF } from './auth';
 import { FaqList, SELLER_FAQ_ITEMS } from './account';
 import { BankField } from '../components/BankField';
 import { useEffect, useRef, useState } from 'react';
-import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Plus, Check, ChevronRight, FileText, Info, Rocket, ScanSearch, Share2, Truck } from 'lucide-react';
 import { activeUser, feeFor, formatPhone, markDelivered, maskName, money, nowOf, orderNo, parseRejection, saleState, salesSoldOut, uid } from '../domain';
 import type { Order, Product, SellerSettings } from '../domain';
@@ -303,6 +303,7 @@ export function SellerProductPage() {
         })}
         {!recentOrders.length && <Empty title="아직 주문이 없어요"/>}
       </section>
+      {!USE_MOCK && <Link className="btn btn-outline w-full" to={`/seller/product/${p.id}/faqs`}>FAQ 수정</Link>}
       <div className="space-y-1 rounded-[8px] bg-[var(--soft)] p-4"><p className="text-[13px] font-bold">판매가 끝나면 주문 내역을 알림으로 보내드려요</p><p className="text-[12px] text-[#7B7B7B]">발송 준비와 송장 등록도 알림에서 바로 이어서 할 수 있어요. 판매 중에는 이 화면에서 실시간 현황만 확인해 주세요.</p></div>
     </div>;
   }
@@ -354,6 +355,7 @@ export function SellerProductPage() {
         <p className="text-[12px] text-[#7B7B7B]">반품·환불은 STOCKDROP이 처리하지 않아요. 구매자와 직접 협의해 진행해 주세요.</p>
         <p className="text-[12px] text-[#7B7B7B]">정산 내역은 마이페이지 &gt; 정산 계좌에서 볼 수 있어요.</p>
       </div>
+      {!USE_MOCK && <Link className="btn btn-outline w-full" to={`/seller/product/${p.id}/faqs`}>FAQ 수정</Link>}
     </div>;
   }
 
@@ -368,6 +370,7 @@ export function SellerProductPage() {
     {rev && <Note title={rev.status === 'IN_REVIEW' ? '수정 심사 중' : rev.status === 'APPROVED' ? '수정 내용이 승인됐어요' : '수정 심사 반려'}>{rev.status === 'IN_REVIEW' ? '승인되면 구매자 화면에 반영돼요. 심사 중에는 다시 수정 요청할 수 없어요.' : rev.status === 'APPROVED' ? '변경한 내용이 구매자 화면에 반영됐어요.' : rev.reason || '반려 사유가 없어요.'}</Note>}
     {now < p.startsAt ? <Link className="btn btn-outline w-full" to={`/seller/new?edit=${p.id}`}>상품 정보 수정</Link> : <Note title="핵심 정보는 변경할 수 없어요">판매 시작 후 가격·옵션·최초 수량·종료 시각은 변경할 수 없습니다.</Note>}
     <Link className="btn w-full" to={`/seller/orders?product=${p.id}`}>주문 관리</Link>
+    {!USE_MOCK && <Link className="btn btn-outline w-full" to={`/seller/product/${p.id}/faqs`}>FAQ 수정</Link>}
   </div>;
 }
 
@@ -597,7 +600,7 @@ export function SellerSettingsPage() {
   const { section } = useParams();
   const s = useStore(), user = activeUser(s), toast = useToast(), navigate = useNavigate();
   const original = s.sellerSettings[user.id];
-  const [form, setForm] = useState<SellerSettings>(original ?? { displayName: user.name, bank: '', account: '', holder: user.name, shippingAddress: '', returnAddress: '', notifications: {} });
+  const [form, setForm] = useState<SellerSettings>(original ?? { displayName: user.name, bank: '', account: '', holder: user.name, shippingAddress: '', returnAddress: '' });
   const [phone, setPhone] = useState(user.phone), [email, setEmail] = useState(user.email), [error, setError] = useState(''), [busy, setBusy] = useState(false);
   const app = s.applications.find(a => a.userId === user.id && a.status === 'approved');
   const [addrTab, setAddrTab] = useState<'ship' | 'return'>('ship');
@@ -939,20 +942,8 @@ export function SellerSettingsPage() {
 
   // ── 회원 탈퇴 ───────────────────────────────────────────────
   if (section === 'withdraw') return <WithdrawForm/>;
-  // ── 알림 설정 fallback ──────────────────────────────────────
-  return (
-    <form className="space-y-5" onSubmit={handleSubmit}>
-      <Header title="알림 설정"/>
-      {['신규주문', '문의', '판매일정', '마케팅'].map(key => (
-        <label key={key} className="divider flex min-h-[60px] items-center justify-between gap-4">
-          <span>{({ 신규주문: '신규 주문', 문의: '상품 · 주문 문의', 판매일정: '판매 시작 · 종료', 마케팅: '혜택 및 이벤트' } as Record<string, string>)[key]}</span>
-          <input role="switch" aria-label={key + ' 알림'} type="checkbox" className="h-5 w-5" checked={form.notifications[key] ?? false} onChange={e => setForm({ ...form, notifications: { ...form.notifications, [key]: e.target.checked } })}/>
-        </label>
-      ))}
-      <ErrorBox message={error}/>
-      <Button type="submit" className="w-full" disabled={busy}>{busy ? '저장 중…' : '수정 내용 저장'}</Button>
-    </form>
-  );
+  // 그 밖의 주소(예전 로컬 전용 판매자 알림 설정 등)는 마이페이지로 보낸다. 알림 설정은 공통 화면(SETTINGS_HREF)을 쓴다
+  return <Navigate to="/my" replace/>;
 }
 export function SellerSupportPage() {
   return (

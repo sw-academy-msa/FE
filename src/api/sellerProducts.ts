@@ -187,7 +187,7 @@ export const saveRegistrationFaqs = (id: string, expectedVersion: number, faqs: 
 /** POST …/review-submissions — 최초 심사 제출(DRAFT/REJECTED) */
 export const submitReview = async (id: string, expectedVersion: number) => sellerProductFromApi(await api.post<SellerProductDto>(`${at(id)}/review-submissions`, { expectedVersion }, { service: purchase }));
 
-/* ── FAQ 개별 (화면 없음: 등록 화면에 FAQ 입력 UI가 없어 호출처 없음 — 문의 답변의 publishToFaq가 FAQ 반영 경로) ── */
+/* ── FAQ 개별 (화면: pages/sellerFaq.tsx '판매 중 상품 FAQ 수정'. 규칙은 src/faqEdit.ts) ── */
 const faqBody = (expectedVersion: number, f: FaqInput) => ({ expectedVersion, faq: { ...f, confirmed: true } });
 export const addProductFaq = async (id: string, expectedVersion: number, f: FaqInput) => sellerProductFromApi(await api.post<SellerProductDto>(`${at(id)}/faqs`, faqBody(expectedVersion, f), { service: purchase }));
 export const updateProductFaq = async (id: string, faqId: string, expectedVersion: number, f: FaqInput) => sellerProductFromApi(await api.put<SellerProductDto>(`${at(id)}/faqs/${enc(faqId)}`, faqBody(expectedVersion, f), { service: purchase }));
