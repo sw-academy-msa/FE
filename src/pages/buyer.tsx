@@ -11,7 +11,7 @@ import { loginHref, signedIn } from '../auth';
 import { trackViewItem } from '../analytics';
 import { addressLine, listAddresses, toAddress } from './address';
 import { ExpiredCheckout } from './checkoutExpired';
-import { confirmPurchase, changeShippingAddress, createOrder, createOrderInquiry, createProductInquiry, listProductInquiries, retryWhileUnavailable, errorMessage, getCheckout, getCheckoutTerms, getOrder, getProduct, isApiError, fetchUnreadCount, listNotifications, listOrders, markAllNotificationsRead, markNotificationRead, notificationPath, useApi, listProducts, mergeCheckout, mergeInquiries, mergeOrderList, mergeOrders, mergeProducts, openTossPayment, uploadInquiryImage, deleteInquiryImage, useLive } from '../api';
+import { confirmPurchase, changeShippingAddress, createOrder, createOrderInquiry, createProductInquiry, listProductInquiries, retryWhileUnavailable, errorMessage, getCheckout, getCheckoutTerms, getOrder, getProduct, isApiError, fetchUnreadCount, listNotifications, listOrders, markAllNotificationsRead, markNotificationRead, notificationPath, useApi, listProducts, mergeCheckout, mergeInquiries, mergeOrderList, mergeOrders, mergeProducts, openTossPayment, uploadInquiryImage, deleteInquiryImage, useLive, retryProjection } from '../api';
 import type { CheckoutTermsDto, InboxItem } from '../api';
 import { USE_MOCK } from '../config';
 import { CompositionInput } from '../components/CompositionInput';
@@ -327,7 +327,10 @@ export function OrderInquiryPage() {
   const order = s.orders.find(o => o.id === id && o.userId === user.id);
   const [kind, setKind] = useState(() => { const k = readInquiryDraft(id).kind; return k && INQUIRY_KINDS.includes(k) ? k : '하자·파손'; }), [question, setQuestion] = useState(() => readInquiryDraft(id).question ?? ''), [images, setImages] = useState<string[]>([]), [files, setFiles] = useState<File[]>([]), [error, setError] = useState(''), [busy, setBusy] = useState(false);
   useEffect(() => { try { if (question.trim()) sessionStorage.setItem(inquiryDraftKey(id), JSON.stringify({ kind, question })); else sessionStorage.removeItem(inquiryDraftKey(id)); } catch { /* 저장 차단: 화면 값만 유지 */ } }, [id, kind, question]);
-  if (!order) return <Empty title="주문을 찾을 수 없어요"><Link to="/orders" className="btn">주문 목록</Link></Empty>;
+  // 새로고침·알림 등으로 바로 들어오면 store에 주문이 없다: 주문을 불러와 주문 번호를 보여 준다(조회 모델 반영 지연·일시 실패는 자동 재시도)
+  const known = !!order;
+  const live = useLive(sig => known || !id ? Promise.resolve(null) : retryProjection(() => getOrder(id, getState().activeUserId, sig), sig).catch(e => { if (isApiError(e) && e.status === 404) return null; throw e; }), (st, d) => { if (d) mergeOrders(st, [d]); }, [id, user.id]);
+  if (!order) return live.loading || live.error ? <LiveStatus state={live}/> : <Empty title="주문을 찾을 수 없어요"><Link to="/orders" className="btn">주문 목록</Link></Empty>;
   const quantity = order.lines.reduce((n, l) => n + l.quantity, 0);
   const sent = () => { try { sessionStorage.removeItem(inquiryDraftKey(id)); } catch { /* 무시 */ } };
   async function attach(fl: FileList | null) { if (!fl?.length) return; try { if (images.length + fl.length > 5) throw new Error('사진은 최대 5장까지 첨부할 수 있어요.'); const added = await Promise.all([...fl].map(imageData)); setImages([...images, ...added]); setFiles([...files, ...fl]); } catch (e) { setError((e as Error).message); } }

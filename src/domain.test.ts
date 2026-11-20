@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { categoryGroup, listingOptions, validateListing, approveApplication, available, beginPayment, blankDraft, defaultAddress, expireHolds, feeFor, localDateTime, markDelivered, publishDraft, recommendCategory, reserve, resolvePayment, saleState, seedState, purchaseBlock, parseRejection } from './domain';
+import { categoryGroup, listingOptions, validateListing, approveApplication, available, beginPayment, blankDraft, defaultAddress, expireHolds, feeFor, localDateTime, markDelivered, publishDraft, recommendCategory, reserve, resolvePayment, saleState, salesSoldOut, seedState, purchaseBlock, parseRejection } from './domain';
 import type { Draft } from './domain';
 const NOW = new Date('2026-10-23T14:00:00+09:00').getTime();
 function draft(): Draft { return { ...blankDraft(NOW), images: ['/images/generated-5.png'], name: 'A5 공책', description: '한 권당 80페이지 노트입니다.', category: '문구 › 노트', originalUrl: 'https://shop.example/notebook', reason: '과잉 발주', noOptions: true, options: [{ id: 'base', name: '기본', stock: 10 }], price: 6000, shipping: 3000, faqs: [] }; }
@@ -56,5 +56,16 @@ describe('판매 심사 반려 사유', () => {
     expect(parseRejection('[한정 판매가] 더 낮춰 주세요\n[물품 확인 · 구성품] 설명서가 빠졌어요')).toEqual([{ field: '한정 판매가', reason: '더 낮춰 주세요', inspection: false }, { field: '구성품', reason: '설명서가 빠졌어요', inspection: true }]);
     expect(parseRejection('사진이 흐려요')).toEqual([{ field: '심사 의견', reason: '사진이 흐려요', inspection: false }]);
     expect(parseRejection(undefined)).toEqual([]);
+  });
+});
+describe('판매자 완판 판단', () => {
+  it('결제 확정 수량이 한정 수량에 닿으면 판매 종료 전이라도 완판이다', () => {
+    expect(salesSoldOut({ total: 10, sold: 10 })).toBe(true);
+    expect(salesSoldOut({ total: 10, sold: 11 })).toBe(true);
+  });
+  it('결제 대기(예약) 때문에 남은 수량이 0이어도 확정 수량이 모자라면 완판이 아니다', () => {
+    expect(salesSoldOut({ total: 10, sold: 7 })).toBe(false);
+    expect(salesSoldOut({ total: 0, sold: 0 })).toBe(false);
+    expect(salesSoldOut(undefined)).toBe(false);
   });
 });
