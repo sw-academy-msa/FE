@@ -13,7 +13,7 @@ test.beforeEach(async ({ page }) => { await signInDemo(page); });
 test('홈 검색·카테고리 필터·외부 상품 새 탭 열기', async ({ page }) => {
   await page.getByRole('button', { name: '문구', exact: true }).click(); await expect(page.getByRole('heading', { name: 'A5 데일리 노트' })).toBeVisible(); await expect(page.getByRole('heading', { name: '모듈 수납 바구니' })).toHaveCount(0);
   await page.getByLabel('상품 검색').fill('검색되지않는상품'); await expect(page.getByText('검색 결과가 없어요')).toBeVisible(); await page.getByRole('button', { name: '필터 초기화' }).click();
-  await page.goto('/#/product/ecobag'); await page.getByRole('button', { name: /기존 판매처에서 상품 보기/ }).click(); const popupPromise = page.waitForEvent('popup'); await page.getByRole('button', { name: '이동하기', exact: true }).click(); const popup = await popupPromise; await expect(popup.getByRole('heading', { name: '데일리 코튼 에코백' })).toBeVisible(); await popup.close(); await expect(page).toHaveURL(/product\/ecobag/);
+  await page.goto('/#/product/ecobag'); await page.getByRole('link', { name: /기존 판매처에서 상품 보기/ }).click(); const popupPromise = page.waitForEvent('popup'); await page.getByRole('button', { name: '이동하기', exact: true }).click(); const popup = await popupPromise; await expect(popup.getByRole('heading', { name: '데일리 코튼 에코백' })).toBeVisible(); await popup.close(); await expect(page).toHaveURL(/product\/ecobag/);
   await page.goto('/#/product/notebook'); await expect(page.getByRole('button', { name: '판매 시작 전 · 구매할 수 없어요' })).toBeDisabled();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
