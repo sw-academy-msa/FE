@@ -60,7 +60,7 @@ describe('변환', () => {
 
 describe('API 호출', () => {
   it('목록·상세는 일반 Gateway, content 필드', async () => {
-    const calls = fake(c => ok(c.url.endsWith('/v1/orders?size=100') ? { content: [] } : { orderId: 'o1', orderNumber: 'n', productId: 'p1', productName: '상품', brandOrStore: '스토어', items: [], state: 'CONFIRMED', delivery: null, totalAmount: 1, unitPrice: 1, shippingFee: 0, address: null, createdAt: '2030-01-01T00:00:00Z', carrier: null, trackingNumber: null, shippedAt: null, deliveredAt: null }));
+    const calls = fake(c => ok(c.url.endsWith('/v1/orders?size=100&page=0') ? { content: [] } : { orderId: 'o1', orderNumber: 'n', productId: 'p1', productName: '상품', brandOrStore: '스토어', items: [], state: 'CONFIRMED', delivery: null, totalAmount: 1, unitPrice: 1, shippingFee: 0, address: null, createdAt: '2030-01-01T00:00:00Z', carrier: null, trackingNumber: null, shippedAt: null, deliveredAt: null }));
     expect(await listOrders()).toEqual([]); expect((await getOrder('o1', 'u')).status).toBe('paid');
     expect(calls[0].url).toContain('/v1/orders?size=100'); expect(calls[1].url).toContain('/v1/orders/o1');
     expect(calls.every(c => c.method === 'GET')).toBe(true);

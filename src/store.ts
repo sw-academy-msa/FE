@@ -11,7 +11,7 @@ const listeners = new Set<() => void>();
  * 실제 모드는 서버 데이터(상품·주문·문의·신청·배송지)를 저장소에 두지 않는다 — 화면을 열 때 서버에서 받는다.
  * 남기는 것: 로그인 상태·계정, 화면 설정, 작성 중인 상품 초안, 아직 끝나지 않은 결제 대기(5분). 예전 서버 주소의 이미지 URL이 남아 깨지던 문제
  */
-const LIVE_KEEP = ['version', 'auth', 'activeUserId', 'users', 'drafts', 'sellerSettings', 'bookmarks', 'clockOffset', 'paymentOutcome', 'aiOutcome'] as const;
+const LIVE_KEEP = ['version', 'auth', 'activeUserId', 'users', 'drafts', 'sellerSettings', 'clockOffset', 'paymentOutcome', 'aiOutcome'] as const;
 export function persisted(s: State): object {
   if (USE_MOCK) return s;
   const now = Date.now(), out: Record<string, unknown> = { tag: STORAGE_TAG };

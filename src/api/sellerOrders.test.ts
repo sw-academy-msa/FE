@@ -42,7 +42,7 @@ describe('판매자 주문 조회', () => {
     const calls = fake(() => page([item(), item({ orderId: 'o2', delivery: 'SHIPPING' }), item({ orderId: 'o3', state: 'HELD', delivery: null })]));
     const list = await listSellerOrders('s1', { productId: 'p1' });
     expect(list.map(o => [o.id, o.sellerId, o.status])).toEqual([['o1', 's1', 'preparing'], ['o2', 's1', 'shipping']]);
-    expect(sig(calls[0])).toBe('GET /seller/orders?size=100&productId=p1');
+    expect(sig(calls[0])).toBe('GET /seller/orders?size=100&productId=p1&state=CONFIRMED'); // 서버 state 쿼리로 확정 주문만 받는다
   });
   it('상세·집계', async () => {
     const calls = fake(c => (c.url.includes('summary') ? { totalOrders: 3, confirmedOrders: 3, preparingOrders: 1, shippingOrders: 1, deliveredOrders: 1, confirmedQuantity: 5, approximate: true }
