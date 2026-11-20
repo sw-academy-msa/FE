@@ -47,9 +47,14 @@ test.describe('아이폰 17 Safari 크기', () => {
         if (touches !== undefined) Object.defineProperty(event, 'touches', { value: Array(touches).fill({}) });
         document.dispatchEvent(event); return event.defaultPrevented;
       };
-      return { gestures: ['gesturestart', 'gesturechange', 'gestureend'].map(type => blocked(type)), multi: blocked('touchmove', 2), single: blocked('touchmove', 1), touchAction: getComputedStyle(document.body).touchAction, overscroll: getComputedStyle(document.documentElement).overscrollBehavior };
+      return { gestures: ['gesturestart', 'gesturechange', 'gestureend'].map(type => blocked(type)), multi: blocked('touchmove', 2), single: blocked('touchmove', 1), touchAction: getComputedStyle(document.body).touchAction,
+        overscrollSupported: CSS.supports('overscroll-behavior', 'none'), overscroll: getComputedStyle(document.documentElement).getPropertyValue('overscroll-behavior') };
     });
-    expect(result).toEqual({ gestures: [true, true, true], multi: true, single: false, touchAction: 'manipulation', overscroll: 'none' });
+    const { overscrollSupported, overscroll, ...gestures } = result;
+    expect(gestures).toEqual({ gestures: [true, true, true], multi: true, single: false, touchAction: 'manipulation' });
+    if (overscrollSupported) expect(overscroll).toBe('none');
+    else test.info().annotations.push({ type: 'browser-limitation', description: '이 WebKit 포트는 overscroll-behavior를 지원하지 않아 계산값 검사를 제외합니다.' });
+    await test.info().attach('overscroll-support', { body: JSON.stringify({ overscrollSupported, overscroll }), contentType: 'application/json' });
     await page.evaluate(() => window.scrollTo(0, 200));
     await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(0);
   });
