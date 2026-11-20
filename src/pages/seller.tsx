@@ -75,7 +75,7 @@ export function SellerProductsPage() {
     return p.listQuantity ? { total: p.listQuantity.total, sold: Math.max(p.listQuantity.sold, localSold) } : { total: p.options.reduce((n, o) => n + o.stock, 0), sold: localSold }; };
   if (!user.seller) return <Unavailable/>; const settings = s.sellerSettings[user.id]; const allProducts = s.products.filter(p => p.sellerId === user.id); const products = allProducts.filter(p => tab === '전체' || (tab === '판매 심사 중' ? p.reviewStatus === 'IN_REVIEW' : saleState(p, now) === tab)); const thisMonth = summary.data?.confirmedQuantity ?? s.orders.filter(o => o.sellerId === user.id && !['cancelled','refunded'].includes(o.status)).reduce((n, o) => n + o.lines.reduce((a, l) => a + l.quantity, 0), 0); const alarmCount = 226; /* TODO(api-gap): 알림 신청 인원 API 없음(목업) */ const endedCount = allProducts.filter(p => saleState(p, now) === '판매 종료').length;
   // 완판: 한정 수량을 모두 판 상품(목록 요약의 판매 수량 기준). 판매 종료 시간 전에 다 팔린 판매 중 상품도 센다
-  const soldOutCount = allProducts.filter(p => { const st = saleState(p, now); return (st === '판매 종료' || st === '판매 중') && salesSoldOut(qtyOf(p)); }).length;
+  const soldOutCount = allProducts.filter(p => { const st = saleState(p, now); return (st === '판매 종료' || st === '판매 중') && salesSoldOut(p.listQuantity ?? qtyOf(p)); }).length;
   const chips: [string, number][] = [['전체', allProducts.length], ['판매 중', allProducts.filter(p => saleState(p, now) === '판매 중').length], ['판매 예정', allProducts.filter(p => saleState(p, now) === '판매 예정').length], ['판매 심사 중', allProducts.filter(p => p.reviewStatus === 'IN_REVIEW').length], ['판매 종료', endedCount]];
   return <div className="space-y-0">
     <Header title="판매 상품 관리" backTo="/my" action={<Link to="/seller/new" aria-label="상품 등록"><Plus size={22}/></Link>}/>
@@ -84,8 +84,8 @@ export function SellerProductsPage() {
     <div className="mb-4 flex justify-around rounded-[4px] bg-[var(--canvas)] py-4">{([['이번 달 판매', `${thisMonth}개`], ...(USE_MOCK ? [['알림 신청', `${alarmCount}명`]] : []), ['완판', `${soldOutCount}건`]] as [string,string][]).map(([label, value]) => <div key={label} className="text-center"><p className="font-number text-[16px] font-bold">{value}</p><p className="muted mt-1 text-[11px]">{label}</p></div>)}</div>
     <div className="-mx-4 mb-2 flex gap-1.5 overflow-x-auto px-4">{chips.map(([label, count]) => <button key={label} onClick={() => setParams(label === '전체' ? {} : { state: label }, { replace: true })} className={`h-[30px] shrink-0 rounded-[4px] px-2.5 text-[12px] ${tab === label ? 'bg-[var(--ink)] font-bold text-[var(--surface)]' : 'muted bg-[var(--soft)]'}`}>{label} {count}</button>)}</div>
     {products.map(p => {
-      // 판매 종료 시간 전이라도 완판(한정 수량 전부 결제 확정)이면 남은 시간을 멈추고 결과로 보인다
-      const status = saleState(p, now); const { total, sold } = qtyOf(p); const remaining = Math.max(0, total - sold); const onSaleTime = status === '판매 중', soldOut = (onSaleTime || status === '판매 종료') && salesSoldOut({ total, sold }); const isLive = onSaleTime && !soldOut, ended = status === '판매 종료' || soldOut; const secondsLeft = Math.max(0, Math.floor((p.endsAt - now) / 1000)); const hh = String(Math.floor(secondsLeft/3600)).padStart(2,'0'), mm = String(Math.floor(secondsLeft%3600/60)).padStart(2,'0'), ss = String(secondsLeft%60).padStart(2,'0');
+      // 판매 종료 시간 전이라도 완판(한정 수량 전부 결제 확정)이면 남은 시간을 멈추고 결과로 보인다. 판정은 서버 확정 수량(목록 요약)을 우선한다: 이 기기의 주문은 서버에서 취소·환불돼도 남아 있을 수 있다
+      const status = saleState(p, now); const { total, sold } = qtyOf(p); const remaining = Math.max(0, total - sold); const onSaleTime = status === '판매 중', soldOut = (onSaleTime || status === '판매 종료') && salesSoldOut(p.listQuantity ?? { total, sold }); const isLive = onSaleTime && !soldOut, ended = status === '판매 종료' || soldOut; const secondsLeft = Math.max(0, Math.floor((p.endsAt - now) / 1000)); const hh = String(Math.floor(secondsLeft/3600)).padStart(2,'0'), mm = String(Math.floor(secondsLeft%3600/60)).padStart(2,'0'), ss = String(secondsLeft%60).padStart(2,'0');
       return <div key={p.id} className="divider space-y-3 py-4">
         <div className="flex gap-3">
           <ProductImage src={p.images[0]} alt={p.name} className="h-[72px] w-[72px] shrink-0"/>
@@ -253,7 +253,7 @@ export function SellerProductPage() {
     const recentOrders = productOrders.slice().sort((a,b) => b.createdAt - a.createdAt).slice(0, 10);
     const alarmCount = 226;
     // 판매 종료 시간 전이라도 한정 수량이 모두 결제 확정되면 완판: 카운트다운을 멈추고 진행 중처럼 보이지 않게 한다(결제 대기 수량은 만료되면 돌아오므로 완판으로 보지 않는다)
-    const soldOut = salesSoldOut({ total: totalStock, sold: totalSold });
+    const soldOut = salesSoldOut(p.listQuantity) || salesSoldOut({ total: totalStock, sold: totalSold }); // 다시 받은 상품 수량(p)도 본다: 정산 응답은 화면 진입 때 한 번만 받는다
     const endTime = new Date(p.endsAt).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit',hour12:false});
     return <div className="space-y-5">
       <Header title="판매 현황" action={<button aria-label="상품 링크 공유" onClick={() => copyText(`${window.location.origin}${window.location.pathname}#/product/${p.id}`).then(() => toast('상품 링크를 복사했습니다.')).catch(e => toast(e.message))}><Share2 size={20}/></button>}/>

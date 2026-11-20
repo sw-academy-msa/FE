@@ -5,7 +5,7 @@
  * 운영(고객센터) 1:1 문의는 API가 없어 화면의 로컬 동작을 유지한다 (TODO(api-gap), 화면 쪽).
  */
 import type { Inquiry, State } from '../domain';
-import { api } from './client';
+import { api, ApiError } from './client';
 import type { ImageUploadDto, InquiryCardDto, OrderInquiryDto, ProductInquiryDto } from './types';
 
 const general = 'general' as const, purchase = 'purchase' as const;
@@ -50,7 +50,8 @@ export async function getProductInquiry(productId: string, inquiryId: string, us
     if (found) return productInquiryFromApi(found, productId, userId);
     if (!r.items.length || page + 1 >= (r.totalPages ?? 1)) break;
   }
-  throw new Error('문의를 찾을 수 없어요. 방금 등록한 문의라면 잠시 후 다시 시도해 주세요.');
+  // 작성 직후 조회 모델 미반영일 수 있어 404로 알린다(retryProjection이 잠시 뒤 다시 읽는다)
+  throw new ApiError('문의를 찾을 수 없어요. 방금 등록한 문의라면 잠시 후 다시 시도해 주세요.', 404, 'PRODUCT_INQUIRY_NOT_FOUND');
 }
 /** POST /v1/products/{productId}/inquiries — 상품 문의 등록 (201) */
 export async function createProductInquiry(productId: string, question: string, userId: string): Promise<Inquiry> {

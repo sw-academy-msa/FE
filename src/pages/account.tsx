@@ -1050,6 +1050,7 @@ function InquiryImage({ orderId, imageId }: { orderId: string; imageId: string }
   useEffect(() => { const c = new AbortController(); getInquiryImageUrl(orderId, imageId, c.signal).then(setSrc, () => {}); return () => c.abort(); }, [orderId, imageId]);
   return <ProductImage src={src} alt="첨부 사진" className="h-[72px] w-[72px] shrink-0"/>;
 }
+const NOT_PROJECTED = 'INQUIRY_NOT_PROJECTED';
 export function InquiryDetailPage() {
   const { id } = useParams(); const s = useStore(); const navigate = useNavigate();
   const [params] = useSearchParams();
@@ -1071,8 +1072,11 @@ export function InquiryDetailPage() {
       catch (e) { if (!(isApiError(e) && e.status === 404)) throw e; } // 404: 1:1 문의가 아니다 → 주문 문의에서 찾는다
     }
     const orderId = q?.orderId ?? (await listInquiryInbox(s.activeUserId, sig)).find(i => i.id === id)?.orderId;
-    return orderId && id ? getOrderInquiry(orderId, id, s.activeUserId, sig) : null;
-  }, sig), (st, d) => { if (d) mergeInquiries(st, [d]); }, [id, s.activeUserId, productId, relatedOrderId]);
+    if (orderId && id) return getOrderInquiry(orderId, id, s.activeUserId, sig);
+    // 캐시 없이 들어왔는데 어디에서도 못 찾으면 아직 반영 전일 수 있어 다시 읽는다. 끝내 없으면 '찾을 수 없어요'로 보인다
+    if (!q && !USE_MOCK && id) throw new ApiError('문의를 찾을 수 없어요.', 404, NOT_PROJECTED);
+    return null;
+  }, sig).catch(e => { if (isApiError(e) && e.code === NOT_PROJECTED) return null; throw e; }), (st, d) => { if (d) mergeInquiries(st, [d]); }, [id, s.activeUserId, productId, relatedOrderId]);
   if (!q) return live.loading || live.error ? <LiveStatus state={live}/> : <Empty title="문의를 찾을 수 없어요"><Link to="/inquiries" className="btn">문의 목록</Link></Empty>;
   if (q.sellerId === 'stockdrop') return <div className="space-y-5">
     <Header title="문의 상세" back={true}/>
