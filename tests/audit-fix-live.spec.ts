@@ -39,35 +39,39 @@ test('판매자 주문 문의 상세에 구매자가 첨부한 사진이 판매�
   await expect.poll(() => downloads.sort()).toEqual(['img1', 'img2']);
 });
 
-test('홈 카테고리 탭은 서버 카테고리로 만들고 같은 이름의 상품만 거른다', async ({ page }) => {
+// 홈 카테고리 탭은 공개 카테고리 카탈로그(GET /category-catalog)의 대분류로 만든다(이슈 #103). 예전 /categories(공개 상품의 세부 이름) 탭을 대신한다
+const CATALOG = { majors: [{ code: 'CLOTHING', name: '의류', categories: [{ code: 'CLOTHING', name: '의류' }, { code: 'CLOTHING_COAT_01', name: '아우터' }] }, { code: 'HOUSEHOLD', name: '일반 생활잡화', categories: [{ code: 'HOUSEHOLD', name: '일반 생활잡화' }, { code: 'HOUSEHOLD_KITCHEN_01', name: '주방용품' }] }] };
+test('홈 카테고리 탭은 서버 카탈로그의 대분류로 만들고 그 대분류의 세부 카테고리 상품을 거른다', async ({ page }) => {
   await mockApi(page, 'BUYER', path => {
-    if (path.endsWith('/categories')) return { categories: ['아우터', '주방용품'] };
+    if (path.endsWith('/category-catalog')) return CATALOG;
     if (path.endsWith('/products')) return { items: [product('a', '아우터'), product('k', '주방용품')], page: 0, size: 100, totalPages: 1, totalElements: 2 };
     if (path.endsWith('/notifications/unread-count')) return { count: 0 };
   });
   await signIn(page, '/');
   const tabs = page.getByRole('group', { name: '상품 카테고리' });
-  await expect(tabs.getByRole('button')).toHaveText(['전체', '아우터', '주방용품']);
-  await tabs.getByRole('button', { name: '주방용품', exact: true }).click();
+  await expect(tabs.getByRole('button')).toHaveText(['전체', '의류', '일반 생활잡화']);
+  await tabs.getByRole('button', { name: '일반 생활잡화', exact: true }).click();
   await expect(page.getByText('주방용품 상품 k')).toBeVisible();
   await expect(page.getByText('아우터 상품 a')).toHaveCount(0);
 });
 
-test('카테고리를 불러오지 못하면 전체만 보이고 다시 시도로 다시 불러온다', async ({ page }) => {
+test('카테고리 카탈로그를 불러오지 못하면 고정 대분류 탭(대체 목록)을 보이고 다시 시도로 서버 카탈로그를 다시 불러온다', async ({ page }) => {
   let fail = true;
   await mockApi(page, 'BUYER', async (path, _url, route) => {
-    if (path.endsWith('/categories')) { if (fail) { await route.fulfill({ status: 503, json: { code: 'TEMP', message: '잠시 후' } }); return null; } return { categories: ['아우터'] }; }
+    if (path.endsWith('/category-catalog')) { if (fail) { await route.fulfill({ status: 503, json: { code: 'TEMP', message: '잠시 후' } }); return null; } return CATALOG; }
     if (path.endsWith('/products')) return { items: [product('a', '아우터')], page: 0, size: 100, totalPages: 1, totalElements: 1 };
     if (path.endsWith('/notifications/unread-count')) return { count: 0 };
   });
   await signIn(page, '/');
   const tabs = page.getByRole('group', { name: '상품 카테고리' });
-  await expect(page.getByText('카테고리를 불러오지 못했어요.')).toBeVisible();
-  await expect(tabs.getByRole('button')).toHaveText(['전체']);
+  await expect(page.getByText('카테고리를 불러오지 못해 대분류만 보여요.')).toBeVisible();
+  await expect(tabs.getByRole('button')).toHaveText(['전체', '의류', '패션잡화', '문구', '일반 생활잡화']);
   await expect(page.getByText('아우터 상품 a')).toBeVisible();
+  await tabs.getByRole('button', { name: '의류', exact: true }).click(); await expect(page.getByText('아직 의류 상품이 없어요')).toBeVisible(); // 대체 목록은 세부 이름(아우터)을 매핑하지 못한다
   fail = false;
   await page.getByRole('button', { name: '다시 시도', exact: true }).click();
-  await expect(tabs.getByRole('button')).toHaveText(['전체', '아우터']);
+  await expect(tabs.getByRole('button')).toHaveText(['전체', '의류', '일반 생활잡화']);
+  await expect(page.getByText('아우터 상품 a')).toBeVisible();
 });
 
 test('상품 상세에는 서버에 저장되지 않는 찜(관심 상품) 버튼이 없고 알림 받기는 남아 있다', async ({ page }) => {

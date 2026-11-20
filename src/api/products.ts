@@ -9,6 +9,7 @@
  *  4. 명세에 없는 기능은 mock 유지 + `TODO(api-gap)` 주석
  */
 import type { Product, State } from '../domain';
+import type { CategoryCatalog } from '../categoryCatalog';
 import { api } from './client';
 import { ms } from './mappers';
 import type { ItemsPage, ProductDetailDto, ProductFaqDto, ProductOptionDto, ProductSummaryDto, SaleStatus, ScheduleDto } from './types';
@@ -74,9 +75,12 @@ export async function getSchedule(range: { from?: string; to?: string } = {}, si
   const r = await api.get<ScheduleDto>('/v1/products/schedule', { service, signal, query: range });
   return Object.fromEntries(r.days.map(d => [d.date, { count: d.productCount, firstStartsAt: Date.parse(d.firstStartsAt) }]));
 }
-/** GET /v1/categories — 구매자 필터용 카테고리 이름 */
-export async function listCategories(signal?: AbortSignal): Promise<string[]> {
-  return (await api.get<{ categories: string[] }>('/v1/categories', { service, signal })).categories;
+/** GET /v1/category-catalog — 공개 카테고리 카탈로그(대분류와 세부 이름, 인증 불필요, 서버 캐시 5분). 홈 대분류 탭용 */
+export async function getCategoryCatalog(signal?: AbortSignal): Promise<CategoryCatalog> {
+  const r = await api.get<CategoryCatalog>('/v1/category-catalog', { service, signal });
+  // 모양이 다른 응답(배포 순서가 어긋난 경우 등)은 실패로 보고 화면이 대체 목록을 쓰게 한다
+  if (!Array.isArray(r?.majors) || r.majors.some(m => typeof m?.name !== 'string' || !Array.isArray(m.categories))) throw new Error('카테고리 카탈로그 응답 형식이 달라요.');
+  return r;
 }
 
 /* ── store 반영 ── */
