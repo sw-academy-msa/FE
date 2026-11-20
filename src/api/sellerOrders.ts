@@ -23,7 +23,8 @@ export interface SellerOrderQuery { keyword?: string; state?: OrderState; delive
 /** GET /v1/seller/orders — 본인 주문 목록(`content`). 목록에는 단가·배송지가 없다 */
 export async function listSellerOrders(sellerId: string, q: SellerOrderQuery = {}, signal?: AbortSignal): Promise<Order[]> {
   const rows = await allSellerPages(async page => {
-    const r = await api.get<ContentPage<OrderListItemDto>>(S, { service: general, signal, query: { size: 100, ...q, page } });
+    // 화면은 결제 확정 주문만 다룬다: 서버 state 쿼리로 걸러 받아 불필요한 페이지를 줄인다(아래 filter는 방어용)
+    const r = await api.get<ContentPage<OrderListItemDto>>(S, { service: general, signal, query: { size: 100, ...q, state: 'CONFIRMED', page } });
     return { ...r, rows: r.content };
   }, q.page);
   return rows.filter(d => d.state === 'CONFIRMED').map(d => mine(sellerId)(orderFromListItem(d, '')));

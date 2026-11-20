@@ -2,11 +2,12 @@
  * 문의 도메인(구매자) — 명세 docs/api-spec.md 3절(상품 문의)·4절(주문 문의·문의 이미지).
  * 조회=일반 Gateway(`general`), 쓰기·이미지 권한/완료/열람=PurchaseGateway(`purchase`).
  * 화면은 상품·주문·운영 문의를 한 `Inquiry` 타입으로 보므로 여기서 변환해 store에 넣는다.
- * 운영(고객센터) 1:1 문의는 API가 없어 화면의 로컬 동작을 유지한다 (TODO(api-gap), 화면 쪽).
+ * 운영(고객센터) 1:1 문의는 api/support.ts가 맡는다.
  */
 import type { Inquiry, State } from '../domain';
 import { api, ApiError } from './client';
 import type { ImageUploadDto, InquiryCardDto, OrderInquiryDto, ProductInquiryDto } from './types';
+import { allPages, pageInfo } from './sellerPaging';
 
 const general = 'general' as const, purchase = 'purchase' as const;
 const enc = encodeURIComponent;
@@ -61,8 +62,12 @@ export async function createProductInquiry(productId: string, question: string, 
 /* ── API: 주문 문의 ── */
 /** GET /v1/orders/inquiries — 구매자 전체 문의함 (최신순). 목록은 `content` */
 export async function listInquiryInbox(userId: string, signal?: AbortSignal): Promise<Inquiry[]> {
-  const r = await api.get<{ content: InquiryCardDto[] }>('/v1/orders/inquiries', { service: general, signal, query: { size: 100 } });
-  return r.content.map(d => inquiryFromCard(d, userId));
+  // 100건 넘는 문의함도 잘리지 않게 모든 페이지를 읽는다
+  const rows = await allPages(async page => {
+    const r = await api.get<{ content: InquiryCardDto[]; page?: number; totalPages?: number }>('/v1/orders/inquiries', { service: general, signal, query: { size: 100, page } });
+    return pageInfo(r, page, r.content);
+  });
+  return rows.map(d => inquiryFromCard(d, userId));
 }
 /** GET /v1/orders/{id}/inquiries — 한 주문의 문의 목록 */
 export async function listOrderInquiries(orderId: string, userId: string, signal?: AbortSignal): Promise<Inquiry[]> {

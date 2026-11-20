@@ -9,6 +9,7 @@ import { api } from './client';
 import { isApiError } from './errors';
 import { ms, orderStatus, addressFromApi, orderFromApi } from './mappers';
 import { rememberTossPending, tossOrderIdOf, tossReturnUrls } from './tossReturn';
+import { allPages, pageInfo } from './sellerPaging';
 import type { CheckoutTermsDto, OrderCommandDto, OrderItemDto, OrderListItemDto, OrderDetailDto, OrderState } from './types';
 
 const general = 'general' as const, purchase = 'purchase' as const;
@@ -54,7 +55,11 @@ export function orderFromListItem(d: OrderListItemDto, userId: string): Order {
 export interface OrderListQuery { keyword?: string; state?: OrderState; page?: number; size?: number }
 /** GET /v1/orders — 본인 주문 목록. 응답 목록 필드는 `content`(상품의 items와 다름) */
 export async function listOrders(q: OrderListQuery = {}, signal?: AbortSignal): Promise<OrderListItemDto[]> {
-  return (await api.get<{ content: OrderListItemDto[] }>('/v1/orders', { service: general, signal, query: { size: 100, ...q } })).content;
+  // 100건 넘는 주문도 잘리지 않게 모든 페이지를 읽는다
+  return allPages(async page => {
+    const r = await api.get<{ content: OrderListItemDto[]; page?: number; totalPages?: number }>('/v1/orders', { service: general, signal, query: { size: 100, ...q, page } });
+    return pageInfo(r, page, r.content);
+  });
 }
 /** GET /v1/orders/{id} — 주문 상세. 조회 모델 반영 지연으로 막 결제한 주문은 404일 수 있다 */
 export async function getOrder(id: string, userId: string, signal?: AbortSignal): Promise<Order> {

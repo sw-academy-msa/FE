@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, CalendarDays, Timer, Camera, ChevronDown, Info, Search, Bell, ExternalLink, Bookmark, Clock3, Plus, Minus, Truck, CheckCircle2, ChevronRight, PackageCheck, Calendar } from 'lucide-react';
+import { ArrowLeft, CalendarDays, Timer, Camera, ChevronDown, Info, Search, Bell, ExternalLink, Clock3, Plus, Minus, Truck, CheckCircle2, ChevronRight, PackageCheck, Calendar } from 'lucide-react';
 import { clockLeft, useFromTab, LiveStatus, Badge, BottomSheet, Button, Chip, CopyButton, DeliveryProgress, Empty, ErrorBox, Field, Header, InfoRow, Modal, Note, ORDER_LABELS, ProductCard, ProductImage, ProductSummary, useToast } from '../components/ui';
-import { categoryGroup, activeUser, purchaseBlock, PURCHASE_BLOCK_TEXT, available, stockLeft, stockTotal, beginPayment, DomainError, formatPhone, money, nowOf, orderNo, reserve, resolvePayment, saleState, uid } from '../domain';
+import { CATEGORIES, categoryGroup, activeUser, purchaseBlock, PURCHASE_BLOCK_TEXT, available, stockLeft, stockTotal, beginPayment, DomainError, formatPhone, money, nowOf, orderNo, reserve, resolvePayment, saleState, uid } from '../domain';
 import type { Address, Hold, Product, Order } from '../domain';
 import { atomic, getState, mutate, useStore } from '../store';
 import { externalHref, imageData } from '../files';
@@ -11,7 +11,7 @@ import { loginHref, signedIn } from '../auth';
 import { trackViewItem } from '../analytics';
 import { addressLine, listAddresses, toAddress } from './address';
 import { ExpiredCheckout } from './checkoutExpired';
-import { confirmPurchase, changeShippingAddress, createOrder, createOrderInquiry, createProductInquiry, listProductInquiries, retryWhileUnavailable, errorMessage, getCheckout, getCheckoutTerms, getOrder, getProduct, isApiError, fetchUnreadCount, listNotifications, listOrders, markAllNotificationsRead, markNotificationRead, notificationPath, useApi, listProducts, mergeCheckout, mergeInquiries, mergeOrderList, mergeOrders, mergeProducts, openTossPayment, uploadInquiryImage, deleteInquiryImage, useLive, retryProjection } from '../api';
+import { confirmPurchase, changeShippingAddress, createOrder, createOrderInquiry, createProductInquiry, listProductInquiries, retryWhileUnavailable, errorMessage, getCheckout, getCheckoutTerms, getOrder, getProduct, isApiError, fetchUnreadCount, listNotifications, listOrders, listCategories, markAllNotificationsRead, markNotificationRead, notificationPath, useApi, listProducts, mergeCheckout, mergeInquiries, mergeOrderList, mergeOrders, mergeProducts, openTossPayment, uploadInquiryImage, deleteInquiryImage, useLive, retryProjection } from '../api';
 import type { CheckoutTermsDto, InboxItem } from '../api';
 import { USE_MOCK } from '../config';
 import { CompositionInput } from '../components/CompositionInput';
@@ -27,7 +27,11 @@ export function HomePage() {
   const setParam = (key: string, value: string) => { const next = new URLSearchParams(params); if (!value || value === '전체') next.delete(key); else next.set(key, value); setParams(next, { replace: true }); };
   const left = (p: Product) => stockLeft(s, p, now);
   const isUrgent = (p: Product) => saleState(p, now) === '판매 중' && p.endsAt - now <= 3_600_000 && left(p) > 0;
-  const products = s.products.filter(p => p.published && (category === '전체' || categoryGroup(p.category) === category) && (filter === '전체' || (filter === '마감 임박' ? isUrgent(p) : saleState(p, now) === filter)) && `${p.name} ${p.brand} ${p.category}`.toLowerCase().includes(query.toLowerCase()));
+  // 카테고리 탭: 실제 모드는 서버 공개 카테고리(GET /categories) 이름 그대로 쓰고 상품 category와 정확히 비교한다. mock 모드는 목업 묶음(categoryGroup)
+  const cats = useApi(signal => (USE_MOCK ? Promise.resolve(CATEGORIES as string[]) : listCategories(signal)), []);
+  const categoryTabs = ['전체', ...(cats.data ?? []), ...(category !== '전체' && cats.data && !cats.data.includes(category) ? [category] : [])];
+  const inCategory = (p: Product) => category === '전체' || (USE_MOCK ? categoryGroup(p.category) === category : p.category === category);
+  const products = s.products.filter(p => p.published && inCategory(p) &&(filter === '전체' || (filter === '마감 임박' ? isUrgent(p) : saleState(p, now) === filter)) && `${p.name} ${p.brand} ${p.category}`.toLowerCase().includes(query.toLowerCase()));
   const showHero = !query && category === '전체' && filter === '전체';
   const urgent = s.products.filter(p => p.published && isUrgent(p));
   const seller = signedIn(s) && !!s.users.find(u => u.id === s.activeUserId)?.seller;
@@ -35,7 +39,8 @@ export function HomePage() {
   return <div className="space-y-4">
     <header className="flex items-start justify-between pt-1"><div><h1 className="text-[22px] font-bold tracking-[-.5px]">STOCKDROP</h1><p className="mt-1 text-[12px] text-[var(--meta)]">남은 재고에 새 주인을, 정해진 시간에.</p></div><Link aria-label="알림 및 주문 확인" to="/notifications" className="relative grid h-9 w-9 place-items-center"><Bell size={21} strokeWidth={1.6}/>{unread > 0 && <span aria-label={`안 읽은 알림 ${unread}개`} className="absolute right-0 top-0 h-2 w-2 rounded-full bg-[var(--red)]"/>}</Link></header>
     <label className="flex h-12 items-center gap-2.5 rounded-[6px] bg-[var(--soft)] px-4"><Search size={18} className="text-[var(--meta)]"/><CompositionInput aria-label="상품 검색" value={query} onValueChange={value => setParam('q', value)} placeholder="상품명·카테고리·판매처 검색" className="min-w-0 flex-1 bg-transparent text-[14px] outline-none placeholder:text-[var(--placeholder)]"/></label>
-    <div role="group" aria-label="상품 카테고리" className="-mx-4 flex justify-between border-b border-[var(--line)] px-4">{['전체', '의류', '패션잡화', '문구', '생활잡화'].map(c => <button key={c} onClick={() => setParam('category', c)} className={`border-b-2 pb-2.5 text-[14px] ${category === c ? 'border-[var(--ink)] font-bold' : 'border-transparent text-[var(--aux)]'}`}>{c}</button>)}</div>
+    <div role="group" aria-label="상품 카테고리" className={`-mx-4 flex overflow-x-auto border-b border-[var(--line)] px-4 ${categoryTabs.length <= 5 ? 'justify-between' : 'gap-5'}`}>{categoryTabs.map(c => <button key={c} onClick={() => setParam('category', c)} className={`shrink-0 whitespace-nowrap border-b-2 pb-2.5 text-[14px] ${category === c ? 'border-[var(--ink)] font-bold' : 'border-transparent text-[var(--aux)]'}`}>{c}</button>)}{cats.loading && <span className="sr-only" role="status">카테고리를 불러오는 중</span>}</div>
+    {cats.error && <p className="text-[12px] text-[var(--meta)]">카테고리를 불러오지 못했어요. <button type="button" className="font-bold underline" onClick={cats.reload}>다시 시도</button></p>}
     <div className="flex gap-1.5 overflow-x-auto">{['전체', '마감 임박', '판매 중', '판매 예정', '판매 종료'].map(f => <button key={f} onClick={() => setParam('state', f)} className={`flex h-[30px] shrink-0 items-center gap-1 rounded-[4px] px-2.5 text-[12px] ${filter === f ? 'bg-[var(--ink)] font-bold text-white' : f === '마감 임박' ? 'bg-[var(--soft)] font-bold text-[var(--urgent)]' : 'bg-[var(--soft)] text-[var(--aux)]'}`}>{f === '마감 임박' && <span className={`h-1.5 w-1.5 rounded-full ${filter === f ? 'bg-white' : 'bg-[var(--urgent)]'}`}/>}{f}</button>)}</div>
     {showHero && <div className="rounded-[6px] bg-[var(--ink)] px-[18px] py-5 text-white"><p className="text-[10px] font-bold">STOCKDROP 시간 한정 판매</p><h2 className="mt-1.5 text-[22px] font-bold tracking-[-.6px]">단 3시간, 한정 판매</h2><p className="mt-1.5 text-[12px] opacity-80">혼자 운영하는 쇼핑몰의 남은 재고를 새 주인에게.</p></div>}
     {showHero && urgent.length > 0 && <section className="space-y-3 pt-3"><div className="flex items-center justify-between"><h2 className="flex items-center gap-1.5 text-[18px] font-bold"><Timer size={19} className="text-[var(--urgent)]"/>곧 마감돼요</h2><span className="text-[12px] text-[var(--aux)]">마감 임박 {urgent.length}</span></div>
@@ -102,16 +107,14 @@ export function ProductPage() {
   const [alerts, toggleAlert] = useNotified(), notified = alerts.includes(id ?? ''); // Hook은 early return 위에 둔다(조건부 호출 금지)
   // 목록에서 받은 요약(옵션 없음)만 있으면 상세가 올 때까지 기다린다
   if (!p || !p.published || (p.live && !p.options.length)) return live.loading || live.error ? <LiveStatus state={live}/> : <Empty title="상품을 찾을 수 없어요"><Link to="/" className="btn">홈으로</Link></Empty>;
-  const status = saleState(p, now), qty = stockLeft(s, p, now), saved = s.bookmarks.includes(`${s.activeUserId}:${p.id}`);
-  // TODO(api-gap): 찜(관심 상품) API가 명세에 없어 로컬 저장(mock) 유지
-  const bookmark = () => mutate(state => { const key = `${state.activeUserId}:${p.id}`; state.bookmarks = saved ? state.bookmarks.filter(k => k !== key) : [...state.bookmarks, key]; });
+  const status = saleState(p, now), qty = stockLeft(s, p, now);
   const block = signedIn(s) ? purchaseBlock(s, p) : null; // 판매자 본인 상품·운영자는 옵션 선택·결제로 못 넘어간다
   // 이 상품을 이미 샀거나 재고를 확보해 결제 중이면 품절 안내 대신 내 주문·결제로 안내한다
   const myOrder = s.orders.find(o => o.userId === s.activeUserId && o.productId === p.id && !['cancelled', 'refunded'].includes(o.status));
   const myHold = s.holds.find(h => h.userId === s.activeUserId && h.productId === p.id && (h.status === 'pending' || h.status === 'reserved' && (h.expiresAt ?? Infinity) > now));
   const soldOut = status !== '판매 예정' && qty <= 0; const hms = (t: number) => new Date(t).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
   const headerTitle = status === '판매 예정' ? '판매 대기' : soldOut ? '구매 결과' : '상품 상세';
-  return <div className="space-y-4"><Header title={headerTitle} subtitle={status === '판매 예정' ? '오픈 예정' : '결제가 완료된 주문부터 확정돼요'} action={<button aria-label={saved ? '관심 상품 해제' : '관심 상품 저장'} onClick={() => { if (!signedIn(s)) { navigate(loginHref(`/product/${p.id}`)); return; } bookmark(); toast(saved ? '관심 상품에서 해제했습니다.' : '관심 상품에 저장했습니다.'); }} className="grid h-9 w-9 place-items-center"><Bookmark size={20} fill={saved ? 'currentColor' : 'none'}/></button>}/><ProductImage src={p.images[0]} alt={p.name} className="aspect-square w-full rounded-none!"/>
+  return <div className="space-y-4"><Header title={headerTitle} subtitle={status === '판매 예정' ? '오픈 예정' : '결제가 완료된 주문부터 확정돼요'}/><ProductImage src={p.images[0]} alt={p.name} className="aspect-square w-full rounded-none!"/>
     {!soldOut && <div className="flex items-center justify-between gap-3"><Badge live={status === '판매 중'}>{status === '판매 예정' ? '오픈 예정' : status}</Badge><p className="text-[11px] text-[var(--red)]">{status === '판매 중' ? `마감까지 ${countdown(p.endsAt, now)}` : status === '판매 예정' ? `${p.category} · 3시간 한정` : '신규 구매가 종료되었어요'}</p></div>}
     {status === '판매 예정' && <div className="space-y-3"><div className="rounded-[4px] bg-[var(--blue-soft)] p-5 text-center"><p className="muted mb-2 text-[11px]">판매 시작까지</p><p className="font-number text-[32px] font-bold">{countdown(p.startsAt, now)}</p><p className="muted mt-2 text-[10px]">{dateTime(p.startsAt)} 오픈</p></div><button type="button" aria-pressed={notified} onClick={() => void toggleAlert(p.id)} className={`flex w-full items-center justify-between rounded-[6px] border px-4 py-3 text-left ${notified ? 'border-[var(--ink)] bg-[var(--ink)] text-[var(--surface)]' : 'border-[var(--line)]'}`}><div><p className="text-[13px] font-bold">상품 알림 받기</p><p className={`mt-0.5 text-[11px] ${notified ? 'opacity-70' : 'muted'}`}>판매 시작·가격 인하·수량 임박 때 알려드려요</p></div><span className={`text-[11px] font-semibold ${notified ? '' : 'text-[var(--muted)]'}`}>{notified ? '알림 설정됨' : '신청하기'}</span></button></div>}
     {status === '판매 중' && notified && <button type="button" onClick={() => void toggleAlert(p.id)} className="flex w-full items-center justify-between rounded-[6px] border border-[var(--line)] px-4 py-3 text-left"><div><p className="text-[13px] font-bold">상품 알림 받는 중</p><p className="muted mt-0.5 text-[11px]">가격 인하·수량 임박 때 알려드려요</p></div><span className="text-[11px] font-semibold text-[var(--muted)]">알림 끄기</span></button>}
@@ -290,7 +293,7 @@ export function OrdersPage() {
   return <><Header title="주문 · 배송" subtitle="주문 상세와 배송 조회를 구분해서 확인하세요." back={!fromTab}/>{activeHolds.map(h => <Link key={h.id} to={`/checkout/${h.id}`} className="mb-4 block rounded-[4px] bg-[var(--blue-soft)] p-4"><b className="text-[12px]">{h.status === 'pending' ? '결제 결과 확인 중' : '확보한 주문 이어서 결제'}</b><p className="muted mt-2 text-[11px]">{s.products.find(p => p.id === h.productId)?.name} · {h.status === 'pending' ? '결제 완료 여부를 확인해 주세요.' : `${countdown(h.expiresAt, now)} 남음`} ›</p></Link>)}<div className="divider flex justify-between gap-1 pb-2">{tabs.map(t => <button key={t} onClick={() => setTab(t)} className={`border-b-2 py-2 text-[10px] ${tab === t ? 'border-[var(--ink)] font-bold' : 'muted border-transparent'}`}>{t}</button>)}</div>{filtered.map(o => <article key={o.id} className="divider space-y-4 py-5"><div className="flex items-center justify-between"><span className="muted text-[10px]">주문번호 {orderNo(o.id)}</span><Badge live={['shipping', 'delivered'].includes(o.status)}>{ORDER_LABELS[o.status]}</Badge></div><ProductSummary product={o.product} option={o.lines.map(l => `${l.name} ${l.quantity}개`).join(' · ')} amount={o.total}/><div className="grid grid-cols-2 gap-2"><Link className="btn" to={`/orders/${o.id}${['shipping', 'delivered'].includes(o.status) ? '?tracking=1' : ''}`}>{['shipping', 'delivered'].includes(o.status) ? '배송 조회' : '주문 상세'}</Link><Link className="btn btn-outline" to={['shipping', 'delivered'].includes(o.status) ? `/orders/${o.id}` : `/orders/${o.id}/inquiry`}>{['shipping', 'delivered'].includes(o.status) ? '주문 상세' : '판매자 문의'}</Link></div></article>)}{!filtered.length && (live.loading || live.error ? <LiveStatus state={live}/> : <Empty title="주문 내역이 없어요"><Link className="btn" to="/">상품 둘러보기</Link></Empty>)}</>;
 }
 
-// TODO(api-gap): 주문 취소·환불·반품·교환·구매 확정 API가 명세에 없다 — 아래 문의 이동 버튼과 취소/환불 상태 표시는 목업 유지
+// 구매 확정은 confirmPurchase로 서버에 보낸다. TODO(api-gap): 주문 취소·환불 API는 명세에 없다(반품·환불은 플랫폼이 처리하지 않고 판매자 문의로 협의) — 취소/환불 상태 표시는 목업 유지
 export function OrderDetailPage() {
   const { id } = useParams(); const [params, setParams] = useSearchParams(); const s = useStore(), user = activeUser(s); const o = s.orders.find(o => o.id === id && o.userId === user.id); const navigate = useNavigate(); const tracking = params.has('tracking');
   // 결제 완료 축하 화면은 결제 직후 한 번만. 주소의 complete를 바로 지워 뒤로 가기로 다시 보이지 않게 한다
@@ -302,12 +305,12 @@ export function OrderDetailPage() {
   if (!o) return live.loading || live.error ? <LiveStatus state={live}/> : <Empty title="주문을 찾을 수 없어요"><Link to="/orders" className="btn">주문 목록</Link></Empty>;
   // 실제로 일어난 일만 보여 준다: 결제 → 송장 등록(배송 출발) → 판매자 배송 완료 처리
   const paidAt = o.paidAt ?? o.createdAt, doneAt = o.deliveredAt ?? o.processedAt;
-  const events: [number, string, string][] = [...(o.purchaseConfirmedAt ? [[o.purchaseConfirmedAt, '구매 확정', '구매를 확정했어요'] as [number, string, string]] : []), ...(doneAt ? [[doneAt, '배송 완료', o.deliveredPlace ?? '판매자가 배송 완료로 처리했어요'] as [number, string, string]] : []), ...(o.shippedAt ? [[o.shippedAt, '배송 출발', [o.carrier, o.tracking && `송장 ${o.tracking}`].filter(Boolean).join(' · ')] as [number, string, string]] : []), [paidAt, '결제 완료', '주문이 확정되었어요']];
+  const events: [number, string, string][] = [...(o.purchaseConfirmedAt ? [[o.purchaseConfirmedAt, '구매 확정', '구매를 확정했어요'] as [number, string, string]] : []), ...(doneAt ? [[doneAt, '배송 완료', '판매자가 배송 완료로 처리했어요'] as [number, string, string]] : []), ...(o.shippedAt ? [[o.shippedAt, '배송 출발', [o.carrier, o.tracking && `송장 ${o.tracking}`].filter(Boolean).join(' · ')] as [number, string, string]] : []), [paidAt, '결제 완료', '주문이 확정되었어요']];
   const deliveredStr = doneAt ? `${kstSlot(doneAt)} 배송 완료` : '';
   const dispatchStr = o.dispatchDays ? `${kstDay(addBusinessDays(paidAt, o.dispatchDays))}까지 출고 예정 · 결제 후 ${o.dispatchDays}영업일 이내` : '';
   return <div className="space-y-5"><Header title={complete ? '결제 완료' : '주문 · 배송 상세'} subtitle={complete ? '배송이 곧 시작돼요' : `주문번호 ${orderNo(o.id)}`}/>{complete ? <div className="space-y-4"><CheckCircle2 size={38} className="text-[var(--green)]"/><h1 className="text-[25px] font-bold">축하해요!</h1><p className="text-[14px]">선착순 구매에 성공했어요</p>{dispatchStr && <p className="muted text-[11px]">{dispatchStr}</p>}<p className="muted text-[11px]">배송이 시작되면 알려드릴게요</p><p className="text-[13px] font-bold">배송 현황</p><DeliveryProgress status={o.status}/><section className="space-y-2 rounded-[4px] bg-[var(--blue-soft)] p-4"><h3 className="mb-2 text-[13px] font-bold">주문 정보</h3><InfoRow label="주문번호" value={orderNo(o.id)}/><InfoRow label="결제 금액" value={money(o.total)}/><InfoRow label="결제 방법" value="카드 결제"/></section><section className="space-y-2 rounded-[4px] bg-[var(--blue-soft)] p-4"><h3 className="mb-2 text-[13px] font-bold">배송지</h3><p className="text-[12px]">{o.address.name ? `${o.address.name} · ${o.address.address}` : '배송지 정보 없음'}</p></section></div> : <><h2 className="text-[24px] font-bold tracking-[-.7px]">{o.status === 'delivered' ? '배송이 완료됐어요' : o.status === 'shipping' ? '상품이 배송 중이에요' : ['cancelled', 'refunded'].includes(o.status) ? ORDER_LABELS[o.status] : o.status === 'preparing' ? '상품을 준비하고 있어요' : '결제가 완료되었어요'}</h2>{deliveredStr && <p className="muted text-[13px]">{deliveredStr}</p>}<DeliveryProgress status={o.status}/></>}
     <ProductSummary product={o.product} option={o.lines.map(l => `${l.name} / ${l.quantity}개`).join('\n')} amount={o.lines.reduce((n, l) => n + l.quantity * o.product.price, 0)}/>
-    {o.status === 'delivered' ? <Note green title={deliveredStr || '배송 완료'}><p className="mb-1">{o.deliveredPlace ?? '판매자가 배송 완료로 처리했어요. 상품을 받지 못했다면 판매자에게 문의해 주세요.'}</p>{o.tracking && <p className="mt-1">{o.carrier} · 송장 {o.tracking}</p>}{USE_MOCK && o.processedAt && <p className="muted mt-1 text-[11px]">10월 28일에 자동으로 구매 확정돼요</p>}</Note> : o.status === 'shipping' ? <Note title="상품이 이동중이에요">운송장을 조회하여 배송 현황을 확인할 수 있습니다.<br/>{o.carrier} · {o.tracking}</Note> : <Note title="판매자가 상품을 준비하고 있어요">운송장이 등록되면 배송 정보를 확인할 수 있습니다.</Note>}
+    {o.status === 'delivered' ? <Note green title={deliveredStr || '배송 완료'}><p className="mb-1">판매자가 배송 완료로 처리했어요. 상품을 받지 못했다면 판매자에게 문의해 주세요.</p>{o.tracking && <p className="mt-1">{o.carrier} · 송장 {o.tracking}</p>}{USE_MOCK && o.processedAt && <p className="muted mt-1 text-[11px]">10월 28일에 자동으로 구매 확정돼요</p>}</Note> : o.status === 'shipping' ? <Note title="상품이 이동중이에요">운송장을 조회하여 배송 현황을 확인할 수 있습니다.<br/>{o.carrier} · {o.tracking}</Note> : <Note title="판매자가 상품을 준비하고 있어요">운송장이 등록되면 배송 정보를 확인할 수 있습니다.</Note>}
     <section className="space-y-2"><h3 className="mb-3 text-[15px] font-bold">주문 및 결제 정보</h3>{o.tracking && <><InfoRow label="택배사" value={o.carrier}/><InfoRow label="운송장 번호" value={<span className="inline-flex items-center gap-1">{o.tracking}<CopyButton value={o.tracking}/></span>}/></>}<InfoRow label="상품금액" value={money(o.total - o.shipping)}/><InfoRow label="고정 배송비" value={money(o.shipping)}/><InfoRow label="최종 결제금액" value={money(o.total)} strong/><InfoRow label="결제 방법" value="카드 결제"/></section>
     <section className="divider space-y-3 py-4"><h3 className="text-[15px] font-bold">배송지</h3><p className="text-[12px]">{o.address.name} · {formatPhone(o.address.phone)}</p><p className="muted text-[12px] leading-relaxed">{o.address.address}{o.address.detail ? ` ${o.address.detail}` : ''}</p>{o.address.request && <p className="muted text-[12px]">요청사항 · {o.address.request}</p>}</section>
     {!complete && <section><h3 className="mb-3 text-[15px] font-bold">주문 진행 내역</h3>{events.map(([time, title, desc], i) => <div key={i} className="divider flex gap-3 py-3"><PackageCheck size={17} className={i ? 'muted' : 'text-[var(--green)]'}/><div className="min-w-0 flex-1"><div className="flex justify-between gap-2"><b className="text-[12px]">{title}</b><span className="muted text-[10px]">{dateTime(time)}</span></div><p className="muted mt-1 text-[11px]">{desc}</p></div></div>)}</section>}
@@ -459,20 +462,33 @@ export function CalendarPage() {
 
 interface Notification { id: string; type: '구매' | '상품' | '맞춤 추천' | '판매'; title: string; desc: string; time: string; read?: boolean; path?: string }
 
+const NOTIFICATION_PAGE = 50;
 export function NotificationsPage() {
   const s = useStore(), now = useClock();
   const [tab, setTab] = useState<'전체' | '구매' | '상품' | '판매'>('전체');
   const tabs = activeUser(s).seller ? (['전체', '구매', '상품', '판매'] as const) : (['전체', '구매', '상품'] as const);
   const navigate = useNavigate(), toast = useToast();
   // 실제 모드: 서버 알림함 (mock 모드는 호출 없이 빈 목록 → 아래 목업을 쓴다)
-  const inbox = useApi(signal => (USE_MOCK ? Promise.resolve([] as InboxItem[]) : listNotifications(0, 50, signal)), [s.activeUserId]);
+  // 알림은 계속 쌓이므로 전체를 한 번에 읽지 않고 50건씩 '더 보기'로 이어 읽는다(서버 목록에는 totalPages가 없어 꽉 찬 페이지면 다음이 있다고 본다)
+  const inbox = useApi(signal => (USE_MOCK ? Promise.resolve([] as InboxItem[]) : listNotifications(0, NOTIFICATION_PAGE, signal)), [s.activeUserId]);
+  const [more, setMore] = useState<{ items: InboxItem[]; next: number; hasMore?: boolean; busy: boolean }>({ items: [], next: 1, busy: false });
+  const loaded = [...(inbox.data ?? []), ...more.items];
+  const canLoadMore = !USE_MOCK && !inbox.loading && !inbox.error && (more.hasMore ?? (inbox.data?.length ?? 0) >= NOTIFICATION_PAGE);
+  async function loadMore() {
+    if (more.busy) return;
+    setMore(m => ({ ...m, busy: true }));
+    try {
+      const page = await listNotifications(more.next, NOTIFICATION_PAGE);
+      setMore(m => ({ items: [...m.items, ...page.filter(n => !loaded.some(x => x.id === n.id))], next: m.next + 1, hasMore: page.length >= NOTIFICATION_PAGE, busy: false }));
+    } catch (e) { setMore(m => ({ ...m, busy: false })); toast(errorMessage(e)); }
+  }
   const [readIds, setReadIds] = useState<string[]>([]);
   const open = (n: Notification) => { if (!n.read) { setReadIds(r => [...r, n.id]); markNotificationRead(n.id).catch(() => {}); } if (n.path) navigate(n.path); };
-  const readAll = () => markAllNotificationsRead().then(() => setReadIds((inbox.data ?? []).map(n => n.id))).catch(e => toast(errorMessage(e)));
+  const readAll = () => markAllNotificationsRead().then(() => setReadIds(loaded.map(n => n.id))).catch(e => toast(errorMessage(e)));
 
   const userOrders = s.orders.filter(o => o.userId === s.activeUserId);
-  const bookmarkedIds = s.bookmarks.filter(k => k.startsWith(`${s.activeUserId}:`)).map(k => k.split(':')[1]);
-  const bookmarkedProducts = s.products.filter(p => bookmarkedIds.includes(p.id) && p.published);
+  const [alertIds] = useNotified(); // mock 알림: 알림 받기를 누른 상품
+  const alertProducts = s.products.filter(p => alertIds.includes(p.id) && p.published);
 
   const raw: Array<{ id: string; type: '구매' | '상품' | '맞춤 추천'; title: string; desc: string; ts: number }> = [
     ...userOrders.flatMap(o => {
@@ -482,13 +498,13 @@ export function NotificationsPage() {
         return [{ id: `o-${o.id}-s`, type: '구매' as const, title: '배송 시작', desc: `${o.product.name}이 출고되었어요.`, ts: o.shippedAt }];
       return [{ id: `o-${o.id}-p`, type: '구매' as const, title: '구매 확정', desc: `${o.product.name} 주문이 확정되었습니다.`, ts: o.createdAt }];
     }),
-    ...bookmarkedProducts.flatMap(p => {
+    ...alertProducts.flatMap(p => {
       const state = saleState(p, now);
       const avail = p.options.reduce((n, o) => n + available(s, p, o.id, now), 0);
       const total = p.options.reduce((n, o) => n + o.stock, 0);
       const items: typeof raw = [];
       if (state === '판매 중') {
-        items.push({ id: `b-${p.id}-on`, type: '상품', title: '판매 시작', desc: `찜한 상품 '${p.name}'의 판매가 막 시작됐어요.`, ts: p.startsAt });
+        items.push({ id: `b-${p.id}-on`, type: '상품', title: '판매 시작', desc: `알림 받기한 상품 '${p.name}'의 판매가 막 시작됐어요.`, ts: p.startsAt });
         if (avail > 0 && avail <= Math.ceil(total * 0.3))
           items.push({ id: `b-${p.id}-low`, type: '상품', title: '재고 임박', desc: `관심 상품의 재고가 얼마 남지 않았어요. 지금 확인해보세요.`, ts: p.startsAt + 60_000 });
       }
@@ -498,7 +514,7 @@ export function NotificationsPage() {
     }),
   ].sort((a, b) => b.ts - a.ts);
 
-  const notifications: Notification[] = USE_MOCK ? raw.map(n => ({ ...n, time: dateTime(n.ts) })) : [...(inbox.data ?? [])].sort((a, b) => b.ts - a.ts).map(n => ({ id: n.id, type: n.kind, title: n.title, desc: n.desc, time: dateTime(n.ts), read: n.read || readIds.includes(n.id), path: notificationPath(n) }));
+  const notifications: Notification[] = USE_MOCK ? raw.map(n => ({ ...n, time: dateTime(n.ts) })) : [...loaded].sort((a, b) => b.ts - a.ts).map(n => ({ id: n.id, type: n.kind, title: n.title, desc: n.desc, time: dateTime(n.ts), read: n.read || readIds.includes(n.id), path: notificationPath(n) }));
   const filtered = tab === '전체' ? notifications : notifications.filter(n => n.type === tab || (tab === '상품' && n.type === '맞춤 추천'));
 
   return (
@@ -521,8 +537,9 @@ export function NotificationsPage() {
           <p className="muted text-[12px] leading-relaxed">{n.desc}</p>
         </article>
       )) : !USE_MOCK && inbox.loading ? null : (
-        <Empty title="새로운 알림이 없어요" message="관심 상품을 저장하면 맞춤 알림을 받을 수 있어요."/>
+        <Empty title="새로운 알림이 없어요" message="상품 상세에서 알림 받기를 누르면 판매 소식을 알려드려요."/>
       )}
+      {canLoadMore && <Button outline className="w-full" disabled={more.busy} onClick={loadMore}>{more.busy ? '불러오는 중…' : '알림 더 보기'}</Button>}
     </div>
   );
 }
