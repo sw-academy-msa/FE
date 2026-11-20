@@ -3,7 +3,7 @@ export const CATEGORIES: Category[] = ['의류', '패션잡화', '문구', '생�
 /** 카테고리 경로 — Figma 체계(대분류 › 중분류 › 소분류) */
 export const CATEGORY_PATHS = ['패션 › 상의 › 니트/스웨터', '패션 › 상의 › 맨투맨', '패션 › 상의 › 티셔츠', '패션 › 아우터 › 가디건', '패션 › 하의 › 팬츠', '패션 › 잡화 › 가방', '패션 › 잡화 › 모자', '패션 › 잡화 › 소품', '문구 › 노트', '문구 › 필기구', '문구 › 사무용품', '생활잡화 › 수납용품', '생활잡화 › 생활소품'];
 /** 홈 카테고리 탭(의류·패션잡화·문구·생활잡화)에 해당하는 묶음 */
-export function categoryGroup(path: string): Category | undefined { if ((CATEGORIES as string[]).includes(path)) return path as Category; /* 서버 카테고리 이름(예: 의류) — 추측: 체계 매핑 미확정, docs/api-gap.md */ if (path.startsWith('패션 › 잡화')) return '패션잡화'; if (path.startsWith('패션')) return '의류'; if (path.startsWith('문구')) return '문구'; if (path.startsWith('생활잡화')) return '생활잡화'; }
+export function categoryGroup(path: string): Category | undefined { if ((CATEGORIES as string[]).includes(path)) return path as Category; /* mock 목업 묶음 전용. 실제 모드 홈 탭은 서버 카테고리(GET /categories) 이름과 정확히 비교한다 */ if (path.startsWith('패션 › 잡화')) return '패션잡화'; if (path.startsWith('패션')) return '의류'; if (path.startsWith('문구')) return '문구'; if (path.startsWith('생활잡화')) return '생활잡화'; }
 export interface Extra { key: string; value: string }
 export interface Faq { id: string; question: string; answer: string; confirmed: boolean; /** AI 질문에서 온 FAQ(서버 suggestionId) */ suggestionId?: string }
 export interface Option { id: string; name: string; stock: number }
@@ -51,8 +51,8 @@ export interface Order {
   id: string; userId: string; sellerId: string; productId: string; holdId: string; lines: Line[];
   product: { name: string; brand: string; image: string; category: string; originalUrl: string; price: number };
   shipping: number; total: number; address: Address; status: OrderStatus; createdAt: number;
-  carrier?: string; tracking?: string; shippedAt?: number; deliveredAt?: number; deliveredPlace?: string;
-  deliveredMemo?: string; processedBy?: string; processedAt?: number;
+  carrier?: string; tracking?: string; shippedAt?: number; deliveredAt?: number;
+  processedBy?: string; processedAt?: number;
   /** 결제 확정 시각(없으면 createdAt) · 상품의 출고 기한(영업일) */ paidAt?: number; dispatchDays?: number;
   /** 구매 확정 시각(구매자 확정 또는 배송 완료 7일 뒤 자동) */ purchaseConfirmedAt?: number;
 }
@@ -122,7 +122,7 @@ export interface SellerSettings { business?: BusinessInfo; displayName: string; 
 export interface State {
   version: 1; auth?: AuthData; activeUserId: string; users: User[]; products: Product[];
   applications: Application[]; holds: Hold[]; orders: Order[]; inquiries: Inquiry[]; drafts: Record<string, Draft>;
-  addresses: Record<string, Address>; sellerSettings: Record<string, SellerSettings>; bookmarks: string[];
+  addresses: Record<string, Address>; sellerSettings: Record<string, SellerSettings>;
   clockOffset: number; paymentOutcome: 'success' | 'failure' | 'pending'; aiOutcome: 'auto' | 'uncertain' | 'failed' | 'unsupported';
 }
 export class DomainError extends Error { constructor(message: string, public code = 'invalid') { super(message); } }
@@ -237,13 +237,12 @@ export function approveApplication(s: State, actorId: string, requestId: string,
   app.status = 'approved'; app.approvedAt = now; app.approvedBy = actorId; user.seller = true;
   s.sellerSettings[user.id] = { displayName: app.displayName || `${user.name}의 스토어`, bank: app.bank, account: app.account, holder: app.name, shippingAddress: app.shippingAddress, returnAddress: app.returnAddress, notifications: { 신규주문: true, 문의: true, 판매일정: true, 마케팅: false } };
 }
-export function markDelivered(s: State, sellerId: string, orderId: string, deliveredAt: number, place: string, memo: string, checked: boolean, now: number) {
+/** 판매자 배송 완료(mock). 서버 delivery-completion이 expectedVersion만 받으므로 완료 일시·장소·메모는 받지 않고 확인 한 번으로 지금 완료한다 */
+export function markDelivered(s: State, sellerId: string, orderId: string, now: number) {
   const o = s.orders.find(o => o.id === orderId && o.sellerId === sellerId);
   if (!s.users.find(u => u.id === sellerId)?.seller || !o) throw new DomainError('판매자 주문을 찾을 수 없습니다.', 'forbidden');
   if (o.status !== 'shipping' || !o.tracking) throw new DomainError('운송장이 등록된 배송 중 주문만 처리할 수 있습니다.');
-  if (!checked || !place.trim() || !Number.isFinite(deliveredAt)) throw new DomainError('배송완료 일시·수령 장소·확인 항목을 입력해 주세요.');
-  if (deliveredAt > now || deliveredAt < Math.floor((o.shippedAt ?? o.createdAt) / 60_000) * 60_000) throw new DomainError('출고 이후부터 현재까지의 일시를 선택해 주세요.');
-  o.status = 'delivered'; o.deliveredAt = deliveredAt; o.deliveredPlace = place.trim(); o.deliveredMemo = memo.trim(); o.processedBy = sellerId; o.processedAt = now;
+  o.status = 'delivered'; o.deliveredAt = now; o.processedBy = sellerId; o.processedAt = now;
 }
 export function feeFor(s: State, p: Product) {
   const initial = p.options.reduce((n, o) => n + o.stock, 0);
@@ -264,7 +263,7 @@ export function publishDraft(s: State, userId: string, d: Draft, now: number): P
 }
 /** 실제 API 모드(mock 꺼짐)의 첫 상태 — 목업 계정·상품·주문 없이 시작한다. 데이터는 서버에서 받아 채운다 */
 export function emptyState(): State {
-  return { version: 1, auth: initialAuth(), activeUserId: '', users: [], products: [], applications: [], holds: [], orders: [], inquiries: [], drafts: {}, addresses: {}, sellerSettings: {}, bookmarks: [], clockOffset: 0, paymentOutcome: 'success', aiOutcome: 'auto' };
+  return { version: 1, auth: initialAuth(), activeUserId: '', users: [], products: [], applications: [], holds: [], orders: [], inquiries: [], drafts: {}, addresses: {}, sellerSettings: {}, clockOffset: 0, paymentOutcome: 'success', aiOutcome: 'auto' };
 }
 /** demoSales: 화면 목업용 판매 이력(다른 구매자 주문)을 넣는다. 단위 테스트는 기본값(false)으로 빈 이력에서 시작 */
 export function seedState(now = Date.now(), demoSales = false, mockSignedIn = true): State {
@@ -281,7 +280,7 @@ export function seedState(now = Date.now(), demoSales = false, mockSignedIn = tr
   // 화면 목업용 판매 이력: 가디건 50개 중 32개, 에코백 20개 중 17개, 수납 바구니 완판 (판매자 주문 목록에는 보이지 않도록 sellerId 'archive')
   const demo = (ps: Product[]): Order[] => ([['cardigan', [['cs', 8], ['cm', 9], ['nm', 7], ['nl', 8]]], ['ecobag', [['natural', 9], ['black', 8]]], ['basket', [['small', 14], ['large', 10]]]] as [string, [string, number][]][]).map(([id, lines], i) => { const p = ps.find(p => p.id === id)!; const qty = lines.reduce((n, [, q]) => n + q, 0); return { id: `demo-${id}`, userId: 'crowd', sellerId: 'archive', productId: id, holdId: `demo-hold-${i}`, lines: lines.map(([optionId, quantity]) => ({ optionId, name: p.options.find(o => o.id === optionId)!.name, quantity })), product: { name: p.name, brand: p.brand, image: p.images[0], category: p.category, originalUrl: p.originalUrl, price: p.price }, shipping: 0, total: p.price * qty, address: { ...defaultAddress }, status: 'paid', createdAt: p.startsAt + 60_000 }; });
   const order = (i: number, p: Product, status: OrderStatus): Order => ({ id: `SD-${new Date(now).getFullYear()}-00${i + 1}`, userId: 'buyer', sellerId: 'seller', productId: `archive-${p.id}`, holdId: `archive-hold-${i}`, lines: [{ optionId: p.options[0].id, name: p.options[0].name, quantity: 1 }], product: { name: p.name, brand: p.brand, image: p.images[0], category: p.category, originalUrl: p.originalUrl, price: p.price }, shipping: 3000, total: p.price + 3000, address: { ...defaultAddress }, status, createdAt: now - 172_800_000, ...(status === 'shipping' || status === 'delivered' ? { carrier: 'CJ대한통운', tracking: '1234-5678-9012', shippedAt: now - 86_400_000 } : {}), ...(status === 'delivered' ? { deliveredAt: now - 3_600_000, deliveredPlace: '문 앞', processedAt: now - 3_500_000, processedBy: 'seller' } : {}) });
-  return { version: 1, auth: mockSignedIn ? { ...initialAuth(), onboarded: true, userId: 'buyer' } : initialAuth(), activeUserId: mockSignedIn ? 'buyer' : '', users, products, applications: [{ id: 'SD-P-002', userId: 'applicant', displayName: '종이상점', name: '이수진', email: 'paper@example.com', phone: '010-2222-3333', document: { id: 'sample', name: '사업자등록증_종이상점.pdf', size: 1024, uploadedAt: now - 3_600_000 }, bank: '신한은행', account: '000-1234-5678', shippingAddress: '서울시 성동구 성수이로 00', returnAddress: '서울시 성동구 성수이로 00', status: 'pending', submittedAt: now - 3_600_000, business: { name: '나의 상점', representative: '김서윤', registrationNumber: '214-86-12345', businessType: '소매업 · 의류', openedAt: '2023년 04월 12일', address: '서울 성동구 성수이로 118' } }], holds: [], orders: [order(0, products[0], 'preparing'), order(1, products[1], 'shipping'), order(2, products[3], 'delivered'), ...(demoSales ? demo(products) : [])], inquiries: [{ id: 'q-figma', userId: 'buyer', sellerId: 'seller', productId: 'archive-cardigan', orderId: `SD-${new Date(now).getFullYear()}-001`, productName: 'LOWFIELD · 소프트 코튼 가디건', quantity: 1, kind: '하자·파손', question: '오른쪽 소매 쪽에 올이 풀린 부분이 있어요.\n교환이나 반품이 가능할까요?', answer: "불편을 드려 죄송합니다.\n보내주신 사진으로 하자가 확인되어 무료 반품을\n도와드릴게요. 아래 '반품 신청하기'를 눌러주시면\n택배 기사님이 2영업일 안에 방문 수거해요.", public: false, createdAt: now - 86_400_000 }, { id: 'q-seed', userId: 'buyer', sellerId: 'seller', productId: 'ecobag', productName: '데일리 코튼 에코백', kind: '상품 문의', question: '손잡이 길이를 포함한 높이도 알 수 있나요?', public: false, createdAt: now - 300_000 }], drafts: {}, addresses: { buyer: { ...defaultAddress }, seller: { ...defaultAddress, name: '김민지' } }, sellerSettings: { seller: { business: { name: '로엠필드 (LOMFIELD)', representative: '김서윤', registrationNumber: '214-87-*****' }, displayName: '아틀리에 노트', bank: '신한은행', account: '000-1234-5678', holder: '김민지', shippingAddress: '서울시 성동구 성수이로 00', returnAddress: '서울시 광진구 아차산로 00', notifications: { 신규주문: true, 문의: true, 판매일정: true, 마케팅: false } } }, bookmarks: [], clockOffset: 0, paymentOutcome: 'success', aiOutcome: 'auto' };
+  return { version: 1, auth: mockSignedIn ? { ...initialAuth(), onboarded: true, userId: 'buyer' } : initialAuth(), activeUserId: mockSignedIn ? 'buyer' : '', users, products, applications: [{ id: 'SD-P-002', userId: 'applicant', displayName: '종이상점', name: '이수진', email: 'paper@example.com', phone: '010-2222-3333', document: { id: 'sample', name: '사업자등록증_종이상점.pdf', size: 1024, uploadedAt: now - 3_600_000 }, bank: '신한은행', account: '000-1234-5678', shippingAddress: '서울시 성동구 성수이로 00', returnAddress: '서울시 성동구 성수이로 00', status: 'pending', submittedAt: now - 3_600_000, business: { name: '나의 상점', representative: '김서윤', registrationNumber: '214-86-12345', businessType: '소매업 · 의류', openedAt: '2023년 04월 12일', address: '서울 성동구 성수이로 118' } }], holds: [], orders: [order(0, products[0], 'preparing'), order(1, products[1], 'shipping'), order(2, products[3], 'delivered'), ...(demoSales ? demo(products) : [])], inquiries: [{ id: 'q-figma', userId: 'buyer', sellerId: 'seller', productId: 'archive-cardigan', orderId: `SD-${new Date(now).getFullYear()}-001`, productName: 'LOWFIELD · 소프트 코튼 가디건', quantity: 1, kind: '하자·파손', question: '오른쪽 소매 쪽에 올이 풀린 부분이 있어요.\n교환이나 반품이 가능할까요?', answer: "불편을 드려 죄송합니다.\n보내주신 사진으로 하자가 확인되어 무료 반품을\n도와드릴게요. 아래 '반품 신청하기'를 눌러주시면\n택배 기사님이 2영업일 안에 방문 수거해요.", public: false, createdAt: now - 86_400_000 }, { id: 'q-seed', userId: 'buyer', sellerId: 'seller', productId: 'ecobag', productName: '데일리 코튼 에코백', kind: '상품 문의', question: '손잡이 길이를 포함한 높이도 알 수 있나요?', public: false, createdAt: now - 300_000 }], drafts: {}, addresses: { buyer: { ...defaultAddress }, seller: { ...defaultAddress, name: '김민지' } }, sellerSettings: { seller: { business: { name: '로엠필드 (LOMFIELD)', representative: '김서윤', registrationNumber: '214-87-*****' }, displayName: '아틀리에 노트', bank: '신한은행', account: '000-1234-5678', holder: '김민지', shippingAddress: '서울시 성동구 성수이로 00', returnAddress: '서울시 광진구 아차산로 00', notifications: { 신규주문: true, 문의: true, 판매일정: true, 마케팅: false } } }, clockOffset: 0, paymentOutcome: 'success', aiOutcome: 'auto' };
 }
 
 /* ── 단일 화면 상품 등록 (Figma 판매 상품 등록 / 판매 정보 수정) ───────────────────────── */

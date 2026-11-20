@@ -278,7 +278,7 @@ export function AdminSellersPage() {
     {!live.loading && !live.error && !sellers.length && <Empty title="승인된 판매자가 없어요"/>}
   </div>;
 }
-/** 문의 관리(StockDrop 1:1 문의) — TODO(api-gap): 운영자 문의 조회·답변 API가 명세에 없어 mock(이 기기 저장) 유지 */
+/** 문의 관리(StockDrop 1:1 문의) — 운영자 1:1 문의 조회·답변 API(api/support.ts)로 동작한다. mock 모드만 이 기기 저장 */
 export function AdminInquiriesPage() {
   const s = useStore(), user = activeUser(s), toast = useToast(); const [open, setOpen] = useState(''), [answer, setAnswer] = useState(''), [busy, setBusy] = useState(false);
   const live = useLive(sig => (USE_MOCK || !user.admin ? Promise.resolve([]) : listAdminSupportInquiries(sig)), mergeInquiries, [user.admin]);
@@ -1143,7 +1143,7 @@ export function InquiryDetailPage() {
   );
 }
 
-// TODO(api-gap): 운영(고객센터) 1:1 문의 API가 명세에 없다 — 이 작성 화면과 InquiryDetailPage의 운영 문의 분기는 로컬 목업 유지
+// 1:1 문의 작성 — 실제 모드는 createSupportInquiry(api/support.ts)로 보낸다. mock 모드만 이 기기 저장
 export function OpsInquiryComposePage() {
   const navigate = useNavigate(); const s = useStore(); const toast = useToast();
   const [kind, setKind] = useState('계정');

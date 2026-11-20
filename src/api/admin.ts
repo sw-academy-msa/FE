@@ -8,6 +8,7 @@ import type { Application, Product, State } from '../domain';
 import { api } from './client';
 import { applicationFromApi } from './seller';
 import { sellerProductFromApi, sellerProductFromListItem } from './sellerProducts';
+import { allArrayPages, allPages, pageInfo } from './sellerPaging';
 import type { ApplicationStatus, CorrectionField, CorrectionRequestDto, ItemsPage, ProductImageMetaDto, ProductReviewListItemDto, ProductRevisionDto, ProductStatus, SellerApplicationDto, SellerProductDto } from './types';
 
 const account = 'account' as const, purchase = 'purchase' as const;
@@ -17,9 +18,13 @@ const REVIEWS = '/v1/admin/product-reviews';
 
 /* ── 입점 심사 ── */
 /** GET …/seller-applications — status 생략=전체. 화면 Application(userId=accountId) */
-export async function listAdminApplications(q: { status?: ApplicationStatus; page?: number; size?: number } = {}, signal?: AbortSignal): Promise<Application[]> {
-  const r = await api.get<{ content: SellerApplicationDto[] }>(APPS, { service: account, signal, query: { size: 100, ...q } });
-  return r.content.map(d => applicationFromApi(d, d.accountId));
+export async function listAdminApplications(q: { status?: ApplicationStatus } = {}, signal?: AbortSignal): Promise<Application[]> {
+  // 100건 넘는 신청도 잘리지 않게 모든 페이지를 읽는다
+  const rows = await allPages(async page => {
+    const r = await api.get<{ content: SellerApplicationDto[]; page?: number; totalPages?: number }>(APPS, { service: account, signal, query: { size: 100, ...q, page } });
+    return pageInfo(r, page, r.content);
+  });
+  return rows.map(d => applicationFromApi(d, d.accountId));
 }
 /** GET …/seller-applications/{id} */
 export async function getAdminApplication(id: string, signal?: AbortSignal): Promise<Application> {
@@ -52,8 +57,11 @@ export function markApplication(s: State, id: string, status: 'approved' | 'reje
 /* ── 상품 심사 ── */
 /** GET …/product-reviews — 최초 심사 목록(`items`). 기본 IN_REVIEW. 목록에는 가격·옵션이 없다 */
 export async function listAdminProductReviews(status: ProductStatus = 'IN_REVIEW', signal?: AbortSignal): Promise<Product[]> {
-  const r = await api.get<ItemsPage<ProductReviewListItemDto>>(REVIEWS, { service: purchase, signal, query: { status, size: 100 } });
-  return r.items.map(d => sellerProductFromListItem(d, d.sellerId ?? '')); // 판매자 이름은 sellerId로 승인된 입점 신청에서 찾는다
+  const rows = await allPages(async page => {
+    const r = await api.get<Partial<ItemsPage<ProductReviewListItemDto>> & { items: ProductReviewListItemDto[] }>(REVIEWS, { service: purchase, signal, query: { status, size: 100, page } });
+    return pageInfo(r, page, r.items);
+  });
+  return rows.map(d => sellerProductFromListItem(d, d.sellerId ?? '')); // 판매자 이름은 sellerId로 승인된 입점 신청에서 찾는다
 }
 /** 목록 항목을 store에 반영: 이미 상세로 채운 가격·옵션 등은 0으로 덮지 않고 이름·상태·일정·version만 갱신 */
 export function mergeAdminProductList(s: State, items: Product[]) {
@@ -85,9 +93,9 @@ export async function decideProductReview(id: string, expectedVersion: number, a
 }
 
 /* ── 상품 수정 심사 (화면: pages/revisions.tsx, 판매 심사 목록의 「수정」 탭). 수정 심사에는 사진이 없어 사진 조회 API도 없다 ── */
-/** GET …/revisions — data 자체가 배열(페이징 메타 없음) */
+/** GET …/revisions — data 자체가 배열(페이징 메타 없음, 서버 기본 size 20·최대 100). 꽉 찬 페이지면 다음 페이지를 읽어 대기열 전체를 받는다 */
 export const listAdminRevisions = (status: 'IN_REVIEW' | 'APPROVED' | 'REJECTED' = 'IN_REVIEW', signal?: AbortSignal) =>
-  api.get<ProductRevisionDto[]>(`${REVIEWS}/revisions`, { service: purchase, signal, query: { status } });
+  allArrayPages((page, size) => api.get<ProductRevisionDto[]>(`${REVIEWS}/revisions`, { service: purchase, signal, query: { status, page, size } }));
 export const getAdminRevision = (productId: string, revisionId: string, signal?: AbortSignal) =>
   api.get<ProductRevisionDto>(`${REVIEWS}/${enc(productId)}/revisions/${enc(revisionId)}`, { service: purchase, signal });
 /** expectedVersion=수정 심사 회차(revision) version, 상품 version이 아니다 */
