@@ -11,15 +11,15 @@ const service = 'general' as const;
 const BASE = '/v1/notifications';
 
 export type NotificationKind = '구매' | '상품' | '맞춤 추천' | '판매';
-export interface InboxItem { id: string; kind: NotificationKind; title: string; desc: string; ts: number; read: boolean; targetType: NotificationDto['targetType']; targetId: string }
+export interface InboxItem { id: string; kind: NotificationKind; title: string; desc: string; ts: number; read: boolean; targetType: NotificationDto['targetType']; targetId: string; relatedId?: string | null }
 
 export function notificationFromApi(d: NotificationDto): InboxItem {
   // 판매자에게 온 알림(입점·상품 심사·판매 주문)은 '판매'로 묶어 구매 알림과 섞이지 않게 한다
-  const kind: NotificationKind = (d.type ?? '').includes('PERSONALIZED') ? '맞춤 추천' : d.targetType.startsWith('SELLER_') ? '판매' : d.targetType === 'ORDER' || d.targetType === 'SUPPORT_INQUIRY' ? '구매' : '상품';
-  return { id: d.id, kind, title: d.title ?? '', desc: d.body ?? '', ts: ms(d.occurredAt) ?? Date.parse(d.createdAt), read: !!d.readAt, targetType: d.targetType, targetId: d.targetId };
+  const kind: NotificationKind = (d.type ?? '').includes('PERSONALIZED') ? '맞춤 추천' : d.targetType.startsWith('SELLER_') ? '판매' : ['ORDER', 'SUPPORT_INQUIRY', 'PRODUCT_INQUIRY', 'ORDER_INQUIRY'].includes(d.targetType) ? '구매' : '상품';
+  return { id: d.id, kind, title: d.title ?? '', desc: d.body ?? '', ts: ms(d.occurredAt) ?? Date.parse(d.createdAt), read: !!d.readAt, targetType: d.targetType, targetId: d.targetId, relatedId: d.relatedId };
 }
 /** 알림 대상 → 앱 경로. SELLER_APPLICATION은 전용 화면이 없어 /apply로 보낸다 */
-export function notificationPath(n: Pick<InboxItem, 'targetType' | 'targetId'>): string {
+export function notificationPath(n: Pick<InboxItem, 'targetType' | 'targetId' | 'relatedId'>): string {
   const id = encodeURIComponent(n.targetId);
   switch (n.targetType) {
     case 'PRODUCT': return `/product/${id}`;
@@ -27,6 +27,10 @@ export function notificationPath(n: Pick<InboxItem, 'targetType' | 'targetId'>):
     case 'SELLER_ORDER': return `/seller/orders/${id}`;
     case 'SELLER_PRODUCT': case 'SELLER_PRODUCT_REVISION': return `/seller/product/${id}`;
     case 'SUPPORT_INQUIRY': return `/inquiries/${id}`;
+    // 관련 ID로 직접 조회하여 새로고침이나 목록의 첫 페이지 밖 문의도 찾는다.
+    case 'PRODUCT_INQUIRY': return n.relatedId ? `/inquiries/${id}?productId=${encodeURIComponent(n.relatedId)}` : '/inquiries';
+    case 'ORDER_INQUIRY': return n.relatedId ? `/inquiries/${id}?orderId=${encodeURIComponent(n.relatedId)}` : '/inquiries';
+    case 'SELLER_PRODUCT_INQUIRY': case 'SELLER_ORDER_INQUIRY': return '/seller/inquiries';
     default: return '/apply'; // 추측(명세 없음): 입점 신청 상태는 /apply에서 본다
   }
 }

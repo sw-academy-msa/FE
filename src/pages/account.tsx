@@ -19,6 +19,7 @@ import { getMySupportInquiry, isApiError, answerSupportInquiry, createSupportInq
 import { failTab, getPdf, openPendingTab } from '../files';
 import { RevisionList, useRevisionQueue } from './revisions';
 import { PhotoViewer } from '../components/PhotoViewer';
+import { getProductInquiry } from '../api/inquiries';
 import { BankField } from '../components/BankField';
 function ProfileEditModal({ userId, name: initialName, phone: initialPhone, onClose }: { userId: string; name: string; phone: string; onClose: () => void }) {
   const [name, setName] = useState(initialName), [phone, setPhone] = useState(initialPhone), [error, setError] = useState(''), [busy, setBusy] = useState(false); const toast = useToast();
@@ -1051,11 +1052,18 @@ function InquiryImage({ orderId, imageId }: { orderId: string; imageId: string }
 }
 export function InquiryDetailPage() {
   const { id } = useParams(); const s = useStore(); const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const productId = params.get('productId'), relatedOrderId = params.get('orderId');
   const [replyText, setReplyText] = useState(''), [replyBusy, setReplyBusy] = useState(false);
   const toast = useToast();
   const q = s.inquiries.find(i => i.id === id && i.userId === s.activeUserId);
   // 상세 API는 주문 id가 필요하다: store에 없으면(직접 진입) 문의함에서 찾아 orderId를 얻는다
   const live = useLive(async sig => {
+    // 알림은 문의뿐 아니라 관련 상품/주문 ID도 전달하므로 목록 캐시 없이 조회한다.
+    if (id && (productId || q?.productId && !q.orderId && q.sellerId !== 'stockdrop')) {
+      return getProductInquiry(productId || q!.productId, id, s.activeUserId, sig);
+    }
+    if (id && relatedOrderId) return getOrderInquiry(relatedOrderId, id, s.activeUserId, sig);
     if (q?.sellerId === 'stockdrop') return USE_MOCK || !id ? null : getMySupportInquiry(id, s.activeUserId, sig);
     if (!q && !USE_MOCK && id) {
       try { return await getMySupportInquiry(id, s.activeUserId, sig); }
@@ -1063,15 +1071,16 @@ export function InquiryDetailPage() {
     }
     const orderId = q?.orderId ?? (await listInquiryInbox(s.activeUserId, sig)).find(i => i.id === id)?.orderId;
     return orderId && id ? getOrderInquiry(orderId, id, s.activeUserId, sig) : null;
-  }, (st, d) => { if (d) mergeInquiries(st, [d]); }, [id, s.activeUserId]);
+  }, (st, d) => { if (d) mergeInquiries(st, [d]); }, [id, s.activeUserId, productId, relatedOrderId]);
   if (!q) return live.loading || live.error ? <LiveStatus state={live}/> : <Empty title="문의를 찾을 수 없어요"><Link to="/inquiries" className="btn">문의 목록</Link></Empty>;
   if (q.sellerId === 'stockdrop') return <div className="space-y-5">
     <Header title="문의 상세" back={true}/>
     <div className="flex items-center justify-between"><span className={`rounded px-2 py-0.5 text-[10px] font-semibold ${q.answer ? 'bg-[var(--positive-soft)] text-[var(--positive)]' : 'bg-[var(--blue-soft)] text-[var(--muted)]'}`}>{q.answer ? '답변 완료' : '접수됨'}</span><span className="muted text-[10px]">{q.kind} · {dateTime(q.createdAt)}</span></div>
     <div className="rounded-[6px] bg-[var(--blue-soft)] p-4 space-y-2"><p className="text-[11px] font-bold">{q.productName}</p><p className="text-[13px] leading-[1.8] whitespace-pre-line">{q.question}</p></div>
     {q.answer ? <div className="space-y-2"><p className="text-[12px] font-bold">StockDrop 운영팀 답변</p><div className="rounded-[6px] border border-[var(--line)] p-4"><p className="text-[13px] leading-[1.8] whitespace-pre-line">{q.answer}</p></div></div> : <Note title="답변 대기 중">영업일 기준 1일 내에 답변드릴게요. 2영업일 안에 답변이 없으면 StockDrop이 직접 확인합니다.</Note>}
-    <div className="space-y-2"><Field label="추가 문의"><textarea aria-label="추가 문의" className="field field-box" value={replyText} onChange={e => setReplyText(e.target.value.slice(0, 1000))} placeholder="추가로 궁금한 점을 입력해 주세요" rows={4}/></Field><p className="muted text-[10px]">문의 내역은 최근 1년까지 보관돼요</p></div>
-    <div className="flex gap-2"><Link className="btn btn-outline flex-1" to="/inquiries">내 문의 내역</Link><Button className="flex-1" disabled={replyBusy || !replyText.trim()} onClick={async () => { setReplyBusy(true); try { mutate(state => { const inq = state.inquiries.find(i => i.id === id); if (inq) inq.question = inq.question + '\n\n---\n' + replyText.trim(); }); setReplyText(''); toast('추가 문의가 접수되었습니다.'); } catch { toast('접수에 실패했어요. 다시 시도해 주세요.'); } finally { setReplyBusy(false); } }}>추가 문의 보내기</Button></div>
+    {/* 운영 1:1 문의는 추가 메시지 API가 없어 로컬 성공 동작을 노출하지 않는다. */}
+    <Note>추가로 궁금한 점은 새 1:1 문의로 남겨 주세요.</Note>
+    <Link to="/inquiries/compose" className="btn btn-outline w-full">새 1:1 문의</Link>
   </div>;
   if (q.messages?.length && q.orderId) return <div className="space-y-5"> {/* 실제 API 주문 문의: 메시지 스레드 */}
     <Header title="문의 상세" back={true}/>
@@ -1120,7 +1129,8 @@ export function InquiryDetailPage() {
         <Note title="답변 대기 중">판매자가 답변을 등록하면 알림으로 안내해 드릴게요.</Note>
       )}
       <div className="flex gap-2">
-        <Button outline className="flex-1" onClick={() => history.back()}>추가 문의</Button>
+        {/* 상품 문의에는 추가 메시지 API가 없다. 기존 질문을 새 질문으로 복제하지 않는다. */}
+        {!q.orderId && <Link className="btn btn-outline flex-1" to={`/product/${encodeURIComponent(q.productId)}`}>새 문의는 상품 상세에서 남겨 주세요</Link>}
         {q.orderId && <Button className="flex-1" onClick={() => navigate(`/orders/${q.orderId}`)}>주문 보기</Button>}
       </div>
       <Link to="/inquiries" className="btn btn-outline w-full">문의 목록으로</Link>
