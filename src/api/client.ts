@@ -53,6 +53,10 @@ export function createApiClient(initial: ClientConfig = {}) {
   const cfg: Required<Pick<ClientConfig, 'base' | 'mock'>> & ClientConfig = { base: '/api', mock: false, services: SERVICE_BASE, ...initial };
   let accessToken: string | null = null;
   let refreshing: Promise<AuthTokens> | null = null;
+  let refreshController: AbortController | null = null;
+  let session = 0;
+  const checkSession = (expected: number) => { if (expected !== session) throw new DOMException('로그인 세션이 변경됐어요.', 'AbortError'); };
+  const setAccessToken = (token: string | null) => { session++; refreshController?.abort(); refreshController = null; accessToken = token; refreshing = null; };
   const doFetch = (...args: Parameters<typeof fetch>) => (cfg.fetch ?? fetch)(...args);
 
   const url = (path: string, query?: RequestOptions['query'], service: Service = 'account') => {
@@ -100,31 +104,46 @@ export function createApiClient(initial: ClientConfig = {}) {
    */
   function refresh(): Promise<AuthTokens> {
     if (cfg.mock) return Promise.reject(new ApiError('mock 모드에서는 서버를 호출하지 않아요.', 0, MOCK_CODE));
+    if (refreshing) return refreshing;
+    const expected = session;
+    const controller = new AbortController(); refreshController = controller;
     return refreshing ??= (async () => {
       try {
-        const res = await send('POST', '/v1/auth/refresh', { auth: false, csrf: true });
+        const res = await send('POST', '/v1/auth/refresh', { auth: false, csrf: true, signal: controller.signal });
         const tokens = await parse<AuthTokens>(res, 'json');
+        checkSession(expected);
         accessToken = tokens.accessToken; cfg.onRefreshed?.(tokens); return tokens;
-      } catch (e) { accessToken = null; throw e; }
-      finally { refreshing = null; }
+      } catch (e) { checkSession(expected); accessToken = null; throw e; }
+      finally { if (expected === session) { refreshing = null; refreshController = null; } }
     })();
   }
 
   async function request<T>(method: string, path: string, o: RequestOptions = {}): Promise<T> {
     if (cfg.mock) throw new ApiError('mock 모드에서는 서버를 호출하지 않아요.', 0, MOCK_CODE);
+    let expected = session;
+    const check = () => {
+      if (o.signal?.aborted) throw new DOMException('요청이 취소됐어요.', 'AbortError');
+      if (o.auth !== false) checkSession(expected);
+    };
     // 로그인 확인(새로고침 직후 재발급)이 진행 중이면 끝난 뒤 보낸다 — 토큰 없이 먼저 나가 401을 받지 않게
     if (o.auth !== false && refreshing) await refreshing.catch(() => {});
+    check();
     let res = await send(method, path, o);
+    check();
     // CSRF가 거절되면 한 번만 재시도(send가 토큰을 새로 받는다)
-    if (res.status === 403 && o.csrf) { const err = await toError(res.clone()); if (err.code === 'COMMON_CSRF_REJECTED') res = await send(method, path, o); }
+    if (res.status === 403 && o.csrf) { const err = await toError(res.clone()); check(); if (err.code === 'COMMON_CSRF_REJECTED') res = await send(method, path, o); }
+    check();
     if (res.status === 401 && o.auth !== false) {
       let renewed = false, rejected = true;
       try { await refresh(); renewed = true; } catch (e) { rejected = !(e instanceof ApiError) || (e.status > 0 && e.status < 500); }
+      check();
       if (renewed) res = await send(method, path, o);
+      check();
       // 재발급이 거절됐거나(401·403 등) 재시도에도 401이면 세션 종료. 네트워크 단절·서버 오류로 재발급을 못 한 경우는 로그아웃하지 않는다
-      if ((renewed || rejected) && res.status === 401) { accessToken = null; cfg.onSessionExpired?.(); }
+      if ((renewed || rejected) && res.status === 401) { setAccessToken(null); expected = session; cfg.onSessionExpired?.(); }
     }
-    return parse<T>(res, o.responseType);
+    try { return await parse<T>(res, o.responseType); }
+    finally { check(); }
   }
 
   return {
@@ -138,7 +157,7 @@ export function createApiClient(initial: ClientConfig = {}) {
     upload: <T>(method: 'POST' | 'PUT', path: string, form: FormData, o?: RequestOptions) => request<T>(method, path, { ...o, form }),
     refresh,
     getAccessToken: () => accessToken,
-    setAccessToken: (token: string | null) => { accessToken = token; },
+    setAccessToken,
     configure: (next: ClientConfig) => { Object.assign(cfg, next); },
   };
 }

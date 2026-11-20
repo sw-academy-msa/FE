@@ -83,18 +83,25 @@ export function DeliveryProgress({ status }: { status: Order['status'] }) { cons
  * 열린 창(모달·시트·사진 보기)을 브라우저 뒤로 가기(아이폰 스와이프 포함)로 닫는다.
  * 열 때 같은 주소로 기록을 하나 쌓고, 뒤로 가기가 오면 페이지 대신 창만 닫는다. 버튼으로 닫으면 쌓은 기록을 되돌린다
  */
-export function useCloseOnBack(onClose: () => void) {
+export function useCloseOnBack(onClose: () => void, restoreOnUnmount = true) {
   const close = useRef(onClose); close.current = onClose;
+  const restore = useRef(restoreOnUnmount); restore.current = restoreOnUnmount;
   useEffect(() => {
     const id = Math.random().toString(36).slice(2); let popped = false;
     window.history.pushState({ ...(window.history.state ?? {}), sdModal: id }, '');
     const onPop = () => { popped = true; close.current(); };
     window.addEventListener('popstate', onPop);
-    return () => { window.removeEventListener('popstate', onPop); if (!popped && window.history.state?.sdModal === id) window.history.back(); };
+    return () => {
+      window.removeEventListener('popstate', onPop);
+      if (!popped && window.history.state?.sdModal === id) {
+        if (restore.current) window.history.back();
+        else { const state = { ...window.history.state }; delete state.sdModal; window.history.replaceState(state, ''); }
+      }
+    };
   }, []);
 }
-export function Modal({ title, children, onClose }: { title: string; children: ReactNode; onClose: () => void }) {
-  const ref = useRef<HTMLDialogElement>(null); useCloseOnBack(onClose);
+export function Modal({ title, children, onClose, restoreOnUnmount = true }: { title: string; children: ReactNode; onClose: () => void; restoreOnUnmount?: boolean }) {
+  const ref = useRef<HTMLDialogElement>(null); useCloseOnBack(onClose, restoreOnUnmount);
   useEffect(() => { const node = ref.current!; node.showModal(); const alreadyLocked = document.body.classList.contains('overflow-hidden'); document.body.classList.add('overflow-hidden'); return () => { node.close(); if (!alreadyLocked) document.body.classList.remove('overflow-hidden'); }; }, []);
   return <dialog ref={ref} aria-label={title} onCancel={event => { event.preventDefault(); onClose(); }} onClick={event => { if (event.target === event.currentTarget) onClose(); }} className="fixed inset-x-0 bottom-0 top-auto m-0 mx-auto max-h-[92dvh] w-full max-w-[390px] overflow-y-auto rounded-t-[16px] border-0 bg-[var(--surface)] p-5 pb-[max(20px,env(safe-area-inset-bottom))] text-[var(--ink)] backdrop:bg-[var(--overlay)]"><div className="mx-auto mb-5 h-1 w-9 rounded-full bg-[var(--line)]"/><div className="mb-5 flex items-center justify-between gap-4"><h2 className="text-[18px] font-bold">{title}</h2><button aria-label="닫기" onClick={onClose} className="grid h-9 w-9 shrink-0 place-items-center"><X size={20}/></button></div>{children}</dialog>;
 }
