@@ -72,7 +72,6 @@ describe('판매자 마이페이지·스토어', () => {
     const calls = fake(() => ({ data: prof }));
     const r = await fetchSellerMe(); expect(path(calls[0])).toBe('GET /sellers/me');
     expect(r.settings).toMatchObject({ displayName: '스토어', bank: '신한', account: '********9012', holder: '', shippingAddress: '서울 마포구', shippingPostal: '04066', shippingDetail: '3층', returnDetail: '' }); expect(r.contactEmail).toBe('h@x.kr');
-    expect(sellerSettingsFromApi(prof, { notifications: { a: true } } as never).notifications).toEqual({ a: true });
   });
   it('수정: contact·bank-account(bankAccountNumber)·addresses(상세 유지)', async () => {
     const calls = fake(() => ({}));

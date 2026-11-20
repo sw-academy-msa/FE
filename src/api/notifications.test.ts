@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { ApiError, api } from './client';
-import { getProductAlert, listProductAlerts, productAlertError, subscribeProductAlert, unsubscribeProductAlert } from './notifications';
+import { listProductAlerts, productAlertError, subscribeProductAlert, unsubscribeProductAlert } from './notifications';
 
 type Call = { url: string; method: string; body: unknown };
 function fake(data: unknown) {
@@ -18,10 +18,8 @@ describe('상품 알림 API', () => {
     let calls = fake([{ productId: 'p1', subscribed: true, createdAt: 'x' }]);
     expect(await listProductAlerts()).toHaveLength(1);
     expect(calls[0]).toMatchObject({ method: 'GET' }); expect(calls[0].url).toMatch(/^\/api\/v1\/notifications\/product-alerts$/);
-    calls = fake({ productId: 'p 1', subscribed: false, createdAt: null });
-    expect((await getProductAlert('p 1')).subscribed).toBe(false); expect(calls[0].url).toMatch(/\/product-alerts\/p%201$/);
     calls = fake({ productId: 'p1', subscribed: true, createdAt: 'x' });
-    await subscribeProductAlert('p1'); expect(calls[0]).toMatchObject({ method: 'PUT', body: undefined }); expect(calls[0].url).toMatch(/\/product-alerts\/p1$/);
+    await subscribeProductAlert('p 1'); expect(calls[0]).toMatchObject({ method: 'PUT', body: undefined }); expect(calls[0].url).toMatch(/\/product-alerts\/p%201$/);
     calls = fake(null);
     await unsubscribeProductAlert('p1'); expect(calls[0]).toMatchObject({ method: 'DELETE' }); expect(calls[0].url).toMatch(/\/product-alerts\/p1$/);
   });
