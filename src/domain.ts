@@ -5,7 +5,7 @@ export const CATEGORY_PATHS = ['패션 › 상의 › 니트/스웨터', '패션
 /** 홈 카테고리 탭(의류·패션잡화·문구·생활잡화)에 해당하는 묶음 */
 export function categoryGroup(path: string): Category | undefined { if ((CATEGORIES as string[]).includes(path)) return path as Category; /* mock 목업 묶음 전용. 실제 모드 홈 탭은 서버 카테고리(GET /categories) 이름과 정확히 비교한다 */ if (path.startsWith('패션 › 잡화')) return '패션잡화'; if (path.startsWith('패션')) return '의류'; if (path.startsWith('문구')) return '문구'; if (path.startsWith('생활잡화')) return '생활잡화'; }
 export interface Extra { key: string; value: string }
-export interface Faq { id: string; question: string; answer: string; confirmed: boolean; /** AI 질문에서 온 FAQ(서버 suggestionId) */ suggestionId?: string }
+export interface Faq { id: string; question: string; answer: string; /** false = AI 예상 답변을 판매자가 아직 확인하지 않은 초안(저장하지 않는다) */ confirmed: boolean; /** AI 질문에서 온 FAQ(서버 suggestionId) */ suggestionId?: string }
 export interface Option { id: string; name: string; stock: number }
 export interface Dimension { name: string; values: string }
 export interface Product {
@@ -83,15 +83,16 @@ export interface Draft {
   axes?: { size: boolean; color: boolean }; /** 색상 말고 다른 옵션 축의 이름(기본 '사이즈') */ sizeName?: string; colors?: string[]; sizes?: string[]; stock?: Record<string, number>; extraUrls?: string[]; reference?: ReferenceListing;
 }
 export interface ReferenceListing { platform: string; title: string; price: number; image?: string }
-/** AI 분석 결과(RECOMMENDED). 서버는 outcome·추천 카테고리 코드·점검 질문만 준다 — 신뢰도·대안·속성은 없다 */
+/** AI 분석 결과(RECOMMENDED). 서버는 outcome·추천 카테고리 코드·구매자 관점 질문만 준다 — 신뢰도·대안·속성은 없다 */
 export interface AiAnalysis { /** 점검 기준 코드(예 CLOTHING) */ code: string; /** 기본 선택할 등록 카테고리 이름 */ category: string; photos: number; questions: AiQuestion[] }
-/** AI 점검 질문. checkCode는 registration-metadata 점검 기준 항목 코드 */
-export interface AiQuestion { checkCode?: string; /** 서버 질문 id — FAQ 저장 때 그대로 보낸다 */ suggestionId?: string; question: string; reason: string }
+/** AI 질문: 사진·짧은 설명·처분 사유를 보고 구매자가 물어볼 만한 질문. 카테고리별 상품 정보 칸과는 묶지 않는다 */
+export interface AiQuestion { /** 서버 질문 id — FAQ 저장 때 그대로 보낸다 */ suggestionId?: string; question: string; reason: string; /** AI 예상 답변 초안(근거가 없으면 없음). 판매자가 확인해야 저장한다 */ suggestedAnswer?: string }
 /**
- * 다시 분석한 뒤 AI 질문 답을 새 질문으로 옮긴다. 같은 점검 항목(checkCode)이나 같은 문구의 새 질문이 있으면 답을 그대로 옮기고,
- * 없으면 예전 질문의 답은 지운다(서버는 예전 분석의 질문 id를 받지 않는다). 직접 쓴 FAQ는 그대로 둔다
+ * 다시 분석한 뒤 AI 질문 답을 새 질문으로 옮긴다. 판매자가 확인한 답은 같은 질문 id나 같은 문구의 새 질문으로 옮기고(새 예상 답변이 덮지 않는다),
+ * 옮길 곳이 없으면 지운다(서버는 예전 분석의 질문 id를 받지 않는다). 확인 전 AI 예상 답변은 옮기지 않고, 답이 없는 새 질문은
+ * 새 예상 답변을 확인 전 초안(confirmed=false)으로 채운다. 직접 쓴 FAQ는 그대로 둔다
  */
-export function carryAiAnswers(faqs: Faq[], prev: AiQuestion[], next: AiQuestion[]): Faq[] {
+export function carryAiAnswers(faqs: Faq[], next: AiQuestion[]): Faq[] {
   const sid = (q: AiQuestion) => q.suggestionId ?? q.question;
   const nextIds = new Set(next.map(sid));
   // 지금 질문에 그대로 남는 답의 질문 id를 먼저 예약한다(옮겨 오는 답이 기존 답을 덮지 않게)
@@ -99,19 +100,22 @@ export function carryAiAnswers(faqs: Faq[], prev: AiQuestion[], next: AiQuestion
   const out: Faq[] = [];
   for (const f of faqs) {
     if (!f.suggestionId || nextIds.has(f.suggestionId)) { out.push(f); continue; }
-    if (!f.answer.trim()) continue;
-    const old = prev.find(q => sid(q) === f.suggestionId);
-    const to = next.find(q => !used.has(sid(q)) && (old?.checkCode && q.checkCode === old.checkCode || q.question.trim() === f.question.trim()));
+    if (!f.answer.trim() || f.confirmed === false) continue;
+    const to = next.find(q => !used.has(sid(q)) && q.question.trim() === f.question.trim());
     if (!to) continue;
     used.add(sid(to));
     out.push({ ...f, id: `faq-${sid(to)}`, question: to.question, suggestionId: sid(to) });
+  }
+  for (const q of next) {
+    const answer = q.suggestedAnswer?.trim();
+    if (answer && !used.has(sid(q))) out.push({ id: `faq-${sid(q)}`, question: q.question, answer, confirmed: false, suggestionId: sid(q) });
   }
   return out;
 }
 /**
  * 끝난 AI 분석을 초안에 반영할 값. 판매자가 '분석 결과 보기'를 누르지 않아도 결과가 오면 바로 반영한다(분석 1번에 1번: 호출하는 쪽이 같은 분석인지 확인한다).
  * - 추천 카테고리: 카테고리가 비었거나 지난번 AI가 채운 그대로(aiCategory)면 채운다. 판매자가 직접 고른 카테고리는 덮지 않고 notice='kept'로 알린다
- * - AI 점검 질문: 예전 질문에 쓴 답을 같은 점검 항목(checkCode) 새 질문으로 옮긴다(carryAiAnswers)
+ * - AI 질문: 판매자가 확인한 답은 같은 문구의 새 질문으로 옮기고, 새 질문은 AI 예상 답변(확인 전)으로 채운다(carryAiAnswers)
  * - 결과가 없으면(판단 불가·실패·지연) 직전 질문을 보관해 다음 재시도에서도 답을 옮길 수 있게 한다
  */
 export function aiResultPatch(d: Draft, ai: Draft['ai'], prev: AiQuestion[]): Partial<Draft> {
@@ -119,7 +123,7 @@ export function aiResultPatch(d: Draft, ai: Draft['ai'], prev: AiQuestion[]): Pa
   const recommended = ai.result.category, ours = !d.category || d.category === d.aiCategory;
   return {
     ai: { ...ai, notice: ours || d.category === recommended ? 'applied' : 'kept', noticeSeen: false },
-    faqs: carryAiAnswers(d.faqs, prev, ai.result.questions),
+    faqs: carryAiAnswers(d.faqs, ai.result.questions),
     ...(ours ? { category: recommended, aiCategory: recommended } : {}),
   };
 }
@@ -276,7 +280,7 @@ export function publishDraft(s: State, userId: string, d: Draft, now: number): P
   validateListing(d, now);
   const existing = d.editingId ? s.products.find(p => p.id === d.editingId && p.sellerId === userId) : undefined;
   if (d.editingId && (!existing || now >= existing.startsAt)) throw new DomainError('판매 시작 후에는 핵심 상품 정보를 변경할 수 없습니다.');
-  const p: Product = { id: existing?.id ?? uid('product-'), sellerId: userId, name: d.name.trim(), brand: s.sellerSettings[userId]?.displayName || d.brand.trim() || '나의 스토어', category: d.category, description: d.description.trim(), images: [...d.images], originalUrl: d.originalUrl.trim(), price: d.price, shipping: d.shipping, maxPerAccount: d.maxPerAccount, dispatchDays: d.dispatchDays, startsAt: new Date(d.startsAt).getTime(), endsAt: new Date(d.startsAt).getTime() + 10_800_000, published: false, options: structuredClone(d.options), dimensions: structuredClone(d.dimensions), extras: d.extras.filter(e => e.key.trim() && e.value.trim()).map(e => ({ ...e })), reason: d.reason.trim(), faqs: structuredClone(d.faqs), shippingNotice: d.shippingNotice?.trim() || undefined };
+  const p: Product = { id: existing?.id ?? uid('product-'), sellerId: userId, name: d.name.trim(), brand: s.sellerSettings[userId]?.displayName || d.brand.trim() || '나의 스토어', category: d.category, description: d.description.trim(), images: [...d.images], originalUrl: d.originalUrl.trim(), price: d.price, shipping: d.shipping, maxPerAccount: d.maxPerAccount, dispatchDays: d.dispatchDays, startsAt: new Date(d.startsAt).getTime(), endsAt: new Date(d.startsAt).getTime() + 10_800_000, published: false, options: structuredClone(d.options), dimensions: structuredClone(d.dimensions), extras: d.extras.filter(e => e.key.trim() && e.value.trim()).map(e => ({ ...e })), reason: d.reason.trim(), faqs: structuredClone(d.faqs.filter(f => f.confirmed !== false)), shippingNotice: d.shippingNotice?.trim() || undefined };
   if (existing) s.products[s.products.indexOf(existing)] = p; else s.products.unshift(p);
   delete s.drafts[userId]; return p;
 }
@@ -336,9 +340,12 @@ export function lookupReference(url: string): ReferenceListing | undefined {
   const key = url.trim().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/$/, '');
   return REFERENCE_MOCK[key];
 }
-/** AI 상품 분석 목업 — 서버 결과와 같은 모양(코드 + 점검 질문) */
+/** AI 상품 분석 목업 — 서버 결과와 같은 모양(코드 + 구매자 관점 질문, 예상 답변 초안) */
 export function mockAiAnalysis(d: Draft): AiAnalysis {
-  return { code: 'CLOTHING_MOCK_01', category: '패션 › 상의 › 니트/스웨터', photos: d.images.length, questions: [{ checkCode: 'CLOTHING_MOCK_01__CLOTHING_MEASUREMENTS', suggestionId: 'mock-suggestion-1', question: '실측 사이즈(총장·가슴 단면)를 알려 주세요', reason: '사진만으로는 사이즈를 확인할 수 없어요' }] };
+  return { code: 'CLOTHING_MOCK_01', category: '패션 › 상의 › 니트/스웨터', photos: d.images.length, questions: [
+    { suggestionId: 'mock-suggestion-1', question: '시즌 종료 재고라고 하셨는데 보관 중 생긴 구김이나 냄새가 있나요?', reason: '처분 사유가 시즌 종료 재고 정리예요', suggestedAnswer: '창고에 보관하던 재고로 사진상 큰 구김은 보이지 않아요. 냄새는 판매자 확인이 필요해요.' },
+    { suggestionId: 'mock-suggestion-2', question: '사진의 색감이 실제와 비슷한가요?', reason: '사진마다 조명이 달라 색이 조금씩 달라 보여요' },
+  ] };
 }
 /** 판매자 화면용 받는 분 이름 가리기(홍길동 → 홍*동, 두 글자 → 홍*). 비어 있으면 빈 문자열 */
 export const maskName = (name: string) => { const n = name.trim(); return n.length <= 1 ? n : n.length === 2 ? `${n[0]}*` : `${n[0]}${'*'.repeat(n.length - 2)}${n[n.length - 1]}`; };

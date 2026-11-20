@@ -25,7 +25,7 @@ async function setup(page: Page, o: Opts = {}) {
       calls.polls++;
       const running = calls.polls <= (o.runningPolls ?? 0);
       data = { requestId: 'r1', productId: 'p1', productVersion: 4, fingerprint: 'f', status: running ? 'RUNNING' : 'COMPLETED', attempts: 1, nextAttemptAt: null,
-        result: running ? null : { requestId: 'r1', productId: 'p1', sellerId: 'real-seller', fingerprint: 'f', outcome: 'RECOMMENDED', recommendedCategory: 'CLOTHING', questions: [{ suggestionId: 's1', checkCode: 'SIZE', question: '총장과 가슴 단면은 몇 cm인가요?', reason: '사이즈 문의가 많아요' }] } };
+        result: running ? null : { requestId: 'r1', productId: 'p1', sellerId: 'real-seller', fingerprint: 'f', outcome: 'RECOMMENDED', recommendedCategory: 'CLOTHING', questions: [{ suggestionId: 's1', checkCode: null, question: '시즌 재고라 보관 중 생긴 구김이 있나요?', reason: '처분 사유가 시즌 재고예요', suggestedAnswer: '사진상 큰 구김은 보이지 않아요' }] } };
     }
     else if (path.startsWith('/api/v1/seller/products/p1')) data = product();
     else if (path.endsWith('/seller/products')) data = method === 'POST' ? product() : { items: [], page: 0, size: 100, totalPages: 0, totalElements: 0 };
@@ -49,15 +49,16 @@ async function setup(page: Page, o: Opts = {}) {
 }
 const notice = (page: Page) => page.getByRole('status', { name: 'AI 분석 반영 안내' });
 
-test('AI 분석이 성공하면 결과 보기 없이 카테고리와 점검 질문을 바로 반영하고, 화면을 떠났다 와도 한 번만 반영한다', async ({ page }) => {
+test('AI 분석이 성공하면 결과 보기 없이 카테고리와 구매자 질문을 바로 반영하고, 화면을 떠났다 와도 한 번만 반영한다', async ({ page }) => {
   const calls = await setup(page, { runningPolls: 2 });
   await page.getByRole('button', { name: 'AI로 카테고리 분석하기' }).click();
   await expect(page.getByRole('heading', { name: /분석하고 있어요/ })).toBeVisible();
   await page.getByRole('button', { name: '기다리지 않고 등록 계속하기' }).click(); // 분석 중에 등록 화면으로 떠난다
   await expect(notice(page)).toContainText('AI 분석 결과를 반영했어요', { timeout: 15000 });
-  await expect(notice(page)).toContainText('점검 질문 1개');
+  await expect(notice(page)).toContainText('구매자가 물어볼 만한 질문 1개');
   await expect(page.getByText('니트', { exact: true })).toBeVisible();
-  await expect(page.getByRole('textbox', { name: /AI 질문 답/ })).toBeVisible();
+  await expect(page.getByRole('textbox', { name: /AI 질문 답/ })).toHaveValue('사진상 큰 구김은 보이지 않아요');
+  await expect(page.getByText('AI 예상 답변 · 확인 전')).toBeVisible();
   await expect(page.getByRole('button', { name: /분석 결과 보기|이 카테고리로 적용/ })).toHaveCount(0);
   expect(calls.analyses).toBe(1);
   const polls = calls.polls;

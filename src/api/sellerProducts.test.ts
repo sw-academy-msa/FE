@@ -147,10 +147,12 @@ describe('AI 분석', () => {
   it('analyzeDraft: 기본 정보 저장 → 요청(새 version) → 폴링, 코드는 점검 기준 이름으로', async () => {
     let saved = dto({ version: 5 });
     const calls = fake(c => c.url.includes('registration-metadata') ? { categories: ['의류'], categoryCriteria: [{ code: 'CLOTHING', name: '의류', checks: [] }] }
-      : c.url.includes('/ai-analyses') ? { requestId: 'r1' } : c.url.includes('/ai/product-analyses/') ? { status: 'COMPLETED', result: { outcome: 'RECOMMENDED', recommendedCategory: 'CLOTHING', questions: [{ suggestionId: 's', checkCode: 'c', question: 'q', reason: 'r' }] } }
+      : c.url.includes('/ai-analyses') ? { requestId: 'r1' } : c.url.includes('/ai/product-analyses/') ? { status: 'COMPLETED', result: { outcome: 'RECOMMENDED', recommendedCategory: 'CLOTHING', questions: [{ suggestionId: 's', checkCode: 'c', question: 'q', reason: 'r' }, { suggestionId: 's2', checkCode: null, question: 'q2', reason: 'r2', suggestedAnswer: ' 초안 ' }, { suggestionId: 's3', checkCode: null, question: 'q3', reason: 'r3', suggestedAnswer: null }] } }
       : c.url.endsWith('/images') ? [img] : c.method === 'PUT' ? (saved = dto({ version: 6, name: '상품', description: '설명', disposalReason: '재고' })) : saved);
     const r = await analyzeDraft({ ...blankDraft(), name: '상품', description: '설명', reason: '재고', images: ['x'] }, 'p1', { schedule: [0, 0, 0] });
-    expect(r).toMatchObject({ outcome: 'RECOMMENDED', category: '의류' }); expect(r.questions).toHaveLength(1);
+    expect(r).toMatchObject({ outcome: 'RECOMMENDED', category: '의류' });
+    // 예전 결과(checkCode 있음)와 새 결과(checkCode null, 예상 답변) 모두 칸과 묶지 않은 같은 모양의 질문이 된다
+    expect(r.questions).toEqual([{ suggestionId: 's', question: 'q', reason: 'r' }, { suggestionId: 's2', question: 'q2', reason: 'r2', suggestedAnswer: '초안' }, { suggestionId: 's3', question: 'q3', reason: 'r3' }]);
     expect(calls.find(c => c.url.includes('basic-info'))!.body.expectedVersion).toBe(5); expect(calls.find(c => c.url.includes('/ai-analyses'))!.body.expectedVersion).toBe(6);
   });
   it('analyzeDraft: 서버 값과 같으면 기본 정보·상세를 다시 저장하지 않는다(재분석마다 version이 오르지 않게)', async () => {
