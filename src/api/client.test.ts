@@ -19,6 +19,76 @@ function setup(handler: (call: Call, n: number) => Response | Promise<Response>,
 }
 const path = (call: Call) => call.url.replace('/api', '');
 
+describe('로그아웃 직후 재로그인 경합', () => {
+  it('현재 세션 만료 오류를 읽는 중에도 새 로그인으로 바뀌면 이전 오류를 전달하지 않는다', async () => {
+    let finish!: (value: unknown) => void;
+    const response = fail(401, 'OLD_SESSION');
+    vi.spyOn(response, 'json').mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    const { client } = setup(c => path(c) === '/old' ? response : path(c) === '/v1/auth/csrf' ? csrf() : fail(401, 'REFRESH_EXPIRED'));
+    client.setAccessToken('old');
+    const pending = client.get('/old').catch(e => e);
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+    client.setAccessToken('new'); finish({ code: 'OLD_SESSION', message: '이전 로그인' });
+    expect(await pending).toMatchObject({ name: 'AbortError' });
+    expect(client.getAccessToken()).toBe('new');
+  });
+  it.each([true, false])('오류 본문 파싱 중 세션 변경 여부(%s)를 확인하고 현재 세션의 오류는 보존한다', async changed => {
+    let finish!: (value: unknown) => void;
+    const response = fail(403, 'FORBIDDEN');
+    vi.spyOn(response, 'json').mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    const { client } = setup(() => response);
+    client.setAccessToken('old');
+    const pending = client.get('/v1/accounts/me').catch(e => e);
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+    if (changed) client.setAccessToken('new');
+    finish({ code: 'FORBIDDEN', message: '거절' });
+    expect(await pending).toMatchObject(changed ? { name: 'AbortError' } : { name: 'ApiError', status: 403, code: 'FORBIDDEN' });
+  });
+  it('이전 세션의 늦은 성공 응답도 새 계정의 캐시에 전달하지 않는다', async () => {
+    let finish!: (res: Response) => void;
+    const { client } = setup(() => new Promise<Response>(resolve => { finish = resolve; }));
+    client.setAccessToken('old');
+    const old = client.get('/v1/accounts/me').catch(e => e);
+    client.setAccessToken('new'); finish(ok({ name: '이전 계정' }));
+    expect(await old).toMatchObject({ name: 'AbortError' });
+    expect(client.getAccessToken()).toBe('new');
+  });
+  it('취소된 이전 화면의 401은 재발급과 로그아웃을 발생시키지 않는다', async () => {
+    let finish!: (res: Response) => void;
+    const expired = vi.fn(), controller = new AbortController();
+    const { client, calls } = setup(() => new Promise<Response>(resolve => { finish = resolve; }), { onSessionExpired: expired });
+    client.setAccessToken('current');
+    const pending = client.get('/old', { signal: controller.signal }).catch(e => e);
+    controller.abort(); finish(fail(401, 'EXPIRED'));
+    expect(await pending).toMatchObject({ name: 'AbortError' });
+    expect(expired).not.toHaveBeenCalled();
+    expect(calls).toHaveLength(1);
+  });
+  it('이전 세션의 늦은 401이 새 로그인을 만료시키지 않는다', async () => {
+    let finish!: (res: Response) => void;
+    const expired = vi.fn();
+    const { client, calls } = setup(c => path(c) === '/old' ? new Promise<Response>(resolve => { finish = resolve; }) : path(c) === '/v1/auth/csrf' ? csrf() : fail(401, 'EXPIRED'), { onSessionExpired: expired });
+    client.setAccessToken('old');
+    const old = client.get('/old').catch(e => e);
+    client.setAccessToken(null); client.setAccessToken('new');
+    finish(fail(401, 'EXPIRED'));
+    expect(await old).toMatchObject({ name: 'AbortError' });
+    expect(client.getAccessToken()).toBe('new');
+    expect(expired).not.toHaveBeenCalled();
+    expect(calls).toHaveLength(1);
+  });
+  it.each([true, false])('진행 중이던 refresh의 늦은 응답(success=%s)이 새 토큰을 덮지 않는다', async success => {
+    let finish!: (res: Response) => void;
+    const { client } = setup(c => path(c) === '/v1/auth/csrf' ? csrf() : new Promise<Response>(resolve => { finish = resolve; }));
+    const old = client.refresh().catch(e => e);
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+    client.setAccessToken('new');
+    finish(success ? tokens('old-refresh') : fail(401, 'EXPIRED'));
+    expect(await old).toMatchObject({ name: 'AbortError' });
+    expect(client.getAccessToken()).toBe('new');
+  });
+});
+
 describe('토큰 첨부', () => {
   it('Access JWT를 Bearer로 붙이고 쿠키를 포함하며 data만 돌려준다', async () => {
     const { client, calls } = setup(() => ok({ items: [1] }));

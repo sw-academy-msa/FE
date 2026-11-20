@@ -29,6 +29,7 @@ export function sellerProductFromApi(d: SellerProductDto): Product {
     dimensions: (d.optionDimensions ?? []).map(x => ({ name: x.name, values: (x.values ?? []).join(', ') })), extras: (d.attributes ?? []).map(a => ({ key: a.name, value: a.value })), reason: d.disposalReason ?? '',
     faqs: (d.faqs ?? []).map(f => ({ id: f.id, question: f.question, answer: f.answer, confirmed: true, ...(f.suggestionId ? { suggestionId: f.suggestionId } : {}) })),
     shippingNotice: d.shippingNotice ?? '', rejectionReason: d.status === 'REJECTED' ? (d.reviewReason ?? '') : undefined, version: d.version, reviewStatus: d.status,
+    listQuantity: { total: (d.options ?? []).reduce((n, o) => n + o.initialQuantity, 0), sold: (d.options ?? []).reduce((n, o) => n + o.confirmedQuantity, 0) },
   };
 }
 /** 관리 목록 항목 → Product. 목록에는 옵션·이미지가 없고 가격·한정 수량·판매 수량 요약만 있다 */

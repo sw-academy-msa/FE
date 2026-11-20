@@ -15,6 +15,7 @@ import { AddressBookFormPage, AddressBookPage } from './sellerAddresses';
 import type { ProductRevisionDto } from '../api';
 import { getSellerSettlement, settlementNet, getProductDispatchAddress, answerOrderInquiry, listSellerOrderInquiries, answerProductInquiry, deleteSellerLogo, deliverOrder, errorMessage, getSalesSummary, getSellerOrder, getSellerOrderInquiry, getSellerOrderSummary, getSellerProduct, getSellerProductWithImages, listRevisions, listSellerOrderInquiryInbox, listSellerOrders, listSellerProductInquiries, listSellerProducts, mergeInquiries, mergeOrders, mergeProducts, shipOrder, useLive, fetchSellerLogo, fetchSellerMe, fetchSellerStore, fetchWithdrawalEligibility, updateSellerAddresses, updateSellerBank, updateSellerContact, updateSellerStore, uploadSellerLogo, useApi, withdrawAccount } from '../api';
 import { api } from '../api';
+import { productSettlement } from '../api/sellerOrders';
 import { USE_MOCK } from '../config';
 const hm = (t: number) => new Date(t).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false });
 const md = (t: number) => { const d = new Date(t); return `${d.getMonth() + 1}.${d.getDate()} (${'일월화수목금토'[d.getDay()]})`; };
@@ -131,14 +132,24 @@ export function SellerProductPage() {
   const live = useLive(async signal => (id && user.seller ? { prod: await getSellerProductWithImages(id, signal), orders: await listSellerOrders(user.id, { productId: id }, signal) } : null), (st, r) => { if (!r) return; mergeProducts(st, [r.prod]); mergeOrders(st, r.orders); }, [id]);
   const sum = useApi(async signal => (USE_MOCK || !id || !user.seller ? null : getSellerOrderSummary({ productId: id }, signal)), [id]);
   const revs = useApi(async signal => (USE_MOCK || !id || !user.seller ? null : listRevisions(id, signal)), [id]);
+  const month = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit' }).format(now);
+  const settle = useApi(async signal => {
+    if (USE_MOCK || !id || !user.seller) return null;
+    const [amounts, product] = await Promise.all([getSellerSettlement(month, signal), getSellerProduct(id, signal)]);
+    return { amounts, product };
+  }, [id, user.id, month]);
   if (!user.seller) return <Unavailable/>;
   if (!p) return live.loading || live.error ? <LiveStatus state={live}/> : <Unavailable/>;
   const rev = [...(revs.data ?? [])].sort((a, b) => Date.parse(b.submittedAt) - Date.parse(a.submittedAt))[0];
   // 실제 모드: 심사 중·반려 상품은 (알림에서 /seller/product/:id로 들어와도) 심사 결과 화면을 보여 준다
-  const status = saleState(p, now), fee = feeFor(s, p) /* TODO(api-gap): 정산·수수료 API 없음(목업 계산) */, published = location.pathname.includes('/published/') || (!USE_MOCK && (p.reviewStatus === 'IN_REVIEW' || p.reviewStatus === 'REJECTED'));
+  const status = saleState(p, now), fee = feeFor(s, p), published = location.pathname.includes('/published/') || (!USE_MOCK && (p.reviewStatus === 'IN_REVIEW' || p.reviewStatus === 'REJECTED'));
   const productOrders = s.orders.filter(o => o.productId === p.id && !['cancelled','refunded'].includes(o.status));
-  const totalSold = sum.data?.confirmedQuantity ?? fee.sold;
-  const totalStock = p.options.reduce((n, o) => n + o.stock, 0);
+  const quantity = settle.data?.product.id === p.id ? settle.data.product.listQuantity : p.listQuantity;
+  const totalSold = quantity?.sold ?? sum.data?.confirmedQuantity ?? fee.sold;
+  const totalStock = quantity?.total ?? p.live?.initial ?? p.options.reduce((n, o) => n + o.stock, 0);
+  const result = USE_MOCK ? { gross: fee.revenue, fee: fee.fee, net: fee.net, rate: fee.initial > 0 && fee.sold * 10 > fee.initial * 9 ? 10 : 0 }
+    : settle.data?.product.id === p.id && !settle.loading && !settle.error ? productSettlement(settle.data.amounts, p.id, { total: totalStock, sold: totalSold }) : undefined;
+  const resultMoney = (amount: number | undefined) => amount === undefined ? '-' : money(amount);
 
   // 심사 대기 / 심사 승인 / 심사 반려
   if (published) {
@@ -288,6 +299,7 @@ export function SellerProductPage() {
 
   // 판매자 판매 결과
   if (status === '판매 종료') {
+    if (!USE_MOCK && (live.loading || live.error)) return <><Header title="판매 결과"/><LiveStatus state={live}/></>;
     const optSales = p.options.map(o => {
       const sold = productOrders.reduce((n,ord) => n + ord.lines.filter(l => l.optionId === o.id).reduce((a,l) => a + l.quantity, 0), 0);
       return { name: o.name, sold };
@@ -303,7 +315,7 @@ export function SellerProductPage() {
         </div>
       </div>
       <div className="rounded-[8px] bg-[var(--soft)] p-5">
-        <p className="text-[20px] font-bold">{totalSold >= totalStock ? (USE_MOCK ? `2시간 14분 만에 완판됐어요` : '완판됐어요') : `${totalSold}개가 판매됐어요`}</p>
+        <p className="text-[20px] font-bold">{totalStock > 0 && totalSold >= totalStock ? (USE_MOCK ? `2시간 14분 만에 완판됐어요` : '완판됐어요') : `${totalSold}개가 판매됐어요`}</p>
         {USE_MOCK && <p className="muted mt-1 text-[12px]">오픈 후 23:14에 마지막 수량이 판매됐어요</p>}
         <div className="my-4 h-px bg-[#DEDEDE]"/>
         <div className="flex items-baseline justify-between">
@@ -313,7 +325,7 @@ export function SellerProductPage() {
         <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-[var(--line)]"><div className="h-2 rounded-full bg-[var(--ink)]" style={{width: totalStock > 0 ? `${Math.min(100, totalSold/totalStock*100)}%` : '0%'}}/></div>
       </div>
       <div className="grid grid-cols-3 gap-2">
-        {([['총 판매 금액', `${Math.round(fee.revenue/10000)}만원`], ['정산 예정', `${Math.round(fee.net/10000)}만원`], ['알림→구매', `${totalStock > 0 ? Math.round(totalSold/226*100) : 0}%`]] as [string,string][]).map(([lbl,val]) => <div key={lbl} className="rounded-[6px] border border-[var(--line)] p-3"><p className="muted text-[11px]">{lbl}</p><p className="font-number mt-2 text-[16px] font-bold">{val}</p></div>)}
+        {([['구매 확정 금액', resultMoney(result?.gross)], ['정산 예정', resultMoney(result?.net)], ...(USE_MOCK ? [['알림→구매', `${totalStock > 0 ? Math.round(totalSold/226*100) : 0}%`]] : [])] as [string,string][]).map(([lbl,val]) => <div key={lbl} className="rounded-[6px] border border-[var(--line)] p-3"><p className="muted text-[11px]">{lbl}</p><p className="font-number mt-2 text-[16px] font-bold">{val}</p></div>)}
       </div>
       <section className="divider space-y-3 pb-4">
         <div className="flex items-center justify-between"><h2 className="text-[15px] font-bold">옵션별 판매</h2><span className="muted text-[12px]">색상 · 사이즈</span></div>
@@ -321,9 +333,11 @@ export function SellerProductPage() {
       </section>
       <section className="space-y-3">
         <h2 className="text-[15px] font-bold">정산 예정</h2>
-        <InfoRow label="총 판매 금액" value={money(fee.revenue)}/>
-        <InfoRow label={`판매 수수료 (${fee.initial > 0 && fee.sold * 10 > fee.initial * 9 ? '10' : '0'}%)`} value={fee.fee > 0 ? `−${money(fee.fee)}` : '없음'}/>
-        <div className="border-t border-[var(--line)] pt-3"><InfoRow label="정산 예정 금액" value={<span className="font-number text-[16px] font-bold">{money(fee.net)}</span>} strong/></div>
+        {!USE_MOCK && <p className="muted text-[12px]">{month} 구매 확정 기준, 배송비 제외</p>}
+        <InfoRow label="구매 확정 금액" value={resultMoney(result?.gross)}/>
+        <InfoRow label={`판매 수수료 (${result?.rate ?? '-'}%)`} value={!result ? '-' : result.fee > 0 ? `−${money(result.fee)}` : '없음'}/>
+        <div className="border-t border-[var(--line)] pt-3"><InfoRow label="정산 예정 금액" value={<span className="font-number text-[16px] font-bold">{resultMoney(result?.net)}</span>} strong/></div>
+        {!USE_MOCK && settle.error && <p className="text-[12px] text-[var(--red)]">정산 금액을 불러오지 못했어요. <button type="button" className="underline" onClick={settle.reload}>다시 시도</button></p>}
       </section>
       <div className="rounded-[8px] bg-[var(--soft)] p-5 space-y-2">
         <p className="text-[13px] font-bold">구매 확정 후 D+7 영업일에 입금돼요</p>

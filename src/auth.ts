@@ -58,7 +58,11 @@ export async function flushPendingPrefs(): Promise<boolean> {
   writePending(left); return !Object.keys(left).length;
 }
 
-export async function logout() {
+let loggingOut: Promise<void> | null = null;
+export function logout(): Promise<void> {
+  return loggingOut ??= finishLogout().finally(() => { loggingOut = null; });
+}
+async function finishLogout() {
   if (!USE_MOCK) await disablePush(); // 명세: 로그아웃 전에 푸시 구독 해제(JWT 필요) 후 브라우저 unsubscribe
   try { await api.post('/v1/auth/logout', undefined, { csrf: true, auth: false }); } catch { /* 서버에 닿지 않아도 이 기기의 세션은 끝낸다 */ }
   api.setAccessToken(null);
@@ -102,6 +106,8 @@ export async function verifyCode(email: string, purpose: 'signup' | 'reset', cod
 }
 /** 로그인. 끝나면 이 계정이 처음 갈 화면(역할별)을 돌려준다 */
 export async function login(emailValue: string, password: string): Promise<string> {
+  // 이전 로그아웃의 서버 쿠키 삭제와 상태 초기화가 새 로그인보다 늦게 실행되지 않게 한다.
+  await loggingOut;
   const email = normalizeEmail(emailValue);
   if (DEMO_LOGIN) {
     const demo = getState().users.find(u => DEMO_ACCOUNT_IDS.includes(u.id) && normalizeEmail(u.email) === email);
