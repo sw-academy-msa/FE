@@ -5,8 +5,8 @@ html, body {
   overscroll-behavior: none; touch-action: manipulation;
   -webkit-text-size-adjust: 100%; text-size-adjust: 100%;
 }
-/* overflow-x와 기존 h-full 조합으로 body 내부에 세로 스크롤이 갇히지 않게 한다. */
-body { height: auto; min-height: 100%; }
+/* body가 별도 스크롤 컨테이너가 되어 sticky 구매 영역을 가두지 않게 한다. */
+body { height: auto; min-height: 100%; overflow-x: clip; }
 @media (max-width: 767px), (hover: none) and (pointer: coarse) {
   /* 아이폰 세로와 가로 화면은 채우고 데스크톱의 390px 레이아웃은 유지한다. */
   [class~="max-w-[390px]"] { max-width: 100%; }
