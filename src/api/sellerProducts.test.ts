@@ -141,10 +141,10 @@ describe('AI 분석', () => {
     expect((await requestAiAnalysis('p1', 3)).requestId).toBe('r1'); await getAiAnalysis('r1');
     expect(calls.map(sig)).toEqual(['POST /seller/products/p1/ai-analyses', 'GET /ai/product-analyses/r1']); expect(calls[0].body).toEqual({ expectedVersion: 3 });
   });
-  it('폴링: RETRY는 계속, COMPLETED면 결과, 끝내 안 오면 안내', async () => {
+  it('이전 계약 호환: failureCode 없는 PENDING, RUNNING, RETRY는 계속, COMPLETED면 결과, 끝내 안 오면 안내', async () => {
     let n = 0;
-    fake(() => (++n < 3 ? { status: n === 1 ? 'PENDING' : 'RETRY', result: null } : { status: 'COMPLETED', result: { outcome: 'RECOMMENDED', recommendedCategory: 'CLOTHING', questions: [] } }));
-    expect((await pollAiAnalysis('r1', { schedule: [0, 0, 0] })).outcome).toBe('RECOMMENDED'); expect(n).toBe(3);
+    fake(() => (++n < 4 ? { status: ['PENDING', 'RUNNING', 'RETRY'][n - 1], result: null } : { status: 'COMPLETED', result: { outcome: 'RECOMMENDED', recommendedCategory: 'CLOTHING', questions: [] } }));
+    expect((await pollAiAnalysis('r1', { schedule: [0, 0, 0, 0] })).outcome).toBe('RECOMMENDED'); expect(n).toBe(4);
     fake(() => ({ status: 'RUNNING', result: null }));
     await expect(pollAiAnalysis('r1', { schedule: [0, 0] })).rejects.toThrow('지연');
   });
