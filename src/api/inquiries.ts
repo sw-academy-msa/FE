@@ -16,9 +16,11 @@ const base = (orderId: string) => `/v1/orders/${enc(orderId)}`;
 /** 주문 문의 상세·목록 항목 → Inquiry. 상품명·판매자·수량은 응답에 없어 merge가 주문에서 채운다 */
 export function orderInquiryFromApi(d: OrderInquiryDto, userId: string): Inquiry {
   const msgs = (d.messages ?? []).map(m => ({ seller: m.seller, body: m.body, createdAt: Date.parse(m.createdAt) }));
+  // 구매자 추가 질문이 마지막이면 판매자 차례이므로 이전 답변이 있어도 답변 대기로 본다.
+  const last = msgs[msgs.length - 1];
   return {
     id: d.id, userId, sellerId: '', productId: '', orderId: d.orderId, productName: '', kind: d.category ?? '',
-    question: msgs.find(m => !m.seller)?.body ?? '', answer: [...msgs].reverse().find(m => m.seller)?.body,
+    question: msgs.find(m => !m.seller)?.body ?? '', answer: last?.seller ? last.body : undefined,
     public: false, createdAt: d.createdAt ? Date.parse(d.createdAt) : (msgs[0]?.createdAt ?? 0), messages: msgs, imageIds: d.imageIds ?? [],
   };
 }

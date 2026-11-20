@@ -39,6 +39,15 @@ describe('알림함 API', () => {
     expect(notificationPath({ targetType: 'PRODUCT', targetId: 'p 1' })).toBe('/product/p%201');
     expect(['SELLER_ORDER', 'SELLER_PRODUCT', 'SELLER_APPLICATION'].map(t => notificationPath({ targetType: t as never, targetId: 'i' }))).toEqual(['/seller/orders/i', '/seller/product/i', '/apply']);
   });
+  it('문의 알림: 구매/판매 분류와 관련 ID로 상세 경로', () => {
+    const inq = (targetType: NotificationDto['targetType'], relatedId: string | null = 'r 1') => notificationFromApi({ ...dto, type: 'X', targetType, targetId: 'q 1', relatedId });
+    expect(['PRODUCT_INQUIRY', 'ORDER_INQUIRY', 'SELLER_PRODUCT_INQUIRY', 'SELLER_ORDER_INQUIRY'].map(t => inq(t as NotificationDto['targetType']).kind)).toEqual(['구매', '구매', '판매', '판매']);
+    expect(notificationPath(inq('PRODUCT_INQUIRY'))).toBe('/inquiries/q%201?productId=r%201');
+    expect(notificationPath(inq('ORDER_INQUIRY'))).toBe('/inquiries/q%201?orderId=r%201');
+    expect(notificationPath(inq('SELLER_PRODUCT_INQUIRY'))).toBe('/seller/inquiries');
+    expect(notificationPath(inq('SELLER_ORDER_INQUIRY'))).toBe('/seller/inquiries');
+    expect(notificationPath(inq('PRODUCT_INQUIRY', null))).toBe('/inquiries');
+  });
   it('목록·개수·읽음 호출', async () => {
     const calls = fake(c => (c.url.endsWith('unread-count') ? { count: 3 } : c.method === 'PATCH' ? { changed: 1 } : { content: [dto], page: 0, size: 50, totalElements: 1 }));
     expect(await listNotifications()).toHaveLength(1); expect(await fetchUnreadCount()).toBe(3);

@@ -1060,10 +1060,10 @@ export function InquiryDetailPage() {
   // 상세 API는 주문 id가 필요하다: store에 없으면(직접 진입) 문의함에서 찾아 orderId를 얻는다
   const live = useLive(async sig => {
     // 알림은 문의뿐 아니라 관련 상품/주문 ID도 전달하므로 목록 캐시 없이 조회한다.
-    if (id && (productId || q?.productId && !q.orderId && q.sellerId !== 'stockdrop')) {
+    if (!USE_MOCK && id && (productId || q?.productId && !q.orderId && q.sellerId !== 'stockdrop')) {
       return getProductInquiry(productId || q!.productId, id, s.activeUserId, sig);
     }
-    if (id && relatedOrderId) return getOrderInquiry(relatedOrderId, id, s.activeUserId, sig);
+    if (!USE_MOCK && id && relatedOrderId) return getOrderInquiry(relatedOrderId, id, s.activeUserId, sig);
     if (q?.sellerId === 'stockdrop') return USE_MOCK || !id ? null : getMySupportInquiry(id, s.activeUserId, sig);
     if (!q && !USE_MOCK && id) {
       try { return await getMySupportInquiry(id, s.activeUserId, sig); }
