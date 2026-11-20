@@ -769,7 +769,7 @@ export function AdminProductDetailPage() {
             <ErrorBox message={error}/>
             <div className="flex gap-2">
               <Button outline className="flex-1" onClick={() => setApproveConfirm(false)} disabled={busy}>취소</Button>
-              <Button className="flex-1" disabled={busy} onClick={async () => { setBusy(true); setError(''); try { if (!USE_MOCK) { const r = await decideProductReview(p.id, p.version ?? 0, true); mutate(state => mergeProducts(state, [r])); } else mutate(state => { const item = state.products.find(x => x.id === p.id); if (item) { item.published = true; delete item.rejectionReason; } }); setApproveConfirm(false); toast('상품을 승인했습니다.'); navigate('/admin/products'); } catch (e) { setError(errorMessage(e)); } finally { setBusy(false); } }}>{busy ? '처리 중…' : <>승인하기 <Check size={16}/></>}</Button>
+              <Button className="flex-1" disabled={busy} onClick={async () => { setBusy(true); setError(''); try { if (!USE_MOCK) { const r = await decideProductReview(p.id, p.version ?? 0, true); mutate(state => mergeProducts(state, [r])); } else mutate(state => { const item = state.products.find(x => x.id === p.id); if (item) { item.published = true; item.publishedAt = nowOf(state); delete item.rejectionReason; } }); setApproveConfirm(false); toast('상품을 승인했습니다.'); navigate('/admin/products'); } catch (e) { setError(errorMessage(e)); } finally { setBusy(false); } }}>{busy ? '처리 중…' : <>승인하기 <Check size={16}/></>}</Button>
             </div>
           </div>
         </div>
