@@ -1,10 +1,11 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
-import type { ButtonHTMLAttributes, ReactNode } from 'react';
+import type { ButtonHTMLAttributes, CSSProperties, ReactNode } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Bell, Timer, X, Home, CalendarDays, Package, UserRound, ChevronRight, Info, Copy } from 'lucide-react';
 import type { Product, Order } from '../domain';
 import { money, saleState, stockTotal } from '../domain';
 import { IMAGE_EXPIRED } from '../config';
+import { FALLBACK_BANNER, FALLBACK_BG, IMAGE_START, imageView, onImageError, onImageLoad } from '../productImage';
 import { useStore } from '../store';
 const ToastContext = createContext<(message: string) => void>(() => {});
 export function ToastProvider({ children }: { children: ReactNode }) {
@@ -34,11 +35,18 @@ export function MenuRow({ label, to, children }: { label: string; to: string; ch
 const signedUrl = (u: string) => /[?&]X-Amz-(Expires|Signature)=/i.test(u);
 export function ProductImage({ src, alt, className = '' }: { src: string; alt: string; className?: string }) {
   const reported = useRef('');
+  const [st, setSt] = useState(IMAGE_START);
+  const view = imageView(src, st);
   // 서명 주소가 만료됐거나, 이 탭에서 만든 미리보기(blob:)가 새로고침으로 사라졌으면 새 주소를 받도록 알린다
-  const onError = () => { if (typeof src === 'string' && (signedUrl(src) || src.startsWith('blob:')) && reported.current !== src) { reported.current = src; window.dispatchEvent(new Event(IMAGE_EXPIRED)); } };
-  // 사진을 아직 못 받았으면 예시 상품 사진을 쓰지 않고 빈 자리만 보여 준다(내 상품 대신 다른 사진이 먼저 보이던 문제)
-  if (!src) return <div role="img" aria-label={alt} className={`block rounded-[4px] bg-[var(--soft)] ${className}`}/>;
-  return <img src={typeof src === 'string' && src.startsWith('/images/') ? `.${src}` : src} alt={alt} onError={onError} className={`block rounded-[4px] bg-[var(--blue-soft)] object-cover ${className}`} loading="lazy"/>;
+  const report = (url: string) => { if ((signedUrl(url) || url.startsWith('blob:')) && reported.current !== url) { reported.current = url; window.dispatchEvent(new Event(IMAGE_EXPIRED)); } };
+  // 배너까지 못 받으면 예전처럼 빈 자리만 보여 준다(내 상품 대신 다른 상품 사진이 보이지 않게)
+  if (view.kind === 'empty') return <div role="img" aria-label={alt} className={`block rounded-[4px] bg-[var(--soft)] ${className}`}/>;
+  // 주소가 없거나 받는 중이거나 못 받았으면 STOCKDROP 배너를 칸 크기 그대로 contain으로 보여 준다(바탕색이 배너와 같아 잘리거나 늘지 않는다)
+  const banner = view.kind === 'banner';
+  const style: CSSProperties | undefined = banner ? { objectFit: 'contain', backgroundColor: FALLBACK_BG } : view.loading ? { backgroundColor: FALLBACK_BG, backgroundImage: `url(${FALLBACK_BANNER})`, backgroundSize: 'contain', backgroundPosition: 'center', backgroundRepeat: 'no-repeat' } : undefined;
+  return <img key={view.url} src={view.url} alt={alt} data-fallback={banner ? 'banner' : view.loading ? 'loading' : undefined} style={style}
+    onLoad={() => setSt(x => onImageLoad(x, view.url))} onError={() => { if (!banner) report(view.url); setSt(x => onImageError(x, view.url)); }}
+    className={`block rounded-[4px] bg-[var(--blue-soft)] object-cover ${className}`} loading={banner ? undefined : 'lazy'}/>;
 }
 export function ProductSummary({ product, option, amount }: { product: { name: string; brand: string; image: string }; option?: ReactNode; amount?: number }) { return <div className="divider flex items-center gap-3 pb-4"><ProductImage src={product.image} alt={product.name} className="h-[86px] w-[76px] shrink-0"/><div className="min-w-0 flex-1 space-y-1.5"><p className="muted text-[10px]">{product.brand}</p><p className="text-[14px] font-semibold">{product.name}</p>{option && <div className="muted whitespace-pre-line text-[11px] leading-relaxed">{option}</div>}{amount !== undefined && <p className="font-number text-[14px] font-bold">{money(amount)}</p>}</div></div>; }
 const pad = (n: number) => String(n).padStart(2, '0');
