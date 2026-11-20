@@ -17,22 +17,27 @@ import { USE_MOCK } from '../config';
 import { CompositionInput } from '../components/CompositionInput';
 import { useNotified } from '../productAlerts';
 import { useBackgroundPush } from '../pushStatus';
+import { homePage, newestFirst, pageCount, rankByServerOrder } from '../homeList';
+import { HomePager } from '../components/HomePager';
 import type { SavedAddress } from './address';
 
 /** 홈 — 구매자 홈. 판매자 권한이 있으면 Figma "판매자 홈"처럼 판매 등록 버튼이 함께 보인다 */
 export function HomePage() {
   const s = useStore(), now = useClock(); const [params, setParams] = useSearchParams(); const [notified, toggleNotify] = useNotified();
-  // shortcut: 공개 상품을 한 번에 100개까지만 받아 기존처럼 화면에서 거른다. 상품이 많아지면 keyword·status·page를 서버 쿼리로 넘긴다
-  const live = useLive(signal => listProducts({ size: 100 }, signal), (state, r) => mergeProducts(state, r.items));
+  // shortcut: 공개 상품을 한 번에 100개까지만 받아 기존처럼 화면에서 거른다(마감 임박, 판매 종료처럼 서버 조건과 다른 필터가 있어서).
+  // 서버 기본 정렬 NEWEST(공개 승인 최신순) 응답 순서를 listRank로 보관해 새로 올라온 상품을 먼저 보여 준다. 이번 응답에 없는 상품의 예전 순위는 지운다
+  const live = useLive(signal => listProducts({ size: 100, sort: 'NEWEST' }, signal), (state, r) => { for (const x of state.products) delete x.listRank; mergeProducts(state, rankByServerOrder(r.items)); });
   const query = params.get('q') ?? '', category = params.get('category') ?? '전체', filter = params.get('state') ?? '전체';
-  const setParam = (key: string, value: string) => { const next = new URLSearchParams(params); if (!value || value === '전체') next.delete(key); else next.set(key, value); setParams(next, { replace: true }); };
+  const setParam = (key: string, value: string) => { const next = new URLSearchParams(params); if (key !== 'p') next.delete('p'); /* 검색어, 카테고리, 상태를 바꾸면 첫 페이지로 */ if (!value || value === '전체') next.delete(key); else next.set(key, value); setParams(next, { replace: true }); };
   const left = (p: Product) => stockLeft(s, p, now);
   const isUrgent = (p: Product) => saleState(p, now) === '판매 중' && p.endsAt - now <= 3_600_000 && left(p) > 0;
   // 카테고리 탭: 실제 모드는 서버 공개 카테고리(GET /categories) 이름 그대로 쓰고 상품 category와 정확히 비교한다. mock 모드는 목업 묶음(categoryGroup)
   const cats = useApi(signal => (USE_MOCK ? Promise.resolve(CATEGORIES as string[]) : listCategories(signal)), []);
   const categoryTabs = ['전체', ...(cats.data ?? []), ...(category !== '전체' && cats.data && !cats.data.includes(category) ? [category] : [])];
   const inCategory = (p: Product) => category === '전체' || (USE_MOCK ? categoryGroup(p.category) === category : p.category === category);
-  const products = s.products.filter(p => p.published && inCategory(p) &&(filter === '전체' || (filter === '마감 임박' ? isUrgent(p) : saleState(p, now) === filter)) && `${p.name} ${p.brand} ${p.category}`.toLowerCase().includes(query.toLowerCase()));
+  const products = newestFirst(s.products.filter(p => p.published && inCategory(p) &&(filter === '전체' || (filter === '마감 임박' ? isUrgent(p) : saleState(p, now) === filter)) && `${p.name} ${p.brand} ${p.category}`.toLowerCase().includes(query.toLowerCase())));
+  // 10개씩 좌우로 넘기는 페이지. 보던 페이지는 주소(p, 1부터)에 남겨 상세에 갔다 뒤로 와도 그대로
+  const page = homePage(params.get('p'), pageCount(products.length));
   const showHero = !query && category === '전체' && filter === '전체';
   const urgent = s.products.filter(p => p.published && isUrgent(p));
   const seller = signedIn(s) && !!s.users.find(u => u.id === s.activeUserId)?.seller;
@@ -49,7 +54,7 @@ export function HomePage() {
       {urgent.slice(0, 1).map(p => { const total = stockTotal(p), l = left(p); return <Link key={p.id} to={`/product/${p.id}`} className="block"><div className="relative"><ProductImage src={p.images[0]} alt={p.name} className="h-[240px] w-full"/><span className="absolute left-3 top-3 rounded-[4px] bg-[var(--urgent)] px-2 py-1 text-[11px] font-bold text-white">마감 임박</span><span className="absolute right-3 top-3 flex items-center gap-1 rounded-[4px] bg-black/75 px-2 py-1 text-[12px] font-bold tabular-nums text-white"><Timer size={13}/>{clockLeft(p.endsAt - now)} 남음</span></div><p className="mt-3 text-[12px] font-bold text-[var(--aux)]">{p.brand}</p><div className="mt-1 flex items-center justify-between"><h3 className="text-[16px]">{p.name}</h3><p className="text-[18px] font-bold">{money(p.price)}</p></div><div className="mt-2 flex items-center justify-between"><p className="text-[13px] font-bold text-[var(--urgent)]">서두르세요! {l}개 남았어요</p><p className="text-[12px] text-[var(--meta)]">{total}개 중 {total - l}개 판매</p></div><div className="mt-2 h-1 w-full rounded-full bg-[var(--line)]"><div className="h-1 rounded-full bg-[var(--urgent)]" style={{ width: `${total ? (total - l) / total * 100 : 0}%` }}/></div></Link>; })}
     </section>}
     <div className="flex items-end justify-between pt-6"><div><h2 className="text-[18px] font-bold">{query ? `검색 결과 ${products.length}개` : '새로 올라온 상품'}</h2><p className="mt-1 text-[12px] text-[var(--meta)]">의류 · 패션잡화 · 문구 · 생활잡화</p></div>{showHero && <button className="text-[12px] text-[var(--aux)]" onClick={() => setParam('state', '판매 예정')}>더보기</button>}</div>
-    {products.length ? <div className="grid grid-cols-2 gap-x-3 gap-y-6">{products.map(p => <ProductCard key={p.id} product={p} now={now} availableCount={left(p)} notified={notified.includes(p.id)} onNotify={() => toggleNotify(p.id)}/>)}</div> : live.loading || live.error ? <LiveStatus state={live}/> : <Empty title="검색 결과가 없어요" message="검색어나 카테고리를 바꿔 보세요."><Button outline onClick={() => setParams({})}>필터 초기화</Button></Empty>}
+    {products.length ? <HomePager items={products} page={page} onPage={i => setParam('p', i ? String(i + 1) : '')} render={p => <ProductCard key={p.id} product={p} now={now} availableCount={left(p)} notified={notified.includes(p.id)} onNotify={() => toggleNotify(p.id)}/>}/> : live.loading || live.error ? <LiveStatus state={live}/> : <Empty title="검색 결과가 없어요" message="검색어나 카테고리를 바꿔 보세요."><Button outline onClick={() => setParams({})}>필터 초기화</Button></Empty>}
     <p className="py-4 text-[11px] text-[var(--meta)]">미판매 새 상품만 판매합니다. 중고·전시·하자 상품은 제외돼요.</p>
     {seller && <Link to="/seller/new" className="fixed bottom-[calc(88px+env(safe-area-inset-bottom,0px))] right-[max(16px,calc(50%-179px))] z-30 flex h-12 items-center gap-2 rounded-full bg-[var(--ink)] pl-3 pr-5 text-[15px] font-bold text-white shadow-lg"><span className="grid h-6 w-6 place-items-center rounded-full bg-[var(--positive)]"><Plus size={16} strokeWidth={2.5}/></span>판매 등록</Link>}
   </div>;
@@ -323,7 +328,13 @@ export function OrderDetailPage() {
   const [confirming, setConfirming] = useState(false), [confirmAsk, setConfirmAsk] = useState(false); const toast = useToast();
   useEffect(() => { if (params.has('complete')) { const next = new URLSearchParams(params); next.delete('complete'); setParams(next, { replace: true }); } }, []);
   // 결제 직후엔 조회 모델이 아직 없어 404일 수 있다 — 구매 실패로 보지 않고 checkout에서 받은 주문을 그대로 쓴다
-  const live = useLive(async signal => { try { return await getOrder(id!, getState().activeUserId, signal); } catch (e) { if (isApiError(e) && e.status === 404) return null; throw e; } }, (st, d) => { if (d) mergeOrders(st, [d]); }, [id]);
+  // 주문 응답에는 상품 사진이 없다. 토스에서 돌아온 결제 완료처럼 새로 열린 페이지는 저장소에 상품이 없어 사진이 비므로, 상품 상세(공개)를 받아 채운다
+  const live = useLive(async signal => {
+    let d: Order | null; try { d = await getOrder(id!, getState().activeUserId, signal); } catch (e) { if (isApiError(e) && e.status === 404) d = null; else throw e; }
+    const pid = d?.productId || getState().orders.find(x => x.id === id)?.productId, has = !!getState().products.find(p => p.id === pid)?.images.length;
+    const prod = pid && !has ? await getProduct(pid, signal).catch(() => undefined) : undefined; // 사진을 못 받아도 주문은 보여 준다
+    return { d, prod };
+  }, (st, r) => { if (r.prod) mergeProducts(st, [r.prod]); if (r.d) mergeOrders(st, [r.d]); }, [id]);
   if (!o) return live.loading || live.error ? <LiveStatus state={live}/> : <Empty title="주문을 찾을 수 없어요"><Link to="/orders" className="btn">주문 목록</Link></Empty>;
   // 실제로 일어난 일만 보여 준다: 결제 → 송장 등록(배송 출발) → 판매자 배송 완료 처리
   const paidAt = o.paidAt ?? o.createdAt, doneAt = o.deliveredAt ?? o.processedAt;
@@ -331,7 +342,7 @@ export function OrderDetailPage() {
   const deliveredStr = doneAt ? `${kstSlot(doneAt)} 배송 완료` : '';
   const dispatchStr = o.dispatchDays ? `${kstDay(addBusinessDays(paidAt, o.dispatchDays))}까지 출고 예정 · 결제 후 ${o.dispatchDays}영업일 이내` : '';
   return <div className="space-y-5"><Header title={complete ? '결제 완료' : '주문 · 배송 상세'} subtitle={complete ? '배송이 곧 시작돼요' : `주문번호 ${orderNo(o.id)}`}/>{complete ? <div className="space-y-4"><CheckCircle2 size={38} className="text-[var(--green)]"/><h1 className="text-[25px] font-bold">축하해요!</h1><p className="text-[14px]">선착순 구매에 성공했어요</p>{dispatchStr && <p className="muted text-[11px]">{dispatchStr}</p>}<p className="muted text-[11px]">배송이 시작되면 알려드릴게요</p><p className="text-[13px] font-bold">배송 현황</p><DeliveryProgress status={o.status}/><section className="space-y-2 rounded-[4px] bg-[var(--blue-soft)] p-4"><h3 className="mb-2 text-[13px] font-bold">주문 정보</h3><InfoRow label="주문번호" value={orderNo(o.id)}/><InfoRow label="결제 금액" value={money(o.total)}/><InfoRow label="결제 방법" value="카드 결제"/></section><section className="space-y-2 rounded-[4px] bg-[var(--blue-soft)] p-4"><h3 className="mb-2 text-[13px] font-bold">배송지</h3><p className="text-[12px]">{o.address.name ? `${o.address.name} · ${o.address.address}` : '배송지 정보 없음'}</p></section></div> : <><h2 className="text-[24px] font-bold tracking-[-.7px]">{o.status === 'delivered' ? '배송이 완료됐어요' : o.status === 'shipping' ? '상품이 배송 중이에요' : ['cancelled', 'refunded'].includes(o.status) ? ORDER_LABELS[o.status] : o.status === 'preparing' ? '상품을 준비하고 있어요' : '결제가 완료되었어요'}</h2>{deliveredStr && <p className="muted text-[13px]">{deliveredStr}</p>}<DeliveryProgress status={o.status}/></>}
-    <ProductSummary product={o.product} option={o.lines.map(l => `${l.name} / ${l.quantity}개`).join('\n')} amount={o.lines.reduce((n, l) => n + l.quantity * o.product.price, 0)}/>
+    <ProductSummary product={{ ...o.product, image: o.product.image || s.products.find(p => p.id === o.productId)?.images[0] || '' }} option={o.lines.map(l => `${l.name} / ${l.quantity}개`).join('\n')} amount={o.lines.reduce((n, l) => n + l.quantity * o.product.price, 0)}/>
     {o.status === 'delivered' ? <Note green title={deliveredStr || '배송 완료'}><p className="mb-1">판매자가 배송 완료로 처리했어요. 상품을 받지 못했다면 판매자에게 문의해 주세요.</p>{o.tracking && <p className="mt-1">{o.carrier} · 송장 {o.tracking}</p>}{USE_MOCK && o.processedAt && <p className="muted mt-1 text-[11px]">10월 28일에 자동으로 구매 확정돼요</p>}</Note> : o.status === 'shipping' ? <Note title="상품이 이동중이에요">운송장을 조회하여 배송 현황을 확인할 수 있습니다.<br/>{o.carrier} · {o.tracking}</Note> : <Note title="판매자가 상품을 준비하고 있어요">운송장이 등록되면 배송 정보를 확인할 수 있습니다.</Note>}
     <section className="space-y-2"><h3 className="mb-3 text-[15px] font-bold">주문 및 결제 정보</h3>{o.tracking && <><InfoRow label="택배사" value={o.carrier}/><InfoRow label="운송장 번호" value={<span className="inline-flex items-center gap-1">{o.tracking}<CopyButton value={o.tracking}/></span>}/></>}<InfoRow label="상품금액" value={money(o.total - o.shipping)}/><InfoRow label="고정 배송비" value={money(o.shipping)}/><InfoRow label="최종 결제금액" value={money(o.total)} strong/><InfoRow label="결제 방법" value="카드 결제"/></section>
     <section className="divider space-y-3 py-4"><h3 className="text-[15px] font-bold">배송지</h3><p className="text-[12px]">{o.address.name} · {formatPhone(o.address.phone)}</p><p className="muted text-[12px] leading-relaxed">{o.address.address}{o.address.detail ? ` ${o.address.detail}` : ''}</p>{o.address.request && <p className="muted text-[12px]">요청사항 · {o.address.request}</p>}</section>
