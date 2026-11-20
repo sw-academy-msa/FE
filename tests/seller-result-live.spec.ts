@@ -43,6 +43,19 @@ test('구매 미확정 금액은 정산에서 제외한다', async ({ page }) =>
   await expect(page.getByText('0원', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('4,500원', { exact: true })).toHaveCount(0);
 });
+test('정산 재시도는 최신 판매 수량도 함께 받아 90% 초과 수수료를 계산한다', async ({ page }) => {
+  await mockApi(page);
+  let sold = 9, failed = true;
+  await page.route(/\/pg\/api\/v1\/seller\/products\/p1$/, route => route.fulfill({ json: { success: true, data: { id: 'p1', sellerId: 'real-seller', name: '패딩', price: 2000, shippingFee: 3000, status: 'APPROVED', startsAt: '2020-01-01T00:00:00Z', endsAt: '2020-01-01T03:00:00Z', options: [{ id: 'o1', label: '카키', initialQuantity: 10, confirmedQuantity: sold, availableQuantity: 10 - sold }], faqs: [] } } }));
+  await page.route(/\/api\/v1\/seller\/orders\/settlement(?:\?|$)/, route => route.fulfill(failed ? { status: 503, json: { code: 'TEMPORARY', message: '다시 시도' } } : { json: { success: true, data: { month: '2026-11', products: [{ productId: 'p1', amount: 20000, quantity: 10, orders: 10 }] } } }));
+  await page.goto('/#/login?next=%2Fseller%2Fproduct%2Fp1'); await signIn(page);
+  await expect(page.getByText('정산 금액을 불러오지 못했어요.', { exact: false })).toBeVisible();
+  sold = 10; failed = false;
+  await page.getByRole('button', { name: '다시 시도', exact: true }).click();
+  await expect(page.getByText('판매 수수료 (10%)', { exact: true })).toBeVisible();
+  await expect(page.getByText('−2,000원', { exact: true })).toBeVisible();
+  await expect(page.getByText('18,000원', { exact: true }).first()).toBeVisible();
+});
 test('미판매 상품은 1개 한정과 0/1개를 표시하고 완판으로 표시하지 않는다', async ({ page }) => {
   await mockApi(page, 'unsold');
   await page.goto('/#/login?next=%2Fseller%2Fproduct%2Fp1'); await signIn(page);

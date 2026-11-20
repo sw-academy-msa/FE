@@ -20,6 +20,18 @@ function setup(handler: (call: Call, n: number) => Response | Promise<Response>,
 const path = (call: Call) => call.url.replace('/api', '');
 
 describe('로그아웃 직후 재로그인 경합', () => {
+  it.each([true, false])('오류 본문 파싱 중 세션 변경 여부(%s)를 확인하고 현재 세션의 오류는 보존한다', async changed => {
+    let finish!: (value: unknown) => void;
+    const response = fail(403, 'FORBIDDEN');
+    vi.spyOn(response, 'json').mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    const { client } = setup(() => response);
+    client.setAccessToken('old');
+    const pending = client.get('/v1/accounts/me').catch(e => e);
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+    if (changed) client.setAccessToken('new');
+    finish({ code: 'FORBIDDEN', message: '거절' });
+    expect(await pending).toMatchObject(changed ? { name: 'AbortError' } : { name: 'ApiError', status: 403, code: 'FORBIDDEN' });
+  });
   it('이전 세션의 늦은 성공 응답도 새 계정의 캐시에 전달하지 않는다', async () => {
     let finish!: (res: Response) => void;
     const { client } = setup(() => new Promise<Response>(resolve => { finish = resolve; }));

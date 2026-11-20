@@ -133,17 +133,22 @@ export function SellerProductPage() {
   const sum = useApi(async signal => (USE_MOCK || !id || !user.seller ? null : getSellerOrderSummary({ productId: id }, signal)), [id]);
   const revs = useApi(async signal => (USE_MOCK || !id || !user.seller ? null : listRevisions(id, signal)), [id]);
   const month = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit' }).format(now);
-  const settle = useApi(async signal => (USE_MOCK || !id || !user.seller ? null : getSellerSettlement(month, signal)), [id, user.id, month]);
+  const settle = useApi(async signal => {
+    if (USE_MOCK || !id || !user.seller) return null;
+    const [amounts, product] = await Promise.all([getSellerSettlement(month, signal), getSellerProduct(id, signal)]);
+    return { amounts, product };
+  }, [id, user.id, month]);
   if (!user.seller) return <Unavailable/>;
   if (!p) return live.loading || live.error ? <LiveStatus state={live}/> : <Unavailable/>;
   const rev = [...(revs.data ?? [])].sort((a, b) => Date.parse(b.submittedAt) - Date.parse(a.submittedAt))[0];
   // 실제 모드: 심사 중·반려 상품은 (알림에서 /seller/product/:id로 들어와도) 심사 결과 화면을 보여 준다
   const status = saleState(p, now), fee = feeFor(s, p), published = location.pathname.includes('/published/') || (!USE_MOCK && (p.reviewStatus === 'IN_REVIEW' || p.reviewStatus === 'REJECTED'));
   const productOrders = s.orders.filter(o => o.productId === p.id && !['cancelled','refunded'].includes(o.status));
-  const totalSold = p.listQuantity?.sold ?? sum.data?.confirmedQuantity ?? fee.sold;
-  const totalStock = p.listQuantity?.total ?? p.live?.initial ?? p.options.reduce((n, o) => n + o.stock, 0);
+  const quantity = settle.data?.product.id === p.id ? settle.data.product.listQuantity : p.listQuantity;
+  const totalSold = quantity?.sold ?? sum.data?.confirmedQuantity ?? fee.sold;
+  const totalStock = quantity?.total ?? p.live?.initial ?? p.options.reduce((n, o) => n + o.stock, 0);
   const result = USE_MOCK ? { gross: fee.revenue, fee: fee.fee, net: fee.net, rate: fee.initial > 0 && fee.sold * 10 > fee.initial * 9 ? 10 : 0 }
-    : settle.data && !settle.loading && !settle.error ? productSettlement(settle.data, p.id, { total: totalStock, sold: totalSold }) : undefined;
+    : settle.data?.product.id === p.id && !settle.loading && !settle.error ? productSettlement(settle.data.amounts, p.id, { total: totalStock, sold: totalSold }) : undefined;
   const resultMoney = (amount: number | undefined) => amount === undefined ? '-' : money(amount);
 
   // 심사 대기 / 심사 승인 / 심사 반려

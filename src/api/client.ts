@@ -142,9 +142,8 @@ export function createApiClient(initial: ClientConfig = {}) {
       // 재발급이 거절됐거나(401·403 등) 재시도에도 401이면 세션 종료. 네트워크 단절·서버 오류로 재발급을 못 한 경우는 로그아웃하지 않는다
       if ((renewed || rejected) && res.status === 401) { setAccessToken(null); cfg.onSessionExpired?.(); return parse<T>(res, o.responseType); }
     }
-    const data = await parse<T>(res, o.responseType);
-    check();
-    return data;
+    try { return await parse<T>(res, o.responseType); }
+    finally { check(); }
   }
 
   return {
