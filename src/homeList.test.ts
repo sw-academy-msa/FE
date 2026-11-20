@@ -17,10 +17,10 @@ describe('홈 상품 최신순', () => {
   });
 });
 
-describe('10개씩 스와이프 페이지', () => {
-  it('한 페이지 10개, 페이지 수', () => {
-    expect(HOME_PAGE_SIZE).toBe(10);
-    expect([0, 1, 10, 11, 25].map(pageCount)).toEqual([1, 1, 1, 2, 3]);
+describe('8개씩 스와이프 페이지', () => {
+  it('한 페이지 8개(2열 4줄), 페이지 수', () => {
+    expect(HOME_PAGE_SIZE).toBe(8);
+    expect([0, 1, 8, 9, 16, 17, 25].map(pageCount)).toEqual([1, 1, 1, 2, 2, 3, 4]);
   });
   it('주소의 p(1부터) → 페이지 번호(0부터), 범위 밖이나 이상한 값은 첫 페이지 또는 마지막 페이지', () => {
     expect(homePage(null, 3)).toBe(0); expect(homePage('2', 3)).toBe(1); expect(homePage('9', 3)).toBe(2);
