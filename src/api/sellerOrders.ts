@@ -48,6 +48,13 @@ export function settlementNet(d: SellerSettlementDto, quantities: Record<string,
   const fee = d.products.reduce((n, p) => { const q = quantities[p.productId]!; return n + (q.total > 0 && q.sold * 10 > q.total * 9 ? Math.round(p.amount * 0.1) : 0); }, 0);
   return { gross: d.confirmedAmount, fee, net: d.confirmedAmount - fee };
 }
+/** 상품별 화면도 월별 구매 확정 정산 API의 상품 금액(배송비 제외)을 쓴다. */
+export function productSettlement(d: SellerSettlementDto, productId: string, quantity: { total: number; sold: number }) {
+  const gross = d.products.filter(p => p.productId === productId).reduce((n, p) => n + p.amount, 0);
+  const rate = quantity.total > 0 && quantity.sold * 10 > quantity.total * 9 ? 10 : 0;
+  const fee = rate ? Math.round(gross * 0.1) : 0;
+  return { gross, fee, net: gross - fee, rate };
+}
 
 /* ── 출고·배송 (Command) ── */
 /** GET /v1/seller/orders/{id}/fulfillment — 출고용 원본. 이 version을 shipment/delivery-completion에 넘긴다 */
