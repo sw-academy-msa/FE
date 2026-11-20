@@ -35,12 +35,18 @@ test('판매 상품 등록 단일 화면 → AI 분석 적용 → 판매 심사 
   await expect(page.getByRole('heading', { name: 'AI 상품 분석' })).toBeHidden();
   await expect(page.getByRole('button', { name: '이 카테고리로 적용' })).toHaveCount(0);
   await expect(page.getByText('패션 › 상의 › 니트/스웨터', { exact: true })).toBeVisible();
-  // AI 질문 답은 FAQ로 공개되고, 분석 뒤에 정보가 바뀌면 질문을 다시 받아야 한다는 안내가 뜬다
+  // AI 질문은 구매자 관점 질문이고 AI 예상 답변은 확인 전 초안으로 채워진다(판매자가 확인하거나 고친 답만 FAQ로 저장)
   await expect(page.getByText('분석은 선택이라 건너뛰고')).toBeVisible(); await expect(page.getByText('상품 전체가 보이는 사진과 라벨')).toBeVisible();
-  const aiAnswer = page.getByRole('textbox', { name: /AI 질문 답/ }); await expect(aiAnswer).toBeVisible(); await expect(page.getByText('이 답은 상품 FAQ로 구매자에게도 공개돼요')).toBeVisible();
-  await aiAnswer.fill('총장 68cm, 가슴 단면 56cm');
+  await expect(page.getByText(/구매자가 물어볼 만한 질문이에요/)).toBeVisible();
+  const draftAnswer = page.getByRole('textbox', { name: /AI 질문 답: 시즌 종료 재고/ }); await expect(draftAnswer).toHaveValue(/창고에 보관하던 재고/);
+  await expect(page.getByText('AI 예상 답변 · 확인 전')).toBeVisible(); await expect(page.getByText(/확인하기 전에는 저장하지 않아요/)).toBeVisible();
+  const confirm = page.getByRole('checkbox', { name: '이 답을 확인했어요' });
+  await confirm.check(); await expect(page.getByText('AI 예상 답변 · 확인 전')).toHaveCount(0); await confirm.uncheck(); await expect(page.getByText('AI 예상 답변 · 확인 전')).toBeVisible();
+  const aiAnswer = page.getByRole('textbox', { name: /AI 질문 답: 사진의 색감/ }); await expect(aiAnswer).toHaveValue(''); await expect(aiAnswer).toHaveAttribute('placeholder', /직접 답해 주세요/);
+  await aiAnswer.fill('자연광에서 찍어 실제 색과 비슷해요'); await expect(page.getByText('이 답은 상품 FAQ로 구매자에게도 공개돼요')).toBeVisible();
+  // 분석 뒤에 정보가 바뀌면 질문을 다시 받아야 한다는 안내가 뜬다
   await page.getByLabel('상품명').fill('울 블렌드 오버핏 니트 (차콜) 수정'); await expect(page.getByText('정보가 바뀌어 AI 질문을 다시 받아야 해요')).toBeVisible(); await expect(aiAnswer).toHaveCount(0);
-  await page.getByLabel('상품명').fill('울 블렌드 오버핏 니트 (차콜)'); await expect(page.getByText('정보가 바뀌어 AI 질문을 다시 받아야 해요')).toHaveCount(0); await expect(aiAnswer).toHaveValue('총장 68cm, 가슴 단면 56cm');
+  await page.getByLabel('상품명').fill('울 블렌드 오버핏 니트 (차콜)'); await expect(page.getByText('정보가 바뀌어 AI 질문을 다시 받아야 해요')).toHaveCount(0); await expect(aiAnswer).toHaveValue('자연광에서 찍어 실제 색과 비슷해요');
 
   await page.getByLabel('타 플랫폼 판매 URL').fill('coupang.com/vp/products/7348215906');
   await expect(page.getByText('http:// 또는 https://로 시작하는 주소를 입력해 주세요.')).toBeVisible();
@@ -48,7 +54,7 @@ test('판매 상품 등록 단일 화면 → AI 분석 적용 → 판매 심사 
   await expect(page.getByText('확인됨')).toBeVisible();
   // 판매처 URL은 분석 입력이 아니라, 분석 뒤에 채워도 AI 질문과 답을 그대로 쓴다
   await expect(page.getByText('정보가 바뀌어 AI 질문을 다시 받아야 해요')).toHaveCount(0);
-  await expect(page.getByRole('textbox', { name: /AI 질문 답/ })).toHaveValue('총장 68cm, 가슴 단면 56cm');
+  await expect(aiAnswer).toHaveValue('자연광에서 찍어 실제 색과 비슷해요');
   await page.getByLabel('한정 판매가').fill('49000');
   await expect(page.getByText('45% 저렴')).toBeVisible();
 
@@ -60,8 +66,8 @@ test('판매 상품 등록 단일 화면 → AI 분석 적용 → 판매 심사 
   await expect(page.getByText('50개')).toHaveCount(0);
   await expect(page.getByText('차콜 5')).toBeVisible();
 
-  // 점검 기준 입력칸은 질문 문장이 아닌 고정 표시명, AI 질문은 같은 칸 옆에
-  await expect(page.getByText('실측 사이즈(총장·가슴 단면)를 알려 주세요')).toBeVisible();
+  // 점검 기준 입력칸은 질문 문장이 아닌 고정 표시명 그대로, AI 질문은 칸과 묶지 않은 독립 목록
+  await expect(page.getByText('사진의 색감이 실제와 비슷한가요?')).toBeVisible();
   await page.getByLabel('소재·혼용률', { exact: true }).fill('울 80%');
   // 택배사·반품 배송비 → 배송 안내 글 자동 작성(교환은 지원하지 않아 교환 배송비 칸 없음)
   await page.getByLabel('택배사').selectOption('CJ대한통운'); await page.getByLabel('반품 배송비').fill('3000'); await expect(page.getByLabel('교환 배송비')).toHaveCount(0);
@@ -79,7 +85,7 @@ test('판매 상품 등록 단일 화면 → AI 분석 적용 → 판매 심사 
   expect(p.category).toBe('패션 › 상의 › 니트/스웨터');
   expect(p.brand).toBe('아틀리에 노트');
   expect(p.options).toEqual([expect.objectContaining({ name: '차콜 / S', stock: 5 })]);
-  expect(p.faqs).toEqual([expect.objectContaining({ question: '실측 사이즈(총장·가슴 단면)를 알려 주세요', answer: '총장 68cm, 가슴 단면 56cm', suggestionId: 'mock-suggestion-1' })]); // AI 질문 답은 attributes가 아니라 FAQ로
+  expect(p.faqs).toEqual([expect.objectContaining({ question: '사진의 색감이 실제와 비슷한가요?', answer: '자연광에서 찍어 실제 색과 비슷해요', suggestionId: 'mock-suggestion-2' })]); // AI 질문 답은 attributes가 아니라 FAQ로, 확인 전 AI 예상 답변은 저장하지 않는다
   expect(p.extras).toEqual([{ key: '소재·혼용률', value: '울 80%' }]); // 카테고리별 입력칸은 그대로 attributes
   expect(p.shippingNotice).toBe('CJ대한통운 / 반품 배송비 3,000원');
 });

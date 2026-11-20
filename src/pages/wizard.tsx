@@ -197,8 +197,9 @@ export function WizardPage() {
   const setExtra = (key: string, value: string) => patch({ extras: d.extras.some(e => e.key === key) ? d.extras.map(e => e.key === key ? { ...e, value } : e) : [...d.extras.filter(e => e.key.trim()), { key, value }] });
   const criteria = meta.data ? criteriaFor(meta.data, d.category) : undefined, stale = analysisStale(d), questions = stale ? [] : (d.ai.result?.questions ?? []);
   // AI 질문 답은 상품 FAQ(question=AI 질문 원문, suggestionId)로 저장한다. 카테고리별 입력칸(categoryCriteria)은 attributes 그대로
-  const aiAnswer = (suggestionId?: string) => d.faqs.find(f => f.suggestionId && f.suggestionId === suggestionId)?.answer ?? '';
-  const setAiAnswer = (q: AiQuestion, answer: string) => { const sid = q.suggestionId ?? q.question; patch({ faqs: d.faqs.some(f => f.suggestionId === sid) ? d.faqs.map(f => (f.suggestionId === sid ? { ...f, answer } : f)) : [...d.faqs, { id: `faq-${sid}`, question: q.question, answer, confirmed: true, suggestionId: sid }] }); };
+  // AI 예상 답변은 확인 전 초안(confirmed=false)으로 채워 두고, 판매자가 고치거나 확인을 체크한 답만 FAQ로 저장한다
+  const aiFaq = (q: AiQuestion) => d.faqs.find(f => f.suggestionId && f.suggestionId === (q.suggestionId ?? q.question));
+  const setAiAnswer = (q: AiQuestion, answer: string, confirmed = true) => { const sid = q.suggestionId ?? q.question; patch({ faqs: d.faqs.some(f => f.suggestionId === sid) ? d.faqs.map(f => (f.suggestionId === sid ? { ...f, answer, confirmed } : f)) : [...d.faqs, { id: `faq-${sid}`, question: q.question, answer, confirmed, suggestionId: sid }] }); };
   const color = colors[Math.min(activeColor, colors.length - 1)] ?? '';
   const colorTotal = (c: string) => axes.size ? sizes.reduce((n, sz) => n + (stock[optionKey(c, sz)] ?? 0), 0) : stock[optionKey(c, '')] ?? 0;
   const total = d.options.reduce((n, o) => n + o.stock, 0);
@@ -362,7 +363,7 @@ export function WizardPage() {
     <section data-field="state" className="space-y-2">
       <Button outline={!!Object.keys(analysisProblems(d, editing?.reviewStatus)).length} className="flex w-full items-center justify-center gap-1.5 text-[14px]!" disabled={d.ai.status === 'analyzing' || uploading} onClick={runAnalysis}><Sparkles size={15}/>{d.ai.status === 'analyzing' ? 'AI가 분석하고 있어요' : d.ai.result || d.ai.status === 'uncertain' ? 'AI 분석 다시 하기' : 'AI로 카테고리 분석하기'}</Button>
       <p className="text-[12px] text-[var(--meta)]">사진·상품명·짧은 설명·처분 사유를 입력하면 AI가 카테고리를 추천해요. 분석은 선택이라 건너뛰고 카테고리를 직접 골라도 돼요</p>
-      <ul className="space-y-1 rounded-[6px] bg-[var(--soft)] p-3 text-[12px] leading-[1.6] text-[var(--aux)]"><li>· 상품 전체가 보이는 사진과 라벨(소재·사이즈 표기) 사진을 올려 주세요</li><li>· 설명에 실측 사이즈, 소재, 구성품, 관리 방법을 적으면 AI 질문이 줄어요</li><li>· 분석 뒤에 상품명·설명·브랜드·사진 등을 바꾸면 질문을 다시 받아야 해요. 입력을 마친 뒤 분석하면 한 번에 끝나요</li></ul>
+      <ul className="space-y-1 rounded-[6px] bg-[var(--soft)] p-3 text-[12px] leading-[1.6] text-[var(--aux)]"><li>· 상품 전체가 보이는 사진과 라벨(소재·사이즈 표기) 사진을 올려 주세요</li><li>· 흠집, 사용감, 포장 상태가 잘 보이게 찍고 처분 사유를 구체적으로 적으면 AI가 구매자 질문과 예상 답변을 더 정확히 만들어요</li><li>· 분석 뒤에 상품명·설명·브랜드·사진 등을 바꾸면 질문을 다시 받아야 해요. 입력을 마친 뒤 분석하면 한 번에 끝나요</li></ul>
       <FieldError name="state"/>
     </section>
 
@@ -370,7 +371,7 @@ export function WizardPage() {
 
     {d.ai.status === 'recommended' && d.ai.result && d.ai.notice && !d.ai.noticeSeen && <div role="status" aria-label="AI 분석 반영 안내" className="space-y-2 rounded-[6px] bg-[var(--soft)] p-4">
       <p className="flex items-center gap-1.5 text-[13px] font-bold"><Sparkles size={14}/>{d.ai.notice === 'applied' ? 'AI 분석 결과를 반영했어요' : '직접 고른 카테고리는 그대로 두었어요'}</p>
-      <p className="text-[12px] leading-relaxed text-[var(--aux)]">{d.ai.notice === 'applied' ? `카테고리 ${d.ai.result.category}` : `AI 추천 카테고리는 ${d.ai.result.category}예요`}{d.ai.result.questions.length ? ` · 점검 질문 ${d.ai.result.questions.length}개를 해당 입력칸 옆에 보여 드려요` : ''}</p>
+      <p className="text-[12px] leading-relaxed text-[var(--aux)]">{d.ai.notice === 'applied' ? `카테고리 ${d.ai.result.category}` : `AI 추천 카테고리는 ${d.ai.result.category}예요`}{d.ai.result.questions.length ? ` · 구매자가 물어볼 만한 질문 ${d.ai.result.questions.length}개를 아래 AI 질문에 보여 드려요` : ''}</p>
       <div className="flex gap-3 text-[12px] font-bold">{d.ai.notice === 'kept' && <button type="button" className="underline" onClick={() => patch({ category: d.ai.result!.category, aiCategory: d.ai.result!.category, ai: { ...d.ai, notice: 'applied', noticeSeen: true } })}>AI 추천으로 바꾸기</button>}<button type="button" className="text-[var(--aux)] underline" onClick={() => patch({ ai: { ...d.ai, noticeSeen: true } })}>닫기</button></div>
     </div>}
     <section data-field="category"><Label hint="· AI 추천 또는 직접 선택">카테고리</Label>
@@ -383,7 +384,7 @@ export function WizardPage() {
       <FieldError name="category"/>
     </section>
 
-    {/* 카테고리별 점검 기준(registration-metadata categoryCriteria) → 입력칸. 값은 2단계 attributes(항목명+값)로 저장. AI 질문은 checkCode가 같은 칸 옆에 */}
+    {/* 카테고리별 점검 기준(registration-metadata categoryCriteria) → 입력칸. 값은 2단계 attributes(항목명+값)로 저장. AI 질문은 칸과 묶지 않고 아래 독립 목록 */}
     {criteria && <section className="space-y-4" data-field="attributes">
       <div><Label hint="· 심사 때 확인해요">카테고리별 상품 정보</Label><p className="mt-1 text-[12px] text-[var(--meta)]">카테고리마다 확인하는 항목이 달라요</p></div>
       {criteria.checks.map(c => { const name = attributeName(c.code); return <div key={c.code}>
@@ -393,13 +394,15 @@ export function WizardPage() {
     </section>}
 
     {questions.length > 0 && <section className="space-y-4" data-field="aiQuestions">
-      <div><Label hint="· 선택">AI 질문</Label><p className="mt-1 text-[12px] text-[var(--meta)]">AI가 분석하며 궁금했던 점이에요. 답하지 않아도 판매 심사를 요청할 수 있어요</p></div>
-      {questions.map((q, i) => <div key={q.suggestionId ?? i} className="space-y-1.5">
+      <div><Label hint="· 선택">AI 질문</Label><p className="mt-1 text-[12px] text-[var(--meta)]">구매자가 물어볼 만한 질문이에요. 답하면 상품 FAQ로 구매자에게 공개돼요. 답하지 않아도 판매 심사를 요청할 수 있어요</p></div>
+      {questions.map((q, i) => { const f = aiFaq(q), answer = f?.answer ?? '', draft = f?.confirmed === false; return <div key={q.suggestionId ?? i} className="space-y-1.5">
         <p className="flex items-start gap-1 text-[13px] font-bold"><Sparkles size={13} className="mt-[3px] shrink-0"/>{q.question}</p>
         {q.reason && <p className="text-[12px] text-[var(--meta)]">{q.reason}</p>}
-        <textarea aria-label={`AI 질문 답: ${q.question}`} className="field-line min-h-[72px] py-2" maxLength={4000} value={aiAnswer(q.suggestionId ?? q.question)} onChange={e => setAiAnswer(q, e.target.value)}/>
-        <p className="text-[11px] text-[var(--meta)]">이 답은 상품 FAQ로 구매자에게도 공개돼요</p>
-      </div>)}
+        {draft && <span className="inline-flex h-[18px] items-center rounded-[4px] bg-[var(--soft)] px-2 text-[10px] font-bold text-[var(--aux)]">AI 예상 답변 · 확인 전</span>}
+        <textarea aria-label={`AI 질문 답: ${q.question}`} className="field-line min-h-[72px] py-2" maxLength={4000} placeholder={q.suggestedAnswer ? undefined : '사진과 설명만으로는 알 수 없어 비워 두었어요. 직접 답해 주세요'} value={answer} onChange={e => setAiAnswer(q, e.target.value)}/>
+        {answer.trim() && <label className="flex items-center gap-2 text-[12px]"><input type="checkbox" checked={!draft} onChange={e => setAiAnswer(q, answer, e.target.checked)}/>이 답을 확인했어요</label>}
+        <p className="text-[11px] text-[var(--meta)]">{draft ? '확인하기 전에는 저장하지 않아요. 내용을 확인하거나 고친 뒤 체크해 주세요' : '이 답은 상품 FAQ로 구매자에게도 공개돼요'}</p>
+      </div>; })}
     </section>}
 
     <section className="space-y-3" data-field="sourceUrl">
@@ -565,7 +568,7 @@ export function AiAnalysisPage() {
       <div className="flex h-12 items-center gap-3 border-b border-[var(--line)]"><span className="grid h-5 w-5 place-items-center rounded-full border-[1.5px] border-[var(--ink)]"><span className="h-2.5 w-2.5 rounded-full bg-[var(--ink)]"/></span><span className="flex-1 text-[14px]">{r.category}</span><span className="text-[11px] font-bold text-[var(--positive)]">AI 추천</span></div>
       <button type="button" onClick={() => navigate(`/seller/new${suffix}${suffix ? '&' : '?'}pick=category`)} className="mt-3 flex items-center text-[13px] text-[var(--aux)]">다른 카테고리 직접 선택<ChevronRight size={15}/></button>
     </section>
-    {r.questions.length > 0 && <><div className="-mx-4 h-2 bg-[var(--divider)]"/><section className="space-y-3"><h2 className="text-[16px] font-bold">AI 점검 질문</h2><p className="text-[12px] text-[var(--aux)]">카테고리를 적용하면 등록 화면의 해당 입력칸 옆에도 보여요</p>{r.questions.map((q, i) => <div key={i} className="space-y-1 rounded-[6px] border border-[var(--line)] p-3.5"><p className="text-[14px] font-bold">{q.question}</p>{q.reason && <p className="text-[12px] text-[var(--aux)]">{q.reason}</p>}</div>)}</section></>}
+    {r.questions.length > 0 && <><div className="-mx-4 h-2 bg-[var(--divider)]"/><section className="space-y-3"><h2 className="text-[16px] font-bold">구매자가 물어볼 만한 질문</h2><p className="text-[12px] text-[var(--aux)]">등록 화면의 AI 질문에서 예상 답변을 확인하거나 고치면 상품 FAQ로 구매자에게 공개돼요</p>{r.questions.map((q, i) => <div key={i} className="space-y-1 rounded-[6px] border border-[var(--line)] p-3.5"><p className="text-[14px] font-bold">{q.question}</p>{q.reason && <p className="text-[12px] text-[var(--aux)]">{q.reason}</p>}{q.suggestedAnswer && <p className="text-[12px]"><span className="font-bold">AI 예상 답변</span> {q.suggestedAnswer}</p>}</div>)}</section></>}
     <div className="flex gap-2 rounded-[6px] bg-[var(--soft)] p-4"><Info size={15} className="mt-[2px] shrink-0 text-[var(--aux)]"/><p className="text-[12px] leading-[1.5] text-[var(--aux)]">AI 분석 결과는 판매 심사에서 한 번 더 확인해요.<br/>카테고리가 다르면 목록에서 바꿔 주세요.</p></div>
   </AiFrame>;
 }
