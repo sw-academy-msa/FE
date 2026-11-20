@@ -14,6 +14,7 @@ export interface Product {
   dispatchDays: number; startsAt: number; endsAt: number; published: boolean; options: Option[];
   dimensions: Dimension[]; extras: Extra[]; reason: string; faqs: Faq[]; rejectionReason?: string;
   /** 택배사·반품/교환 배송비 안내문(서버 shippingNotice, ≤4000자) */ shippingNotice?: string;
+  /** 공개 상품 상세의 구매 안내 */ purchaseNotice?: string;
   /** 판매 시작 알림 신청 인원 — 백엔드 요청 필드 (docs/backend-api-requests.md) */ notifySubscribers?: number;
   /** 선착순 마감(완판) 시각 — 백엔드 요청 필드 */ soldOutAt?: number;
   /** 판매에 참여(구매 시도)한 인원 — 백엔드 요청 필드 */ participants?: number;

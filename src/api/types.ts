@@ -108,6 +108,6 @@ export interface ProductImageMetaDto { id: string; objectKey: string; contentTyp
 /* ── AI ── */
 export interface AiAnalysisAcceptedDto { requestId: string; productId: string; fingerprint: string; completed: boolean }
 export interface AiAnalysisDto {
-  requestId: string; productId: string; productVersion: number; fingerprint: string; status: 'PENDING' | 'RUNNING' | 'RETRY' | 'COMPLETED'; attempts: number; nextAttemptAt: Iso | null;
+  requestId: string; productId: string; productVersion: number; fingerprint: string; status: 'PENDING' | 'RUNNING' | 'RETRY' | 'COMPLETED' | 'FAILED'; attempts: number; nextAttemptAt: Iso | null; failureCode?: string | null;
   result: null | { requestId: string; productId: string; sellerId: string; fingerprint: string; outcome: 'RECOMMENDED' | 'NOT_APPLICABLE' | 'UNCLEAR'; recommendedCategory: string | null; questions: { suggestionId: string; /** 점검 항목에 묶던 이전 결과에만 있다(새 결과는 null) */ checkCode?: string | null; question: string; reason: string; /** AI 예상 답변 초안(근거가 없으면 null) */ suggestedAnswer?: string | null }[] };
 }

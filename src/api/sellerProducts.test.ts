@@ -23,6 +23,11 @@ afterEach(() => api.configure({ fetch: undefined }));
 const sig = (c: Call) => `${c.method} ${c.url.replace(/^(\/pg)?\/api\/v1/, '')}`;
 
 describe('변환', () => {
+  it('FAILED 분석은 지연 대기하지 않고 즉시 실패로 끝난다', async () => {
+    const calls = fake(() => ({ status: 'FAILED', attempts: 5, nextAttemptAt: null, result: null }));
+    await expect(pollAiAnalysis('failed', { schedule: [0, 0] })).rejects.toThrow('분석에 실패');
+    expect(calls).toHaveLength(1);
+  });
   it('SellerProduct → Product (null은 빈 값, 승인만 published, 반려 사유, version·심사 상태 보관)', () => {
     const p = sellerProductFromApi(dto({ status: 'REJECTED', version: 4, name: '상품', brandOrStore: '스토어', price: 1000, startsAt: '2030-01-01T00:00:00Z', reviewReason: '가격 오류',
       options: [{ id: 'o1', label: '크림 / S', initialQuantity: 5, reservedQuantity: 0, confirmedQuantity: 0, availableQuantity: 5, selections: {} }], optionDimensions: [{ name: '색상', values: ['크림', '네이비'] }], attributes: [{ name: '소재', value: '면' }] }));
