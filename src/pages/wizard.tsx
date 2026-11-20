@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { CompositionInput } from '../components/CompositionInput';
 import type { ReactNode } from 'react';
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, Calendar, Check, ChevronDown, ChevronRight, Hash, Image as ImageIcon, Info, Link2, Minus, Package, Plus, ShieldCheck, Sparkles, Timer } from 'lucide-react';
@@ -351,7 +352,7 @@ export function WizardPage() {
       <FieldError name="images"/>
     </section>
 
-    <section data-field="name"><Label hint={revision ? '· 승인 후 변경 불가' : '· 필수'}>상품명</Label><input aria-label="상품명" className="field-line" readOnly={revision} value={d.name} maxLength={50} onChange={e => patch({ name: e.target.value })} placeholder="상품명을 입력해 주세요"/><FieldError name="name"/></section>
+    <section data-field="name"><Label hint={revision ? '· 승인 후 변경 불가' : '· 필수'}>상품명</Label><CompositionInput aria-label="상품명" className="field-line" readOnly={revision} value={d.name} maxLength={50} onValueChange={value => patch({ name: value })} placeholder="상품명을 입력해 주세요"/><FieldError name="name"/></section>
 
     {/* AI 분석·심사 제출에 필요한 값(단계 저장 땐 선택). 비워 두면 보내지 않는다 — 임의 문구로 채우지 않는다. Figma에 추가할 칸 */}
     <section data-field="description"><Label hint="· 필수 · 한두 줄이면 돼요">짧은 설명</Label><textarea aria-label="짧은 설명" rows={2} className="field-line min-h-[64px] resize-y" value={d.description} maxLength={20000} onChange={e => patch({ description: e.target.value })} placeholder="예: 새 상품, 택 그대로, 박스 없음"/><FieldError name="description"/></section>
@@ -398,7 +399,7 @@ export function WizardPage() {
 
     <section className="space-y-3" data-field="sourceUrl">
       <div><Label hint="· 필수">타 플랫폼 판매 URL</Label><p className="mt-1 text-[12px] text-[var(--meta)]">쿠팡·알리 등에서 판매 중인 같은 상품의 링크</p></div>
-      <label className="flex h-12 items-center gap-2 border-b border-[var(--line)]"><Link2 size={17} className="shrink-0 text-[var(--aux)]"/><input aria-label="타 플랫폼 판매 URL" className="min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-[var(--placeholder)]" value={d.originalUrl} placeholder="https://" onChange={e => patch({ originalUrl: e.target.value, reference: lookupReference(e.target.value) /* TODO(api-gap): 타 플랫폼 가격 조회 API 없음(목업) */ })}/></label>
+      <label className="flex h-12 items-center gap-2 border-b border-[var(--line)]"><Link2 size={17} className="shrink-0 text-[var(--aux)]"/><CompositionInput aria-label="타 플랫폼 판매 URL" className="min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-[var(--placeholder)]" value={d.originalUrl} placeholder="https://" onValueChange={value => patch({ originalUrl: value, reference: lookupReference(value) /* TODO(api-gap): 타 플랫폼 가격 조회 API 없음(목업) */ })}/></label>
       {reference && <div className="flex items-center gap-3 rounded-[6px] bg-[var(--soft)] p-3">{reference.image && <ProductImage src={reference.image} alt={reference.title} className="h-12 w-12 shrink-0"/>}<div className="min-w-0 flex-1"><p className="text-[11px] font-bold text-[var(--meta)]">{reference.platform}</p><p className="truncate text-[13px]">{reference.title}</p><p className="text-[14px] font-bold">{money(reference.price)}</p></div><span className="flex shrink-0 items-center gap-1 text-[12px] font-bold text-[var(--positive)]"><Check size={14}/>확인됨</span></div>}
       {(d.extraUrls ?? []).map((url, i) => <label key={i} className="flex h-12 items-center gap-2 border-b border-[var(--line)]"><Link2 size={17} className="shrink-0 text-[var(--aux)]"/><input aria-label={`추가 URL ${i + 1}`} className="min-w-0 flex-1 bg-transparent text-[15px] outline-none" value={url} placeholder="https://" onChange={e => patch({ extraUrls: (d.extraUrls ?? []).map((u, j) => j === i ? e.target.value : u) })}/></label>)}
       <button type="button" onClick={() => patch({ extraUrls: [...(d.extraUrls ?? []), ''] })} className="flex items-center gap-1 text-[13px] text-[var(--aux)]"><Plus size={14}/>다른 플랫폼 URL 추가</button>
@@ -522,7 +523,7 @@ function CategoryPicker({ value, recommended, onClose, onSave }: { value: string
   const radio = (path: string) => <label key={path} className="divider flex items-center gap-3 py-3 text-[13px]"><input type="radio" name="category" value={path} checked={pick === path} onChange={() => setPick(path)}/>{path}</label>;
   const row = (label: string, count: number, onClick: () => void) => <button key={label} type="button" onClick={onClick} className="divider flex w-full items-center justify-between py-3 text-left text-[14px]"><span>{label} <span className="muted text-[12px]">{count}</span></span><ChevronRight size={16}/></button>;
   return <Modal title="카테고리 선택" onClose={onClose}><div className="space-y-1">
-    <input aria-label="카테고리 검색" className="field-line" value={q} onChange={e => setQ(e.target.value)} placeholder="카테고리 이름으로 찾기 (전체에서 검색)"/>
+      <CompositionInput aria-label="카테고리 검색" className="field-line" value={q} onValueChange={setQ} placeholder="카테고리 이름으로 찾기 (전체에서 검색)"/>
     <LiveStatus state={meta}/>
     {recommended && !searching && <button type="button" onClick={() => onSave(recommended)} className="mt-2 flex w-full items-center justify-between rounded-[6px] bg-[var(--soft)] p-3 text-left"><span><span className="block text-[11px] font-bold text-[var(--positive)]">AI 추천</span><span className="text-[14px] font-bold">{recommended}</span></span><span className="text-[12px]">바로 선택</span></button>}
     {!searching && (m || g) && <div className="flex items-center gap-1 pt-2 text-[12px]"><button type="button" aria-label="이전 단계" className="muted" onClick={() => (g ? setGroup(null) : setMajor(null))}><ArrowLeft size={16}/></button><span className="muted">{m!.name}{g ? ` › ${g.label}` : ''}</span></div>}
