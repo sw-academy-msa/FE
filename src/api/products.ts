@@ -31,6 +31,7 @@ export function productFromApi(d: ProductDetailDto): Product {
   return {
     id: d.id, sellerId: d.sellerId, name: d.name, brand: d.brandOrStore, category: d.category, description: d.description ?? '', images, originalUrl: d.sourceUrl ?? '',
     price: d.price, shipping: d.shippingFee, maxPerAccount: d.perAccountLimit, dispatchDays: d.dispatchBusinessDays,
+    shippingNotice: d.shippingNotice ?? undefined, purchaseNotice: d.purchaseNotice ?? undefined,
     startsAt: Date.parse(d.startsAt), endsAt: Date.parse(d.endsAt), published: true,
     options: (d.options ?? []).map(optionFromApi),
     dimensions: (d.dimensions ?? []).map(x => ({ name: x.name, values: (x.values ?? []).join(', ') })),
