@@ -23,6 +23,11 @@ afterEach(() => api.configure({ fetch: undefined }));
 const sig = (c: Call) => `${c.method} ${c.url.replace(/^(\/pg)?\/api\/v1/, '')}`;
 
 describe('변환', () => {
+  it.each([null, 'AI_ANALYSIS_ATTEMPTS_EXHAUSTED', 'AI_NOT_FOUND'])('FAILED 분석은 오류 코드 %s에서도 즉시 실패로 끝난다', async (failureCode) => {
+    const calls = fake(() => ({ status: 'FAILED', failureCode, attempts: 5, nextAttemptAt: null, result: null }));
+    await expect(pollAiAnalysis('failed', { schedule: [0, 0] })).rejects.toThrow('분석에 실패');
+    expect(calls).toHaveLength(1);
+  });
   it('SellerProduct → Product (null은 빈 값, 승인만 published, 반려 사유, version·심사 상태 보관)', () => {
     const p = sellerProductFromApi(dto({ status: 'REJECTED', version: 4, name: '상품', brandOrStore: '스토어', price: 1000, startsAt: '2030-01-01T00:00:00Z', reviewReason: '가격 오류',
       options: [{ id: 'o1', label: '크림 / S', initialQuantity: 5, reservedQuantity: 0, confirmedQuantity: 0, availableQuantity: 5, selections: {} }], optionDimensions: [{ name: '색상', values: ['크림', '네이비'] }], attributes: [{ name: '소재', value: '면' }] }));
@@ -136,10 +141,10 @@ describe('AI 분석', () => {
     expect((await requestAiAnalysis('p1', 3)).requestId).toBe('r1'); await getAiAnalysis('r1');
     expect(calls.map(sig)).toEqual(['POST /seller/products/p1/ai-analyses', 'GET /ai/product-analyses/r1']); expect(calls[0].body).toEqual({ expectedVersion: 3 });
   });
-  it('폴링: RETRY는 계속, COMPLETED면 결과, 끝내 안 오면 안내', async () => {
+  it('이전 계약 호환: failureCode 없는 PENDING, RUNNING, RETRY는 계속, COMPLETED면 결과, 끝내 안 오면 안내', async () => {
     let n = 0;
-    fake(() => (++n < 3 ? { status: n === 1 ? 'PENDING' : 'RETRY', result: null } : { status: 'COMPLETED', result: { outcome: 'RECOMMENDED', recommendedCategory: 'CLOTHING', questions: [] } }));
-    expect((await pollAiAnalysis('r1', { schedule: [0, 0, 0] })).outcome).toBe('RECOMMENDED'); expect(n).toBe(3);
+    fake(() => (++n < 4 ? { status: ['PENDING', 'RUNNING', 'RETRY'][n - 1], result: null } : { status: 'COMPLETED', result: { outcome: 'RECOMMENDED', recommendedCategory: 'CLOTHING', questions: [] } }));
+    expect((await pollAiAnalysis('r1', { schedule: [0, 0, 0, 0] })).outcome).toBe('RECOMMENDED'); expect(n).toBe(4);
     fake(() => ({ status: 'RUNNING', result: null }));
     await expect(pollAiAnalysis('r1', { schedule: [0, 0] })).rejects.toThrow('지연');
   });

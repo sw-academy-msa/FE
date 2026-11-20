@@ -14,6 +14,9 @@ const detail: ProductDetailDto = {
   stock: { initialQuantity: 10, confirmedQuantity: 10, availableQuantity: 0, approximate: true }, metadata: { version: 1, occurredAt: '2030-01-01T00:59:58Z', projectedAt: '2030-01-01T00:59:59Z' },
 };
 describe('공개 상품 → Product', () => {
+  it('배송과 구매 안내를 판매 전에도 보존한다', () => {
+    expect(productFromApi({ ...detail, status: 'UPCOMING', shippingNotice: '배송 안내', purchaseNotice: '구매 안내' })).toMatchObject({ shippingNotice: '배송 안내', purchaseNotice: '구매 안내' });
+  });
   it('화면이 쓰는 형태로 변환한다 (이미지 정렬·URL 없는 이미지 제외, 시각은 ms)', () => {
     const p = productFromApi(detail);
     expect(p).toMatchObject({ id: 'p1', brand: '테스트 스토어', originalUrl: 'https://store.example.invalid/p', shipping: 3000, maxPerAccount: 2, dispatchDays: 3, reason: '시즌 종료', published: true });

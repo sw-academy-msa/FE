@@ -110,13 +110,16 @@ export function useCloseOnBack(onClose: () => void, restoreOnUnmount = true) {
 }
 export function Modal({ title, children, onClose, restoreOnUnmount = true }: { title: string; children: ReactNode; onClose: () => void; restoreOnUnmount?: boolean }) {
   const ref = useRef<HTMLDialogElement>(null); useCloseOnBack(onClose, restoreOnUnmount);
+  const close = useRef(onClose); close.current = onClose;
   useEffect(() => {
-    const node = ref.current!; node.showModal();
+    const node = ref.current!, previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null; node.showModal();
     const roots = [document.documentElement, document.body].map(element => ({ element, locked: element.classList.contains('overflow-hidden') }));
     roots.forEach(({ element }) => element.classList.add('overflow-hidden'));
-    return () => { node.close(); roots.forEach(({ element, locked }) => { if (!locked) element.classList.remove('overflow-hidden'); }); };
+    const outside = (event: PointerEvent) => { const r = node.getBoundingClientRect(); if (node.open && (event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom)) close.current(); };
+    document.addEventListener('pointerdown', outside, true);
+    return () => { document.removeEventListener('pointerdown', outside, true); node.close(); roots.forEach(({ element, locked }) => { if (!locked) element.classList.remove('overflow-hidden'); }); if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true }); };
   }, []);
-  return <dialog ref={ref} aria-label={title} onCancel={event => { event.preventDefault(); onClose(); }} onClick={event => { if (event.target === event.currentTarget) onClose(); }} className="fixed inset-x-0 bottom-0 top-auto m-0 mx-auto max-h-[92dvh] w-full max-w-[390px] overflow-y-auto rounded-t-[16px] border-0 bg-[var(--surface)] p-5 pb-[max(20px,env(safe-area-inset-bottom))] text-[var(--ink)] backdrop:bg-[var(--overlay)]"><div className="mx-auto mb-5 h-1 w-9 rounded-full bg-[var(--line)]"/><div className="mb-5 flex items-center justify-between gap-4"><h2 className="text-[18px] font-bold">{title}</h2><button aria-label="닫기" onClick={onClose} className="grid h-9 w-9 shrink-0 place-items-center"><X size={20}/></button></div>{children}</dialog>;
+  return <dialog ref={ref} aria-label={title} aria-modal="true" onCancel={event => { event.preventDefault(); onClose(); }} className="fixed inset-x-0 bottom-0 top-auto m-0 mx-auto max-h-[92dvh] w-full max-w-[390px] overflow-y-auto rounded-t-[16px] border-0 bg-[var(--surface)] p-5 pb-[max(20px,env(safe-area-inset-bottom))] text-[var(--ink)] backdrop:bg-[var(--overlay)]"><div className="mx-auto mb-5 h-1 w-9 rounded-full bg-[var(--line)]"/><div className="mb-5 flex items-center justify-between gap-4"><h2 className="min-w-0 break-words text-[18px] font-bold">{title}</h2><button aria-label="닫기" onClick={onClose} className="grid h-9 w-9 shrink-0 place-items-center"><X size={20}/></button></div>{children}</dialog>;
 }
 /** 하단 탭으로 들어온 화면인지 — 탭으로 열면 Figma대로 뒤로 가기 없음, 마이페이지·결제 완료·알림 등에서 열면 뒤로 가기 */
 export const useFromTab = () => !!(useLocation().state as { tab?: boolean } | null)?.tab;

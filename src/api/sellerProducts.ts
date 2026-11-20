@@ -212,11 +212,17 @@ const sleep = (t: number) => new Promise(r => setTimeout(r, t));
 export const AI_POLL_MS = [...Array<number>(30).fill(2000), ...Array<number>(24).fill(5000)];
 /** 3분이 지나도 끝나지 않음 — 실패가 아니다(서버는 계속 분석한다). 화면은 "다시 확인"을 보여 준다 */
 export class AiDelayedError extends Error { constructor() { super('분석이 지연되고 있어요. 나중에 다시 확인해 주세요.'); this.name = 'AiDelayedError'; } }
-/** 완료(COMPLETED)까지 폴링. 상태: PENDING 대기 · RUNNING 처리 중 · RETRY 서버가 nextAttemptAt에 자동 재시도(실패 아님) · COMPLETED. FAILED는 없다. 이벤트 지연으로 생기는 404 AI_NOT_FOUND는 재시도한다 */
+/** COMPLETED까지 폴링하고 FAILED는 즉시 종료한다. RETRY는 서버 재시도 중이며 AI_NOT_FOUND는 조회 모델 반영을 기다린다. */
 export async function pollAiAnalysis(requestId: string, o: { schedule?: number[]; signal?: AbortSignal; onProgress?: (r: Pick<AiAnalysisDto, 'status' | 'attempts' | 'nextAttemptAt'>) => void; sleep?: (ms: number) => Promise<unknown> } = {}): Promise<NonNullable<AiAnalysisDto['result']>> {
   for (const wait of o.schedule ?? AI_POLL_MS) {
-    try { const r = await getAiAnalysis(requestId, o.signal); o.onProgress?.(r); if (r.status === 'COMPLETED' && r.result) return r.result; }
+    let r: AiAnalysisDto | undefined;
+    try { r = await getAiAnalysis(requestId, o.signal); }
     catch (e) { if (!(e instanceof ApiError && e.code === 'AI_NOT_FOUND')) throw e; }
+    if (r) {
+      o.onProgress?.(r);
+      if (r.status === 'FAILED') throw new ApiError('AI 분석에 실패했어요. 다시 분석해 주세요.', 0, r.failureCode ?? 'AI_ANALYSIS_FAILED');
+      if (r.status === 'COMPLETED' && r.result) return r.result;
+    }
     await (o.sleep ?? sleep)(wait);
   }
   throw new AiDelayedError();
