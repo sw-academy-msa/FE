@@ -34,7 +34,8 @@ describe('문의 API', () => {
   it('상품 문의 단건: 없으면 다시 시도 안내 오류', async () => {
     const calls = fake(() => ({ items: [], totalPages: 0 }));
     await expect(getProductInquiry('pr', 'none', 'u')).rejects.toThrow('잠시 후 다시 시도');
-    expect(calls).toHaveLength(1);
+    await expect(getProductInquiry('pr', 'none', 'u')).rejects.toMatchObject({ status: 404 }); // 조회 모델 미반영: retryProjection 재시도 대상
+    expect(calls).toHaveLength(2);
   });
   it('상품 문의: 조회는 items, 등록은 body {question}', async () => {
     const calls = fake(c => (c.method === 'GET' ? { items: [{ id: 'p1', question: 'q', answer: null, createdAt: '2026-01-01T00:00:00Z', answeredAt: null }] } : { id: 'p2', question: 'x', answer: null, createdAt: '2026-01-01T00:00:00Z', answeredAt: null }));

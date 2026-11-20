@@ -4,7 +4,7 @@ import { BankField } from '../components/BankField';
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Plus, Check, ChevronRight, FileText, Info, Rocket, ScanSearch, Share2, Truck } from 'lucide-react';
-import { activeUser, feeFor, formatPhone, markDelivered, maskName, money, nowOf, orderNo, parseRejection, saleState, uid } from '../domain';
+import { activeUser, feeFor, formatPhone, markDelivered, maskName, money, nowOf, orderNo, parseRejection, saleState, salesSoldOut, uid } from '../domain';
 import type { Order, Product, SellerSettings } from '../domain';
 import { atomic, mutate, useStore } from '../store';
 import { endSession } from '../auth';
@@ -52,7 +52,7 @@ export function SellerSalesPage() {
       {orders.error && <p className="text-[12px] text-[var(--red)]">주문 집계를 불러오지 못했어요. <button type="button" className="font-bold underline" onClick={orders.reload}>다시 시도</button></p>}
     </section>
     <section className="space-y-2"><h2 className="text-[15px] font-bold">지금 판매 중</h2>
-      {onSale.map(p => <Link key={p.id} to={`/seller/product/${p.id}`} className="divider flex items-center justify-between gap-3 py-3"><span className="min-w-0 flex-1 truncate text-[14px]">{p.name}</span><span className="muted shrink-0 text-[12px]">{clockLeft(p.endsAt - now)} 남음 ›</span></Link>)}
+      {onSale.map(p => <Link key={p.id} to={`/seller/product/${p.id}`} className="divider flex items-center justify-between gap-3 py-3"><span className="min-w-0 flex-1 truncate text-[14px]">{p.name}</span><span className="muted shrink-0 text-[12px]">{salesSoldOut(p.listQuantity) ? '완판 ›' : `${clockLeft(p.endsAt - now)} 남음 ›`}</span></Link>)}
       {!onSale.length && !live.loading && <p className="muted py-3 text-[12px]">지금 판매 중인 상품이 없어요.</p>}
     </section>
   </div>;
@@ -74,8 +74,8 @@ export function SellerProductsPage() {
   const qtyOf = (p: Product) => { const localSold = s.orders.filter(o => o.productId === p.id && !['cancelled','refunded'].includes(o.status)).reduce((n, o) => n + o.lines.reduce((a, l) => a + l.quantity, 0), 0);
     return p.listQuantity ? { total: p.listQuantity.total, sold: Math.max(p.listQuantity.sold, localSold) } : { total: p.options.reduce((n, o) => n + o.stock, 0), sold: localSold }; };
   if (!user.seller) return <Unavailable/>; const settings = s.sellerSettings[user.id]; const allProducts = s.products.filter(p => p.sellerId === user.id); const products = allProducts.filter(p => tab === '전체' || (tab === '판매 심사 중' ? p.reviewStatus === 'IN_REVIEW' : saleState(p, now) === tab)); const thisMonth = summary.data?.confirmedQuantity ?? s.orders.filter(o => o.sellerId === user.id && !['cancelled','refunded'].includes(o.status)).reduce((n, o) => n + o.lines.reduce((a, l) => a + l.quantity, 0), 0); const alarmCount = 226; /* TODO(api-gap): 알림 신청 인원 API 없음(목업) */ const endedCount = allProducts.filter(p => saleState(p, now) === '판매 종료').length;
-  // 완판: 한정 수량을 모두 판 종료 상품(목록 요약의 판매 수량 기준)
-  const soldOutCount = allProducts.filter(p => { const q = qtyOf(p); return saleState(p, now) === '판매 종료' && q.total > 0 && q.sold >= q.total; }).length;
+  // 완판: 한정 수량을 모두 판 상품(목록 요약의 판매 수량 기준). 판매 종료 시간 전에 다 팔린 판매 중 상품도 센다
+  const soldOutCount = allProducts.filter(p => { const st = saleState(p, now); return (st === '판매 종료' || st === '판매 중') && salesSoldOut(p.listQuantity ?? qtyOf(p)); }).length;
   const chips: [string, number][] = [['전체', allProducts.length], ['판매 중', allProducts.filter(p => saleState(p, now) === '판매 중').length], ['판매 예정', allProducts.filter(p => saleState(p, now) === '판매 예정').length], ['판매 심사 중', allProducts.filter(p => p.reviewStatus === 'IN_REVIEW').length], ['판매 종료', endedCount]];
   return <div className="space-y-0">
     <Header title="판매 상품 관리" backTo="/my" action={<Link to="/seller/new" aria-label="상품 등록"><Plus size={22}/></Link>}/>
@@ -84,18 +84,19 @@ export function SellerProductsPage() {
     <div className="mb-4 flex justify-around rounded-[4px] bg-[var(--canvas)] py-4">{([['이번 달 판매', `${thisMonth}개`], ...(USE_MOCK ? [['알림 신청', `${alarmCount}명`]] : []), ['완판', `${soldOutCount}건`]] as [string,string][]).map(([label, value]) => <div key={label} className="text-center"><p className="font-number text-[16px] font-bold">{value}</p><p className="muted mt-1 text-[11px]">{label}</p></div>)}</div>
     <div className="-mx-4 mb-2 flex gap-1.5 overflow-x-auto px-4">{chips.map(([label, count]) => <button key={label} onClick={() => setParams(label === '전체' ? {} : { state: label }, { replace: true })} className={`h-[30px] shrink-0 rounded-[4px] px-2.5 text-[12px] ${tab === label ? 'bg-[var(--ink)] font-bold text-[var(--surface)]' : 'muted bg-[var(--soft)]'}`}>{label} {count}</button>)}</div>
     {products.map(p => {
-      const status = saleState(p, now); const { total, sold } = qtyOf(p); const remaining = Math.max(0, total - sold); const isLive = status === '판매 중', ended = status === '판매 종료'; const secondsLeft = Math.max(0, Math.floor((p.endsAt - now) / 1000)); const hh = String(Math.floor(secondsLeft/3600)).padStart(2,'0'), mm = String(Math.floor(secondsLeft%3600/60)).padStart(2,'0'), ss = String(secondsLeft%60).padStart(2,'0');
+      // 판매 종료 시간 전이라도 완판(한정 수량 전부 결제 확정)이면 남은 시간을 멈추고 결과로 보인다. 판정은 서버 확정 수량(목록 요약)을 우선한다: 이 기기의 주문은 서버에서 취소·환불돼도 남아 있을 수 있다
+      const status = saleState(p, now); const { total, sold } = qtyOf(p); const remaining = Math.max(0, total - sold); const onSaleTime = status === '판매 중', soldOut = (onSaleTime || status === '판매 종료') && salesSoldOut(p.listQuantity ?? { total, sold }); const isLive = onSaleTime && !soldOut, ended = status === '판매 종료' || soldOut; const secondsLeft = Math.max(0, Math.floor((p.endsAt - now) / 1000)); const hh = String(Math.floor(secondsLeft/3600)).padStart(2,'0'), mm = String(Math.floor(secondsLeft%3600/60)).padStart(2,'0'), ss = String(secondsLeft%60).padStart(2,'0');
       return <div key={p.id} className="divider space-y-3 py-4">
         <div className="flex gap-3">
           <ProductImage src={p.images[0]} alt={p.name} className="h-[72px] w-[72px] shrink-0"/>
           <div className="min-w-0 flex-1 space-y-1">
-            <div className="flex items-center gap-2"><span className={`rounded-[3px] px-2 py-0.5 text-[11px] font-bold ${isLive ? 'bg-[#EEF8F3] text-[#3FB181]' : !USE_MOCK && p.reviewStatus === 'REJECTED' ? 'bg-[var(--red-soft)] text-[var(--red)]' : 'bg-[var(--soft)] text-[var(--muted)]'}`}>{isLive ? '판매 중' : status === '게시 전' && !USE_MOCK && p.reviewStatus ? REVIEW_LABEL[p.reviewStatus] : status}</span>{revStatus.data?.[p.id]?.status === 'IN_REVIEW' && <span className="rounded-[3px] bg-[#FFF3E0] px-2 py-0.5 text-[11px] font-bold text-[#B25E09]">수정 심사 중</span>}{revStatus.data?.[p.id]?.status === 'REJECTED' && <span className="rounded-[3px] bg-[var(--red-soft)] px-2 py-0.5 text-[11px] font-bold text-[var(--red)]">수정 반려</span>}<span className="muted text-[11px] font-bold">{isLive ? `오늘 ${hm(p.startsAt)} – ${hm(p.endsAt)}` : ended ? `${md(p.endsAt)} ${hm(p.endsAt)} 종료` : `${md(p.startsAt)} ${hm(p.startsAt)} 오픈`}</span></div>
+            <div className="flex items-center gap-2"><span className={`rounded-[3px] px-2 py-0.5 text-[11px] font-bold ${isLive ? 'bg-[#EEF8F3] text-[#3FB181]' : !USE_MOCK && p.reviewStatus === 'REJECTED' ? 'bg-[var(--red-soft)] text-[var(--red)]' : 'bg-[var(--soft)] text-[var(--muted)]'}`}>{isLive ? '판매 중' : soldOut ? '완판' : status === '게시 전' && !USE_MOCK && p.reviewStatus ? REVIEW_LABEL[p.reviewStatus] : status}</span>{revStatus.data?.[p.id]?.status === 'IN_REVIEW' && <span className="rounded-[3px] bg-[#FFF3E0] px-2 py-0.5 text-[11px] font-bold text-[#B25E09]">수정 심사 중</span>}{revStatus.data?.[p.id]?.status === 'REJECTED' && <span className="rounded-[3px] bg-[var(--red-soft)] px-2 py-0.5 text-[11px] font-bold text-[var(--red)]">수정 반려</span>}<span className="muted text-[11px] font-bold">{onSaleTime ? `오늘 ${hm(p.startsAt)} – ${hm(p.endsAt)}` : ended ? `${md(p.endsAt)} ${hm(p.endsAt)} 종료` : `${md(p.startsAt)} ${hm(p.startsAt)} 오픈`}</span></div>
             <p className="text-[14px]">{p.name}</p>
             <p className="font-number text-[15px] font-bold">{money(p.price)} <span className="muted text-[12px] font-normal">{total}개 한정</span></p>
           </div>
         </div>
         {isLive && <><div className="flex items-center justify-between text-[12px]"><span className="font-bold">{sold} / {total}개 판매</span><span className="muted">{hh}:{mm}:{ss} 남음</span></div><div className="h-1 w-full rounded-full bg-[var(--line)]"><div className="h-1 rounded-full bg-[var(--ink)]" style={{width: total > 0 ? `${(sold/total)*100}%` : '0%'}}/></div></>}
-        {ended && <><div className="flex items-center justify-between text-[12px]"><span className="font-bold">{sold} / {total}개 판매</span><span className="muted">{total > 0 && sold >= total ? '완판' : '판매 종료'}</span></div><div className="h-1 w-full rounded-full bg-[var(--line)]"><div className="h-1 rounded-full bg-[var(--muted)]" style={{width: total > 0 ? `${Math.min(100, sold/total*100)}%` : '0%'}}/></div></>}
+        {ended && <><div className="flex items-center justify-between text-[12px]"><span className="font-bold">{sold} / {total}개 판매</span><span className="muted">{soldOut ? '완판' : '판매 종료'}</span></div><div className="h-1 w-full rounded-full bg-[var(--line)]"><div className="h-1 rounded-full bg-[var(--muted)]" style={{width: total > 0 ? `${Math.min(100, sold/total*100)}%` : '0%'}}/></div></>}
         {status === '판매 예정' && <p className="muted text-[12px]">{openDay(p.startsAt, now)}{USE_MOCK && ` · 알림 신청 ${alarmCount}명`}</p>}
         {isLive || ended ? <Link to={`/seller/product/${p.id}`} className="btn btn-outline w-full text-[13px]!">{isLive ? '판매 현황' : '판매 결과'}</Link> : status === '판매 예정' && <Link to={`/seller/new?edit=${p.id}`} className="btn btn-outline w-full text-[13px]!">판매 정보 수정</Link>}
         {status === '게시 전' && (p.reviewStatus === 'IN_REVIEW' ? <Link to={`/seller/published/${p.id}`} className="btn btn-outline w-full text-[13px]!">심사 상태 보기</Link> : p.reviewStatus === 'REJECTED' && !USE_MOCK ? <RejectedActions p={p}/> : <Link to={`/seller/new?edit=${p.id}`} className="btn btn-outline w-full text-[13px]!">{p.reviewStatus === 'REJECTED' ? '수정하고 다시 요청' : '이어서 등록'}</Link>)}
@@ -251,25 +252,33 @@ export function SellerProductPage() {
     const hh = String(Math.floor(secondsLeft/3600)).padStart(2,'0'), mm = String(Math.floor(secondsLeft%3600/60)).padStart(2,'0'), ss = String(secondsLeft%60).padStart(2,'0');
     const recentOrders = productOrders.slice().sort((a,b) => b.createdAt - a.createdAt).slice(0, 10);
     const alarmCount = 226;
+    // 판매 종료 시간 전이라도 한정 수량이 모두 결제 확정되면 완판: 카운트다운을 멈추고 진행 중처럼 보이지 않게 한다(결제 대기 수량은 만료되면 돌아오므로 완판으로 보지 않는다)
+    const soldOut = salesSoldOut(p.listQuantity) || salesSoldOut({ total: totalStock, sold: totalSold }); // 다시 받은 상품 수량(p)도 본다: 정산 응답은 화면 진입 때 한 번만 받는다
+    const endTime = new Date(p.endsAt).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit',hour12:false});
     return <div className="space-y-5">
       <Header title="판매 현황" action={<button aria-label="상품 링크 공유" onClick={() => copyText(`${window.location.origin}${window.location.pathname}#/product/${p.id}`).then(() => toast('상품 링크를 복사했습니다.')).catch(e => toast(e.message))}><Share2 size={20}/></button>}/>
       <div className="flex items-center gap-3">
-        <div className="shrink-0 rounded-[4px]" style={{outline:'2px solid #E5484D', outlineOffset:'2px'}}><ProductImage src={p.images[0]} alt={p.name} className="h-[56px] w-[56px]"/></div>
+        <div className="shrink-0 rounded-[4px]" style={soldOut ? undefined : {outline:'2px solid #E5484D', outlineOffset:'2px'}}><ProductImage src={p.images[0]} alt={p.name} className="h-[56px] w-[56px]"/></div>
         <div className="min-w-0 flex-1">
           <div className="mb-1 flex items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 rounded-[3px] bg-[#E5484D] px-2 py-0.5 text-[11px] font-bold text-white"><span className="inline-block h-2 w-2 rounded-full bg-white/40"/><span className="inline-block h-1.5 w-1.5 -ml-2 rounded-full bg-white"/><span>LIVE</span></span>
-            <span className="text-[11px] font-bold text-[#E5484D]">판매 중 · {new Date(p.endsAt).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit',hour12:false})} 종료</span>
+            {soldOut ? <><span className="rounded-[3px] bg-[var(--ink)] px-2 py-0.5 text-[11px] font-bold text-white">완판</span><span className="muted text-[11px] font-bold">{endTime} 종료 예정이었어요</span></>
+              : <><span className="inline-flex items-center gap-1.5 rounded-[3px] bg-[#E5484D] px-2 py-0.5 text-[11px] font-bold text-white"><span className="inline-block h-2 w-2 rounded-full bg-white/40"/><span className="inline-block h-1.5 w-1.5 -ml-2 rounded-full bg-white"/><span>LIVE</span></span>
+            <span className="text-[11px] font-bold text-[#E5484D]">판매 중 · {endTime} 종료</span></>}
           </div>
           <p className="text-[14px]">{p.name}</p>
           <p className="font-number text-[15px] font-bold">{money(p.price)} <span className="muted text-[12px] font-normal">{totalStock}개 한정</span></p>
         </div>
       </div>
       <div className="rounded-[8px] bg-[var(--soft)] p-5">
+        {soldOut ? <div role="status" className="text-center">
+          <p className="text-[22px] font-bold">완판됐어요</p>
+          <p className="mt-1 text-[12px] text-[#949494]">{p.soldOutAt ? `${hm(p.soldOutAt)}에 마지막 수량이 판매됐어요` : `${endTime} 종료 전에 한정 수량이 모두 판매됐어요`}</p>
+        </div> : <>
         <p className="text-center text-[12px] text-[#7B7B7B]">판매 종료까지</p>
         <div className="mt-2 flex items-baseline justify-center gap-1">
           {([[hh,'시간'],[mm,'분'],[ss,'초']] as [string,string][]).map(([v,u],i) => <span key={u} className="flex items-baseline gap-0.5">{i>0&&<span className="font-number text-[32px] font-bold text-[#DEDEDE] mx-1">:</span>}<span className="font-number text-[40px] font-bold">{v}</span><span className="muted text-[10px]">{u}</span></span>)}
         </div>
-        <p className="mt-1 text-center text-[12px] text-[#949494]">오늘 {new Date(p.endsAt).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit',hour12:false})} 종료</p>
+        <p className="mt-1 text-center text-[12px] text-[#949494]">오늘 {endTime} 종료</p></>}
         <div className="mt-4 border-t border-[#DEDEDE] pt-4">
           <div className="flex items-baseline justify-between"><span className="font-number text-[32px] font-bold">{totalSold}</span><span className="ml-2 text-[14px] font-bold text-[#7B7B7B]">/ {totalStock}개 판매</span><span className="ml-auto text-[14px] font-bold text-[#3FB181]">{totalStock > 0 ? Math.round(totalSold/totalStock*100) : 0}%</span></div>
           <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-[#DEDEDE]"><div className="h-2 rounded-full bg-[var(--ink)]" style={{width: totalStock > 0 ? `${(totalSold/totalStock)*100}%` : '0%'}}/></div>

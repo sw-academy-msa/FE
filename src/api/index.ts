@@ -14,6 +14,7 @@ export * from './sellerProducts';
 export * from './sellerOrders';
 export * from './admin';
 export * from './support';
+export { retryProjection } from './projection';
 export { useLive } from './live';
 export type { LiveState } from './live';
 export { SERVICE_BASE } from './services';

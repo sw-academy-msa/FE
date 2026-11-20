@@ -171,6 +171,11 @@ export function saleState(p: Product, now: number): '판매 예정' | '판매 �
   if (now < p.startsAt) return '판매 예정';
   return now >= p.endsAt ? '판매 종료' : '판매 중';
 }
+/**
+ * 판매자 화면의 완판: 한정 수량(initialQuantity 합계)을 결제 확정 수량(confirmedQuantity 합계)이 모두 채웠을 때.
+ * 결제 대기(reservedQuantity)는 결제 시간이 지나면 다시 판매 가능 수량으로 돌아오므로, 그 때문에 availableQuantity가 0이어도 완판으로 보지 않는다.
+ */
+export const salesSoldOut = (q: { total: number; sold: number } | undefined) => !!q && q.total > 0 && q.sold >= q.total;
 export function available(s: State, p: Product, optionId: string, now: number): number {
   if (p.live) return p.options.find(o => o.id === optionId)?.stock ?? 0;
   const initial = p.options.find(o => o.id === optionId)?.stock ?? 0;
