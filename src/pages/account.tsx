@@ -15,7 +15,7 @@ import { changePassword, restoreSession, validPassword } from '../auth';
 import { USE_MOCK } from '../config';
 import { applicationFailure, applicationProblems, firstProblem, normalizeAccount, normalizePhone, problemSummary } from '../sellerApply';
 import type { ApplyField, ApplyProblems } from '../sellerApply';
-import { getMySupportInquiry, isApiError, answerSupportInquiry, createSupportInquiry, listAdminSupportInquiries, listMySupportInquiries, ApiError, apiPut, apiDelete, approveSellerApplication, decideProductReview, errorMessage, getAdminApplication, getAdminProductReviewWithImages, listAdminApplications, listAdminProductReviews, markApplication, mergeAdminApplications, mergeAdminProductList, mergeProducts, rejectSellerApplication, reviewCertificate, fetchMyApplication, mergeApplication, resubmitApplication, submitApplication, updateMyName, addInquiryMessage, getInquiryImageUrl, getOrderInquiry, listInquiryInbox, mergeInquiries, useLive } from '../api';
+import { getMySupportInquiry, isApiError, answerSupportInquiry, createSupportInquiry, listAdminSupportInquiries, listMySupportInquiries, ApiError, apiPut, apiDelete, approveSellerApplication, decideProductReview, errorMessage, getAdminApplication, getAdminProductReviewWithImages, listAdminApplications, listAdminProductReviews, markApplication, mergeAdminApplications, mergeAdminProductList, mergeProducts, rejectSellerApplication, reviewCertificate, fetchMyApplication, mergeApplication, resubmitApplication, submitApplication, updateMyName, addInquiryMessage, getInquiryImageUrl, getOrderInquiry, listInquiryInbox, mergeInquiries, useLive, retryProjection, listOrders, mergeOrderList } from '../api';
 import { failTab, getPdf, openPendingTab } from '../files';
 import { RevisionList, useRevisionQueue } from './revisions';
 import { PhotoViewer } from '../components/PhotoViewer';
@@ -1050,6 +1050,7 @@ function InquiryImage({ orderId, imageId }: { orderId: string; imageId: string }
   useEffect(() => { const c = new AbortController(); getInquiryImageUrl(orderId, imageId, c.signal).then(setSrc, () => {}); return () => c.abort(); }, [orderId, imageId]);
   return <ProductImage src={src} alt="첨부 사진" className="h-[72px] w-[72px] shrink-0"/>;
 }
+const NOT_PROJECTED = 'INQUIRY_NOT_PROJECTED';
 export function InquiryDetailPage() {
   const { id } = useParams(); const s = useStore(); const navigate = useNavigate();
   const [params] = useSearchParams();
@@ -1058,7 +1059,8 @@ export function InquiryDetailPage() {
   const toast = useToast();
   const q = s.inquiries.find(i => i.id === id && i.userId === s.activeUserId);
   // 상세 API는 주문 id가 필요하다: store에 없으면(직접 진입) 문의함에서 찾아 orderId를 얻는다
-  const live = useLive(async sig => {
+  // 방금 보낸 문의는 Kafka 조회 모델에 아직 없어 첫 조회가 404일 수 있다: 오류와 다시 시도를 띄우지 않고 잠시 뒤 자동으로 다시 읽는다
+  const live = useLive(sig => retryProjection(async () => {
     // 알림은 문의뿐 아니라 관련 상품/주문 ID도 전달하므로 목록 캐시 없이 조회한다.
     if (!USE_MOCK && id && (productId || q?.productId && !q.orderId && q.sellerId !== 'stockdrop')) {
       return getProductInquiry(productId || q!.productId, id, s.activeUserId, sig);
@@ -1070,8 +1072,11 @@ export function InquiryDetailPage() {
       catch (e) { if (!(isApiError(e) && e.status === 404)) throw e; } // 404: 1:1 문의가 아니다 → 주문 문의에서 찾는다
     }
     const orderId = q?.orderId ?? (await listInquiryInbox(s.activeUserId, sig)).find(i => i.id === id)?.orderId;
-    return orderId && id ? getOrderInquiry(orderId, id, s.activeUserId, sig) : null;
-  }, (st, d) => { if (d) mergeInquiries(st, [d]); }, [id, s.activeUserId, productId, relatedOrderId]);
+    if (orderId && id) return getOrderInquiry(orderId, id, s.activeUserId, sig);
+    // 캐시 없이 들어왔는데 어디에서도 못 찾으면 아직 반영 전일 수 있어 다시 읽는다. 끝내 없으면 '찾을 수 없어요'로 보인다
+    if (!q && !USE_MOCK && id) throw new ApiError('문의를 찾을 수 없어요.', 404, NOT_PROJECTED);
+    return null;
+  }, sig).catch(e => { if (isApiError(e) && e.code === NOT_PROJECTED) return null; throw e; }), (st, d) => { if (d) mergeInquiries(st, [d]); }, [id, s.activeUserId, productId, relatedOrderId]);
   if (!q) return live.loading || live.error ? <LiveStatus state={live}/> : <Empty title="문의를 찾을 수 없어요"><Link to="/inquiries" className="btn">문의 목록</Link></Empty>;
   if (q.sellerId === 'stockdrop') return <div className="space-y-5">
     <Header title="문의 상세" back={true}/>
@@ -1146,13 +1151,15 @@ export function OpsInquiryComposePage() {
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [leaving, setLeaving] = useState(false);
   const kinds = ['계정', '결제', '앱 오류', '입점·판매', '기타'];
   const dirty = !!title.trim() || !!content.trim();
+  // 관련 주문: 주문 목록을 거치지 않고 바로 들어와도 고를 수 있게 본인 주문을 불러온다(일시 실패는 한 번 자동 재시도)
+  const orders = useLive(sig => retryProjection(() => listOrders({}, sig), sig), mergeOrderList, [s.activeUserId]);
   const userOrders = s.orders.filter(o => o.userId === s.activeUserId).slice(0, 10);
   return <form className="space-y-5" onSubmit={async e => { e.preventDefault(); if (!title.trim() || !content.trim()) { setError('제목과 내용을 입력해 주세요.'); return; } setBusy(true); setError(''); try { let newId = uid('q-'); if (!USE_MOCK) { const q = await createSupportInquiry({ kind, title, content, orderId }, s.activeUserId); newId = q.id; mutate(st => mergeInquiries(st, [q])); } else await atomic(state => { state.inquiries.unshift({ id: newId, userId: state.activeUserId, sellerId: 'stockdrop', productId: '', productName: title.trim(), kind, question: content.trim(), orderId: orderId || undefined, public: false, createdAt: nowOf(state) }); }); toast('문의가 접수되었습니다. 평일 10:00–18:00 내에 답변드릴게요.'); navigate(`/inquiries/${newId}`, { replace: true }); } catch (e) { setError((e as Error).message); } finally { setBusy(false); } }}>
     <Header title="1:1 문의하기" action={<button type="button" onClick={() => { if (dirty) setLeaving(true); else navigate(-1); }} className="muted text-[11px]">닫기</button>}/>
     <section className="space-y-3"><p className="label">문의 유형 <span className="muted text-[10px]">· 필수</span></p><div className="flex flex-wrap gap-2">{kinds.map(k => <Chip key={k} selected={kind === k} onClick={() => setKind(k)}>{k}</Chip>)}</div></section>
     <Field label="제목" required><input aria-label="제목" className="field" value={title} onChange={e => setTitle(e.target.value)} placeholder="제목을 입력해 주세요" required/></Field>
     <Field label="문의 내용" required><textarea aria-label="문의 내용" className="field field-box" value={content} onChange={e => setContent(e.target.value.slice(0, 1000))} placeholder="문의 내용을 자세히 적어주세요." rows={5} required/><p className="muted mt-1 text-right text-[10px]">{content.length} / 1000</p></Field>
-    <Field label="관련 주문"><p className="muted mb-1 text-[10px]">· 선택</p><select aria-label="관련 주문" className="field" value={orderId} onChange={e => setOrderId(e.target.value)}><option value="">주문을 선택해 주세요</option>{userOrders.map(o => <option key={o.id} value={o.id}>{o.id} · {o.product.name}</option>)}</select></Field>
+    <Field label="관련 주문"><p className="muted mb-1 text-[10px]">· 선택</p><select aria-label="관련 주문" className="field" value={orderId} onChange={e => setOrderId(e.target.value)}><option value="">주문을 선택해 주세요</option>{userOrders.map(o => <option key={o.id} value={o.id}>{o.id} · {o.product.name}</option>)}</select>{orders.error && !userOrders.length && <p className="mt-1 text-[11px] text-[var(--red)]">주문 목록을 불러오지 못했어요. <button type="button" className="font-bold underline" onClick={orders.reload}>다시 시도</button></p>}</Field>
     <Note>취소·반품·하자·오배송은 해당 주문의 판매자에게 문의해 주세요. 1:1 문의 운영시간 평일 10:00–18:00 · 주말·공휴일 휴무</Note>
     <ErrorBox message={error}/>
     <Button type="submit" className="w-full" disabled={busy || !title.trim() || !content.trim()}>{busy ? '접수 중…' : '문의 보내기'}</Button>
