@@ -58,6 +58,8 @@ test('판매 상품 등록 단일 화면 → AI 분석 적용 → 판매 심사 
   await page.getByLabel('한정 판매가').fill('49000');
   await expect(page.getByText('45% 저렴')).toBeVisible();
 
+  // 옵션은 옵션 없음으로 시작하니 색상과 사이즈 칩을 직접 켠다
+  await page.getByRole('button', { name: '색상', exact: true }).first().click(); await page.getByRole('button', { name: '사이즈', exact: true }).first().click();
   await page.getByRole('button', { name: '색상', exact: true }).last().click();
   await page.getByLabel('색상', { exact: true }).fill('차콜'); await page.keyboard.press('Enter');
   await page.getByRole('button', { name: '사이즈 추가' }).click();
@@ -88,4 +90,26 @@ test('판매 상품 등록 단일 화면 → AI 분석 적용 → 판매 심사 
   expect(p.faqs).toEqual([expect.objectContaining({ question: '사진의 색감이 실제와 비슷한가요?', answer: '자연광에서 찍어 실제 색과 비슷해요', suggestionId: 'mock-suggestion-2' })]); // AI 질문 답은 attributes가 아니라 FAQ로, 확인 전 AI 예상 답변은 저장하지 않는다
   expect(p.extras).toEqual([{ key: '소재·혼용률', value: '울 80%' }]); // 카테고리별 입력칸은 그대로 attributes
   expect(p.shippingNotice).toBe('CJ대한통운 / 반품 배송비 3,000원');
+});
+
+test('옵션별 한정 수량은 옵션 없음으로 시작하고, 판매자가 켠 옵션은 카테고리가 정해져도 그대로다', async ({ page }) => {
+  await page.goto('/#/seller/new'); await page.reload();
+  const chip = (name: string) => page.getByRole('button', { name, exact: true }).first();
+  await expect(chip('옵션 없음')).toHaveAttribute('aria-pressed', 'true');
+  await expect(chip('색상')).toHaveAttribute('aria-pressed', 'false');
+  await expect(chip('사이즈')).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.getByText('기본 수량')).toBeVisible();
+  // 판매자가 색상만 켠 뒤 AI 분석이 의류 카테고리를 채워도 켠 옵션은 그대로, 사이즈가 저절로 켜지지 않는다
+  await chip('색상').click();
+  await expect(chip('색상')).toHaveAttribute('aria-pressed', 'true'); await expect(chip('옵션 없음')).toHaveAttribute('aria-pressed', 'false');
+  await page.getByLabel('상품 사진 업로드').setInputFiles(['seller-register-1.jpg'].map(f => path.join(process.cwd(), 'public/images', f)));
+  await page.getByLabel('상품명').fill('울 블렌드 오버핏 니트 (차콜)'); await page.getByLabel('짧은 설명').fill('새 상품, 택 그대로'); await page.getByLabel('처분 사유').fill('시즌 종료 후 남은 재고');
+  await page.getByRole('button', { name: 'AI로 카테고리 분석하기' }).click();
+  await expect(page.getByText('패션 › 상의 › 니트/스웨터', { exact: true })).toBeVisible();
+  await expect(chip('색상')).toHaveAttribute('aria-pressed', 'true');
+  await expect(chip('사이즈')).toHaveAttribute('aria-pressed', 'false');
+  // 추천 칩과 빠른 선택은 그대로 남아 판매자가 켤 수 있다
+  await chip('사이즈').click(); await expect(chip('사이즈')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: '사이즈 추가' })).toBeVisible();
+  await chip('옵션 없음').click(); await expect(page.getByText('기본 수량')).toBeVisible();
 });
