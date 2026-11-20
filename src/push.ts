@@ -6,6 +6,10 @@ const isStandalone = () => (navigator as Navigator & { standalone?: boolean }).s
 /** 구독 버튼을 보여도 되는지: 서버는 iOS(web.push.apple.com)만 받고, iOS는 홈 화면에 추가한 앱(standalone)에서만 푸시 구독이 된다 */
 export const canSubscribePush = () => supported() && isIos() && isStandalone();
 
+/** 이 탭에서 백그라운드 알림 연결이 바뀌었다(등록, 해제, 실패). 홈 화면 알림 아이콘 같은 표시가 다시 확인한다 */
+export const PUSH_CHANGED = 'stockdrop:push-changed';
+const changed = () => { try { window.dispatchEvent(new Event(PUSH_CHANGED)); } catch { /* 창 없음 */ } };
+
 /** 이 브라우저가 등록한 서버 구독 ID — 로그아웃 전에 해제할 때 쓴다 */
 const KEY = 'stockdrop:push-subscription-id';
 /** 마지막 서버 등록 결과(점검 영역 표시용) */
@@ -25,9 +29,9 @@ async function subscribeAndRegister(): Promise<'granted' | 'disabled'> {
     const sub = (await reg.pushManager.getSubscription()) ?? await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: vapidKeyBytes(config.publicKey) });
     const saved = await registerPushSubscription(sub.toJSON() as PushSubscriptionBody);
     try { localStorage.setItem(KEY, saved.id); } catch { /* 저장 실패면 로그아웃 때 브라우저 구독만 해제된다 */ }
-    remember({ at: Date.now(), ok: true });
+    remember({ at: Date.now(), ok: true }); changed();
     return 'granted';
-  } catch (e) { remember({ at: Date.now(), ok: false, message: errorMessage(e) }); throw e; }
+  } catch (e) { remember({ at: Date.now(), ok: false, message: errorMessage(e) }); changed(); throw e; }
 }
 
 /**
@@ -50,7 +54,7 @@ export function requestPushPermission(): Promise<NotificationPermission> | null 
 export async function enablePush(asked?: Promise<NotificationPermission> | null): Promise<NotificationPermission | 'disabled' | 'unsupported'> {
   if (!canSubscribePush()) return 'unsupported';
   const permission = await (asked ?? (Notification.permission === 'default' ? Notification.requestPermission() : Promise.resolve(Notification.permission)));
-  if (permission !== 'granted') return permission;
+  if (permission !== 'granted') { changed(); return permission; } // 권한 팝업 결과(거절 등)도 표시를 다시 확인하게 한다
   return subscribeAndRegister();
 }
 
@@ -95,6 +99,7 @@ export async function disablePush() {
     const reg = await navigator.serviceWorker.getRegistration();
     await (await reg?.pushManager.getSubscription())?.unsubscribe();
   } catch { /* 브라우저 구독 해제 실패는 무시 */ }
+  changed();
 }
 
 export interface PushDiagnostics { standalone: boolean; ios: boolean; permission: string; sw: string; subscription: string; last: PushRegisterRecord | null }

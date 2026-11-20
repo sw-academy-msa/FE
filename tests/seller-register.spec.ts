@@ -30,9 +30,11 @@ test('판매 상품 등록 단일 화면 → AI 분석 적용 → 판매 심사 
   await page.getByLabel('처분 사유').fill('시즌 종료 후 남은 재고');
   await page.getByRole('button', { name: 'AI로 카테고리 분석하기' }).click();
   await expect(page.getByRole('heading', { name: 'AI 상품 분석' })).toBeVisible();
-  await page.getByRole('button', { name: '이 카테고리로 적용' }).click();
-  await expect(page.getByRole('heading', { name: 'AI 상품 분석' })).toBeHidden(); // 결과 화면이 사라진 뒤 폼의 카테고리를 확인
-  await expect(page.getByText('패션 › 상의 › 니트/스웨터')).toBeVisible();
+  // 분석이 끝나면 '분석 결과 보기'나 적용 버튼 없이 등록 화면으로 돌아와 결과가 바로 반영된다
+  await expect(page.getByRole('status', { name: 'AI 분석 반영 안내' })).toContainText('AI 분석 결과를 반영했어요');
+  await expect(page.getByRole('heading', { name: 'AI 상품 분석' })).toBeHidden();
+  await expect(page.getByRole('button', { name: '이 카테고리로 적용' })).toHaveCount(0);
+  await expect(page.getByText('패션 › 상의 › 니트/스웨터', { exact: true })).toBeVisible();
   // AI 질문 답은 FAQ로 공개되고, 분석 뒤에 정보가 바뀌면 질문을 다시 받아야 한다는 안내가 뜬다
   await expect(page.getByText('분석은 선택이라 건너뛰고')).toBeVisible(); await expect(page.getByText('상품 전체가 보이는 사진과 라벨')).toBeVisible();
   const aiAnswer = page.getByRole('textbox', { name: /AI 질문 답/ }); await expect(aiAnswer).toBeVisible(); await expect(page.getByText('이 답은 상품 FAQ로 구매자에게도 공개돼요')).toBeVisible();

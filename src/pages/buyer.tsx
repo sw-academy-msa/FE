@@ -16,6 +16,7 @@ import type { CheckoutTermsDto, InboxItem } from '../api';
 import { USE_MOCK } from '../config';
 import { CompositionInput } from '../components/CompositionInput';
 import { useNotified } from '../productAlerts';
+import { useBackgroundPush } from '../pushStatus';
 import type { SavedAddress } from './address';
 
 /** 홈 — 구매자 홈. 판매자 권한이 있으면 Figma "판매자 홈"처럼 판매 등록 버튼이 함께 보인다 */
@@ -36,8 +37,9 @@ export function HomePage() {
   const urgent = s.products.filter(p => p.published && isUrgent(p));
   const seller = signedIn(s) && !!s.users.find(u => u.id === s.activeUserId)?.seller;
   const unread = useApi(signal => (!USE_MOCK && signedIn(s) ? fetchUnreadCount(signal) : Promise.resolve(0)), [s.activeUserId]).data ?? 0;
+  const pushOn = useBackgroundPush(signedIn(s)); // 아이콘을 채우면 이 기기의 백그라운드 알림이 켜진 상태(기준은 알림 설정 화면과 같다)
   return <div className="space-y-4">
-    <header className="flex items-start justify-between pt-1"><div><h1 className="text-[22px] font-bold tracking-[-.5px]">STOCKDROP</h1><p className="mt-1 text-[12px] text-[var(--meta)]">남은 재고에 새 주인을, 정해진 시간에.</p></div><Link aria-label="알림 및 주문 확인" to="/notifications" className="relative grid h-9 w-9 place-items-center"><Bell size={21} strokeWidth={1.6}/>{unread > 0 && <span aria-label={`안 읽은 알림 ${unread}개`} className="absolute right-0 top-0 h-2 w-2 rounded-full bg-[var(--red)]"/>}</Link></header>
+    <header className="flex items-start justify-between pt-1"><div><h1 className="text-[22px] font-bold tracking-[-.5px]">STOCKDROP</h1><p className="mt-1 text-[12px] text-[var(--meta)]">남은 재고에 새 주인을, 정해진 시간에.</p></div><Link aria-label={`알림 및 주문 확인, 백그라운드 알림 ${pushOn ? '켜짐' : '꺼짐'}`} data-push={pushOn ? 'on' : 'off'} to="/notifications" className="relative grid h-9 w-9 place-items-center"><Bell size={21} strokeWidth={1.6} fill={pushOn ? 'currentColor' : 'none'} aria-hidden/>{unread > 0 && <span aria-label={`안 읽은 알림 ${unread}개`} className="absolute right-0 top-0 h-2 w-2 rounded-full bg-[var(--red)] ring-2 ring-[var(--surface)]"/>}</Link></header>
     <label className="flex h-12 items-center gap-2.5 rounded-[6px] bg-[var(--soft)] px-4"><Search size={18} className="text-[var(--meta)]"/><CompositionInput aria-label="상품 검색" value={query} onValueChange={value => setParam('q', value)} placeholder="상품명·카테고리·판매처 검색" className="min-w-0 flex-1 bg-transparent text-[14px] outline-none placeholder:text-[var(--placeholder)]"/></label>
     <div role="group" aria-label="상품 카테고리" className={`-mx-4 flex overflow-x-auto border-b border-[var(--line)] px-4 ${categoryTabs.length <= 5 ? 'justify-between' : 'gap-5'}`}>{categoryTabs.map(c => <button key={c} onClick={() => setParam('category', c)} className={`shrink-0 whitespace-nowrap border-b-2 pb-2.5 text-[14px] ${category === c ? 'border-[var(--ink)] font-bold' : 'border-transparent text-[var(--aux)]'}`}>{c}</button>)}{cats.loading && <span className="sr-only" role="status">카테고리를 불러오는 중</span>}</div>
     {cats.error && <p className="text-[12px] text-[var(--meta)]">카테고리를 불러오지 못했어요. <button type="button" className="font-bold underline" onClick={cats.reload}>다시 시도</button></p>}
