@@ -16,9 +16,11 @@ const base = (orderId: string) => `/v1/orders/${enc(orderId)}`;
 /** 주문 문의 상세·목록 항목 → Inquiry. 상품명·판매자·수량은 응답에 없어 merge가 주문에서 채운다 */
 export function orderInquiryFromApi(d: OrderInquiryDto, userId: string): Inquiry {
   const msgs = (d.messages ?? []).map(m => ({ seller: m.seller, body: m.body, createdAt: Date.parse(m.createdAt) }));
+  // 구매자 추가 질문이 마지막이면 판매자 차례이므로 이전 답변이 있어도 답변 대기로 본다.
+  const last = msgs[msgs.length - 1];
   return {
     id: d.id, userId, sellerId: '', productId: '', orderId: d.orderId, productName: '', kind: d.category ?? '',
-    question: msgs.find(m => !m.seller)?.body ?? '', answer: [...msgs].reverse().find(m => m.seller)?.body,
+    question: msgs.find(m => !m.seller)?.body ?? '', answer: last?.seller ? last.body : undefined,
     public: false, createdAt: d.createdAt ? Date.parse(d.createdAt) : (msgs[0]?.createdAt ?? 0), messages: msgs, imageIds: d.imageIds ?? [],
   };
 }
@@ -39,6 +41,16 @@ export function productInquiryFromApi(d: ProductInquiryDto, productId: string, u
 export async function listProductInquiries(productId: string, userId: string, signal?: AbortSignal): Promise<Inquiry[]> {
   const r = await api.get<{ items: ProductInquiryDto[] }>(`/v1/products/${enc(productId)}/inquiries`, { service: general, signal, query: { size: 100 } });
   return r.items.map(d => productInquiryFromApi(d, productId, userId));
+}
+/** 단건 API가 없는 상품 문의는 본인 목록의 페이지를 탐색한다. 다른 사용자의 문의는 서버가 제외한다. */
+export async function getProductInquiry(productId: string, inquiryId: string, userId: string, signal?: AbortSignal): Promise<Inquiry> {
+  for (let page = 0; ; page++) {
+    const r = await api.get<{ items: ProductInquiryDto[]; totalPages: number }>(`/v1/products/${enc(productId)}/inquiries`, { service: general, signal, query: { page, size: 100 } });
+    const found = r.items.find(i => i.id === inquiryId);
+    if (found) return productInquiryFromApi(found, productId, userId);
+    if (!r.items.length || page + 1 >= (r.totalPages ?? 1)) break;
+  }
+  throw new Error('문의를 찾을 수 없어요. 방금 등록한 문의라면 잠시 후 다시 시도해 주세요.');
 }
 /** POST /v1/products/{productId}/inquiries — 상품 문의 등록 (201) */
 export async function createProductInquiry(productId: string, question: string, userId: string): Promise<Inquiry> {
