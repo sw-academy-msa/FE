@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { categoryGroup, listingOptions, validateListing, approveApplication, available, beginPayment, blankDraft, defaultAddress, expireHolds, feeFor, localDateTime, markDelivered, publishDraft, recommendCategory, reserve, resolvePayment, saleState, salesSoldOut, seedState, purchaseBlock, parseRejection } from './domain';
-import type { Draft } from './domain';
+import { categoryGroup, listingOptions, validateListing, approveApplication, available, beginPayment, blankDraft, defaultAddress, expireHolds, feeFor, localDateTime, markDelivered, aiResultPatch, publishDraft, recommendCategory, reserve, resolvePayment, saleState, salesSoldOut, seedState, purchaseBlock, parseRejection } from './domain';
+import type { AiQuestion, Draft } from './domain';
 const NOW = new Date('2026-10-23T14:00:00+09:00').getTime();
 function draft(): Draft { return { ...blankDraft(NOW), images: ['/images/generated-5.png'], name: 'A5 공책', description: '한 권당 80페이지 노트입니다.', category: '문구 › 노트', originalUrl: 'https://shop.example/notebook', reason: '과잉 발주', noOptions: true, options: [{ id: 'base', name: '기본', stock: 10 }], price: 6000, shipping: 3000, faqs: [] }; }
 describe('선착순 재고 확보', () => {
@@ -67,5 +67,31 @@ describe('판매자 완판 판단', () => {
     expect(salesSoldOut({ total: 10, sold: 7 })).toBe(false);
     expect(salesSoldOut({ total: 0, sold: 0 })).toBe(false);
     expect(salesSoldOut(undefined)).toBe(false);
+  });
+});
+describe('AI 분석 결과 자동 반영', () => {
+  const result = (category: string, questions: AiQuestion[] = []) => ({ status: 'recommended' as const, signature: 't2', category: '', reason: '', result: { code: 'CLOTHING', category, photos: 1, questions } });
+  it('카테고리가 비어 있으면 추천 카테고리를 채우고 반영 안내를 남긴다', () => {
+    const d = blankDraft(NOW);
+    expect(aiResultPatch(d, result('니트'), [])).toMatchObject({ category: '니트', aiCategory: '니트', ai: { notice: 'applied', noticeSeen: false } });
+  });
+  it('지난번 AI가 채운 카테고리 그대로면 새 추천으로 바꾸고, 판매자가 직접 고른 카테고리는 덮지 않는다', () => {
+    const fromAi = { ...blankDraft(NOW), category: '니트', aiCategory: '니트' };
+    expect(aiResultPatch(fromAi, result('가디건'), [])).toMatchObject({ category: '가디건', aiCategory: '가디건', ai: { notice: 'applied' } });
+    const mine = { ...blankDraft(NOW), category: '노트', aiCategory: '니트' };
+    const p = aiResultPatch(mine, result('가디건'), []);
+    expect(p).not.toHaveProperty('category'); expect(p.ai?.notice).toBe('kept');
+    expect(aiResultPatch({ ...mine, category: '가디건' }, result('가디건'), []).ai?.notice).toBe('applied');
+  });
+  it('다시 분석하면 같은 점검 항목(checkCode)의 새 질문으로 답을 옮긴다', () => {
+    const prev = [{ checkCode: 'SIZE', suggestionId: 'old', question: '사이즈?', reason: '' }];
+    const d = { ...blankDraft(NOW), faqs: [{ id: 'f', question: '사이즈?', answer: '정사이즈', confirmed: true, suggestionId: 'old' }] };
+    const p = aiResultPatch(d, result('니트', [{ checkCode: 'SIZE', suggestionId: 'new', question: '사이즈는 어떤가요?', reason: '' }]), prev);
+    expect(p.faqs).toEqual([expect.objectContaining({ answer: '정사이즈', suggestionId: 'new' })]);
+  });
+  it('결과가 없는 분석(판단 불가, 실패)은 카테고리를 건드리지 않고 직전 질문을 보관한다', () => {
+    const prev = [{ question: 'q', reason: '' }];
+    const p = aiResultPatch({ ...blankDraft(NOW), category: '노트' }, { status: 'uncertain', signature: 't', category: '', reason: '사진이 흐려요' }, prev);
+    expect(p).toEqual({ ai: { status: 'uncertain', signature: 't', category: '', reason: '사진이 흐려요', prev } });
   });
 });

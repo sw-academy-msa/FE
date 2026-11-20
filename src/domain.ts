@@ -73,7 +73,9 @@ export interface Draft {
   maxPerAccount: number; startsAt: string; faqs: Faq[];
   /** 물품 검수에서 체크한 항목(INSPECTION_CHECKS 순서 번호). 화면 시연용 — 서버로 보내지 않는다 */ inspection?: number[];
   /** 택배사·반품 배송비·교환 배송비 입력(숫자는 문자열, 빈 값 = 미입력)과 이 값으로 만든 shippingNotice(판매자가 직접 고칠 수 있다) */ carrier?: string; returnFee?: string; exchangeFee?: string; shippingNotice?: string;
-  ai: { status: AiStatus; signature: string; category: string; reason: string; /** 다시 분석 중·실패·지연 동안 보관하는 직전 분석의 질문(답 이어받기용) */ prev?: AiQuestion[]; result?: AiAnalysis; /** 분석을 요청한 시점의 입력 — 이후 바뀌면 이전 AI 질문은 쓸 수 없다 */ input?: AnalysisInput; /** 서버가 자동 재시도 중(RETRY)일 때 표시용 */ retry?: { attempts: number; nextAttemptAt: string | null }; /** 분석 전 단계에서 막힌 칸별 문구(등록 화면 칸 아래 표시) */ fields?: Record<string, string> };
+  ai: { status: AiStatus; signature: string; category: string; reason: string; /** 다시 분석 중·실패·지연 동안 보관하는 직전 분석의 질문(답 이어받기용) */ prev?: AiQuestion[]; result?: AiAnalysis; /** 분석을 요청한 시점의 입력 — 이후 바뀌면 이전 AI 질문은 쓸 수 없다 */ input?: AnalysisInput; /** 서버가 자동 재시도 중(RETRY)일 때 표시용 */ retry?: { attempts: number; nextAttemptAt: string | null }; /** 분석 전 단계에서 막힌 칸별 문구(등록 화면 칸 아래 표시) */ fields?: Record<string, string>;
+    /** 분석 결과를 등록 화면에 자동 반영한 결과(applied=카테고리 채움, kept=판매자가 고른 카테고리 유지)와 안내를 닫았는지 */ notice?: 'applied' | 'kept'; noticeSeen?: boolean };
+  /** AI 분석이 마지막으로 자동 반영한 카테고리. 지금 카테고리가 이 값이면 판매자가 직접 고른 것이 아니라서 다음 분석 결과로 바꿔도 된다 */ aiCategory?: string;
   /** 단일 화면 등록(Figma 판매 상품 등록): 옵션 축, 색상·사이즈, 조합별 수량, 추가 URL, 타 플랫폼 확인 결과 */
   /** 실제 API: 서버에 만든 초안 상품 id·서버 이미지 id(images와 같은 순서) */ serverId?: string; imageIds?: string[];
   /** 사진 바이트 수(images와 같은 순서) — AI 분석 30MB 한도 확인용 */ imageSizes?: number[];
@@ -105,6 +107,21 @@ export function carryAiAnswers(faqs: Faq[], prev: AiQuestion[], next: AiQuestion
     out.push({ ...f, id: `faq-${sid(to)}`, question: to.question, suggestionId: sid(to) });
   }
   return out;
+}
+/**
+ * 끝난 AI 분석을 초안에 반영할 값. 판매자가 '분석 결과 보기'를 누르지 않아도 결과가 오면 바로 반영한다(분석 1번에 1번: 호출하는 쪽이 같은 분석인지 확인한다).
+ * - 추천 카테고리: 카테고리가 비었거나 지난번 AI가 채운 그대로(aiCategory)면 채운다. 판매자가 직접 고른 카테고리는 덮지 않고 notice='kept'로 알린다
+ * - AI 점검 질문: 예전 질문에 쓴 답을 같은 점검 항목(checkCode) 새 질문으로 옮긴다(carryAiAnswers)
+ * - 결과가 없으면(판단 불가·실패·지연) 직전 질문을 보관해 다음 재시도에서도 답을 옮길 수 있게 한다
+ */
+export function aiResultPatch(d: Draft, ai: Draft['ai'], prev: AiQuestion[]): Partial<Draft> {
+  if (!ai.result) return { ai: { ...ai, prev } };
+  const recommended = ai.result.category, ours = !d.category || d.category === d.aiCategory;
+  return {
+    ai: { ...ai, notice: ours || d.category === recommended ? 'applied' : 'kept', noticeSeen: false },
+    faqs: carryAiAnswers(d.faqs, prev, ai.result.questions),
+    ...(ours ? { category: recommended, aiCategory: recommended } : {}),
+  };
 }
 /** AI 분석에 쓰이는 입력. 이 중 하나라도 바뀌면 이전 분석의 질문은 쓸 수 없다(카테고리를 AI 추천값으로 바꾼 것은 예외) */
 /** AI 분석 입력. 판매처 URL은 AI가 열어보지 않아 넣지 않는다(서버 분석 입력과 같다). URL만 바꿔도 다시 분석하지 않는다 */
