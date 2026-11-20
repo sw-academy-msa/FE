@@ -1,10 +1,11 @@
 /**
- * 홈 상품 목록: 새로 올라온 상품이 먼저, 10개씩 좌우로 넘기는 페이지(아래 점 표시).
+ * 홈 상품 목록: 새로 올라온 상품이 먼저, 8개씩(2열 4줄) 좌우로 넘기는 페이지(아래 점 표시).
  * 최신 기준은 공개 승인 시각(ProductQueryService 목록 API 기본 정렬 NEWEST = publishedAt 내림차순, 같으면 id).
  * 목록 카드에는 publishedAt이 없어서 실제 모드는 서버가 준 순서를 listRank로 보관해 그 순서를 쓴다.
  * mock 모드는 공개될 때 적어 둔 publishedAt(예시 상품은 없음 → 원래 순서로 뒤에)을 쓴다.
  */
-export const HOME_PAGE_SIZE = 10;
+/** 한 페이지 상품 수(2열 그리드 4줄). 바꿀 때는 이 값만 고친다 */
+export const HOME_PAGE_SIZE = 8;
 /** 점은 최대 이만큼만 보인다(페이지가 많아도 줄을 넘지 않게) */
 export const MAX_DOTS = 7;
 type Ranked = { listRank?: number; publishedAt?: number };

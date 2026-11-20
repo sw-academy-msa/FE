@@ -41,7 +41,7 @@ export function HomePage() {
   const categoryTabs = [...baseTabs, ...(category !== '전체' && !baseTabs.includes(category) && (USE_MOCK || cats.data) ? [category] : [])]; // 예전 주소의 세부 이름도 탭으로 남긴다
   const inCategory = (p: Product) => category === '전체' || (USE_MOCK ? categoryGroup(p.category) === category : majorOf(p.category) === category || p.category === category);
   const products = newestFirst(s.products.filter(p => p.published && inCategory(p) &&(filter === '전체' || (filter === '마감 임박' ? isUrgent(p) : saleState(p, now) === filter)) && `${p.name} ${p.brand} ${p.category}`.toLowerCase().includes(query.toLowerCase())));
-  // 10개씩 좌우로 넘기는 페이지. 보던 페이지는 주소(p, 1부터)에 남겨 상세에 갔다 뒤로 와도 그대로
+  // 8개씩(HOME_PAGE_SIZE) 좌우로 넘기는 페이지. 보던 페이지는 주소(p, 1부터)에 남겨 상세에 갔다 뒤로 와도 그대로
   const page = homePage(params.get('p'), pageCount(products.length));
   const showHero = !query && category === '전체' && filter === '전체';
   const urgent = s.products.filter(p => p.published && isUrgent(p));
