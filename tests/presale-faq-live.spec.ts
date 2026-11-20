@@ -28,6 +28,7 @@ test('FAQ 질문은 아래 모달로 열리고 Esc, 바깥, 뒤로와 닫기 버
   await trigger.click();
   const sheet = page.getByRole('dialog', { name: '세탁 방법은 무엇인가요?', exact: true });
   await expect(sheet).toBeVisible(); await expect(sheet).toHaveAttribute('aria-modal', 'true');
+  await sheet.click({ position: { x: 5, y: 5 } }); await expect(sheet).toBeVisible();
   await expect(sheet.getByText(answer, { exact: true })).toBeVisible();
   expect(await sheet.evaluate(el => el.scrollHeight > el.clientHeight)).toBe(true);
   await page.keyboard.press('Escape'); await expect(sheet).not.toBeVisible(); await expect(trigger).toBeFocused();

@@ -215,8 +215,14 @@ export class AiDelayedError extends Error { constructor() { super('분석이 지
 /** COMPLETED까지 폴링하고 FAILED는 즉시 종료한다. RETRY는 서버 재시도 중이며 AI_NOT_FOUND는 조회 모델 반영을 기다린다. */
 export async function pollAiAnalysis(requestId: string, o: { schedule?: number[]; signal?: AbortSignal; onProgress?: (r: Pick<AiAnalysisDto, 'status' | 'attempts' | 'nextAttemptAt'>) => void; sleep?: (ms: number) => Promise<unknown> } = {}): Promise<NonNullable<AiAnalysisDto['result']>> {
   for (const wait of o.schedule ?? AI_POLL_MS) {
-    try { const r = await getAiAnalysis(requestId, o.signal); o.onProgress?.(r); if (r.status === 'FAILED') throw new ApiError('AI 분석에 실패했어요. 다시 분석해 주세요.', 0, r.failureCode ?? 'AI_ANALYSIS_FAILED'); if (r.status === 'COMPLETED' && r.result) return r.result; }
+    let r: AiAnalysisDto | undefined;
+    try { r = await getAiAnalysis(requestId, o.signal); }
     catch (e) { if (!(e instanceof ApiError && e.code === 'AI_NOT_FOUND')) throw e; }
+    if (r) {
+      o.onProgress?.(r);
+      if (r.status === 'FAILED') throw new ApiError('AI 분석에 실패했어요. 다시 분석해 주세요.', 0, r.failureCode ?? 'AI_ANALYSIS_FAILED');
+      if (r.status === 'COMPLETED' && r.result) return r.result;
+    }
     await (o.sleep ?? sleep)(wait);
   }
   throw new AiDelayedError();

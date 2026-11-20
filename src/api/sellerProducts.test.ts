@@ -23,8 +23,8 @@ afterEach(() => api.configure({ fetch: undefined }));
 const sig = (c: Call) => `${c.method} ${c.url.replace(/^(\/pg)?\/api\/v1/, '')}`;
 
 describe('변환', () => {
-  it('FAILED 분석은 지연 대기하지 않고 즉시 실패로 끝난다', async () => {
-    const calls = fake(() => ({ status: 'FAILED', attempts: 5, nextAttemptAt: null, result: null }));
+  it.each([null, 'AI_ANALYSIS_ATTEMPTS_EXHAUSTED', 'AI_NOT_FOUND'])('FAILED 분석은 오류 코드 %s에서도 즉시 실패로 끝난다', async (failureCode) => {
+    const calls = fake(() => ({ status: 'FAILED', failureCode, attempts: 5, nextAttemptAt: null, result: null }));
     await expect(pollAiAnalysis('failed', { schedule: [0, 0] })).rejects.toThrow('분석에 실패');
     expect(calls).toHaveLength(1);
   });
