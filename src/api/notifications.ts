@@ -55,8 +55,6 @@ export interface ProductAlertDto { productId: string; subscribed: boolean; creat
 const alertAt = (productId: string) => `${BASE}/product-alerts/${encodeURIComponent(productId)}`;
 /** GET /v1/notifications/product-alerts — 신청한 상품 목록(data 자체가 배열) */
 export const listProductAlerts = (signal?: AbortSignal) => api.get<ProductAlertDto[]>(`${BASE}/product-alerts`, { service, signal });
-/** GET /v1/notifications/product-alerts/{productId} — 신청하지 않았으면 subscribed=false */
-export const getProductAlert = (productId: string, signal?: AbortSignal) => api.get<ProductAlertDto>(alertAt(productId), { service, signal });
 /** PUT /v1/notifications/product-alerts/{productId} — 이미 신청했어도 성공(멱등) */
 export const subscribeProductAlert = (productId: string) => api.put<ProductAlertDto>(alertAt(productId), undefined, { service });
 /** DELETE /v1/notifications/product-alerts/{productId} — 신청하지 않았어도 성공(멱등) */

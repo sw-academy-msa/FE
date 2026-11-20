@@ -44,7 +44,7 @@ export function mergeApplication(s: State, app: Application | null) {
 /** GET /sellers/me → 화면 설정(주소 상세는 shippingDetail/returnDetail에 보관해 저장 때 지워지지 않게 한다) */
 export function sellerSettingsFromApi(d: SellerProfileDto, prev?: SellerSettings): SellerSettings {
   return {
-    notifications: {}, ...prev, displayName: d.sellerDisplayName ?? '', bank: d.bankAccount?.bankName ?? '', account: d.bankAccount?.maskedBankAccount ?? '', holder: d.bankAccount?.accountHolderName ?? '',
+    ...prev, displayName: d.sellerDisplayName ?? '', bank: d.bankAccount?.bankName ?? '', account: d.bankAccount?.maskedBankAccount ?? '', holder: d.bankAccount?.accountHolderName ?? '',
     shippingAddress: d.dispatchAddress?.roadAddress ?? '', shippingPostal: d.dispatchAddress?.postalCode ?? '', shippingDetail: d.dispatchAddress?.detailAddress ?? '',
     returnAddress: d.returnAddress?.roadAddress ?? '', returnPostal: d.returnAddress?.postalCode ?? '', returnDetail: d.returnAddress?.detailAddress ?? '',
   };
