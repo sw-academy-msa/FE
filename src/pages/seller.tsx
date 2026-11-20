@@ -18,6 +18,7 @@ import { getSellerSettlement, settlementNet, getProductDispatchAddress, answerOr
 import { api } from '../api';
 import { productSettlement } from '../api/sellerOrders';
 import { USE_MOCK } from '../config';
+import { useProductPhotos } from '../productPhotos';
 const hm = (t: number) => new Date(t).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false });
 const md = (t: number) => { const d = new Date(t); return `${d.getMonth() + 1}.${d.getDate()} (${'일월화수목금토'[d.getDay()]})`; };
 /** 판매 현황 요약 — 이번 달 판매·남은 수량(상품 집계), 상품 상태별 수, 처리할 주문(주문 집계), 지금 판매 중인 상품 */
@@ -417,6 +418,8 @@ export function SellerOrdersPage() {
   const productId = params.get('product') ?? undefined;
   const live = useLive(async signal => (user.seller ? listSellerOrders(user.id, { productId }, signal) : null), (st, list) => { if (list) mergeOrders(st, list); }, [user.id, productId]);
   const sum = useApi(async signal => (USE_MOCK || !user.seller ? null : getSellerOrderSummary({ productId }, signal)), [productId]);
+  // 주문 목록에는 상품 사진이 없다: 목록에 나온 상품을 모아 상품마다 한 번만 받아 채운다
+  const photo = useProductPhotos(s.orders.filter(o => o.sellerId === user.id).map(o => o.productId));
   if (!user.seller) return <Unavailable/>; const allOrders = s.orders.filter(o => o.sellerId === user.id && (!params.get('product') || params.get('product') === o.productId)); const orders = allOrders.filter(o => tab === '전체' || (tab === '결제 완료' && o.status === 'paid') || (tab === '배송 준비' && o.status === 'preparing') || (tab === '배송 중' && o.status === 'shipping') || (tab === '배송 완료' && o.status === 'delivered'));
   const sd = sum.data; // 추측(명세 없음): 결제 완료 = 확정 주문 − (배송 준비+배송 중+배송 완료)
   const counts: Record<string, number> = sd ? { '전체': sd.confirmedOrders, '결제 완료': Math.max(0, sd.confirmedOrders - sd.preparingOrders - sd.shippingOrders - sd.deliveredOrders), '배송 준비': sd.preparingOrders, '배송 중': sd.shippingOrders, '배송 완료': sd.deliveredOrders } : { '전체': allOrders.length, '결제 완료': allOrders.filter(o => o.status === 'paid').length, '배송 준비': allOrders.filter(o => o.status === 'preparing').length, '배송 중': allOrders.filter(o => o.status === 'shipping').length, '배송 완료': allOrders.filter(o => o.status === 'delivered').length };
@@ -433,7 +436,7 @@ export function SellerOrdersPage() {
           <span className="muted shrink-0 text-[12px]">{time}</span>
         </div>
         <div className="flex gap-3">
-          <ProductImage src={o.product.image} alt={o.product.name} className="h-[56px] w-[56px] shrink-0"/>
+          <ProductImage src={photo(o.productId, o.product.image)} alt={o.product.name} className="h-[56px] w-[56px] shrink-0"/>
           <div className="min-w-0 flex-1 space-y-1">
             <p className="text-[14px]">{o.product.name}</p>
             <p className="muted text-[12px]">{[...o.lines.map(l => `${l.name} · ${l.quantity}개`), maskName(o.address.name)].filter(Boolean).join(' · ')}</p>
@@ -451,6 +454,7 @@ export function SellerOrderPage() {
   // 실제 모드: 주문 상세(배송지·송장)와 이 주문의 문의를 서버에서 받는다
   const live = useLive(async signal => (id && user.seller ? { o: await getSellerOrder(id, user.id, signal), qs: await listSellerOrderInquiries(id, user.id, signal) } : null), (st, r) => { if (r) { mergeOrders(st, [r.o]); mergeInquiries(st, r.qs); } }, [id]);
   // 출고지: 주문에는 없어 상품의 출고지를 받는다(판매 시작 뒤에는 바뀌지 않는다)
+  const photo = useProductPhotos([order?.productId]); // 주문 상세에도 상품 사진이 없다
   const dispatch = useApi(async signal => (USE_MOCK || !order?.productId ? null : { productId: order.productId, address: await getProductDispatchAddress(order.productId, signal).catch(() => '') }), [order?.productId]);
   if (!user.seller) return <Unavailable message="판매자 주문을 찾을 수 없습니다."/>;
   if (!order) return live.loading || live.error ? <LiveStatus state={live}/> : <Unavailable message="판매자 주문을 찾을 수 없습니다."/>;
@@ -462,7 +466,7 @@ export function SellerOrderPage() {
     <Header title="주문 상세" subtitle={`주문번호 ${orderNo(o.id)} · ${kstShort(paidAt)} 결제`}/>
     {needsTracking ? <><h1 className="text-[24px] font-bold tracking-[-.7px]">송장을 등록해 주세요</h1>{dueStr && <p className="text-[13px] text-[#7B7B7B]">{dueStr}</p>}</> : <h1 className="text-[24px] font-bold tracking-[-.7px]">{o.status === 'shipping' ? '상품이 배송 중이에요' : o.status === 'delivered' ? '배송이 완료됐어요' : ORDER_LABELS[o.status]}</h1>}
     <div className="flex gap-3 rounded-[4px] bg-[var(--canvas)] p-4">
-      <ProductImage src={o.product.image} alt={o.product.name} className="h-[64px] w-[64px] shrink-0"/>
+      <ProductImage src={photo(o.productId, o.product.image)} alt={o.product.name} className="h-[64px] w-[64px] shrink-0"/>
       <div className="min-w-0 flex-1 space-y-1"><p className="muted text-[11px] font-bold">{o.product.brand}</p><p className="text-[14px]">{o.product.name}</p><p className="muted text-[12px]">{o.lines.map(l => l.name).join(' / ')} / {o.lines.reduce((n,l)=>n+l.quantity,0)}개</p></div>
     </div>
     <section className="divider space-y-2 pb-4"><h2 className="text-[15px] font-bold">주문 및 결제 정보</h2><InfoRow label="상품금액" value={money(o.total - o.shipping)}/><InfoRow label="고정 배송비" value={money(o.shipping)}/><InfoRow label="최종 결제금액" value={<span className="font-bold">{money(o.total)}</span>}/></section>
