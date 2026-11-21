@@ -22,6 +22,7 @@ import { HomePager } from '../components/HomePager';
 import { useProductPhotos } from '../productPhotos';
 import { FALLBACK_CATALOG, catalogMajorOf, catalogTabs } from '../categoryCatalog';
 import type { SavedAddress } from './address';
+import { retryable } from '../api/live';
 
 /** 홈 — 구매자 홈. 판매자 권한이 있으면 Figma "판매자 홈"처럼 판매 등록 버튼이 함께 보인다 */
 export function HomePage() {
@@ -135,7 +136,7 @@ export function ProductPage() {
   useEffect(() => { if (resume) setOptionsOpen(true); }, []);
   const [alerts, toggleAlert] = useNotified(), notified = alerts.includes(id ?? ''); // Hook은 early return 위에 둔다(조건부 호출 금지)
   // 목록에서 받은 요약(옵션 없음)만 있으면 상세가 올 때까지 기다린다
-  if (!p || !p.published || (p.live && !p.options.length)) return live.loading || live.error ? <LiveStatus state={live}/> : <Empty title="상품을 찾을 수 없어요"><Button to="/">홈으로</Button></Empty>;
+  if (!p || !p.published || (p.live && !p.options.length)) return retryable(live) ? <LiveStatus state={live}/> : <Empty title="상품을 찾을 수 없어요"><Button to="/">홈으로</Button></Empty>;
   const status = saleState(p, now), qty = stockLeft(s, p, now);
   const block = signedIn(s) ? purchaseBlock(s, p) : null; // 판매자 본인 상품·운영자는 옵션 선택·결제로 못 넘어간다
   // 이 상품을 이미 샀거나 재고를 확보해 결제 중이면 품절 안내 대신 내 주문·결제로 안내한다
@@ -143,7 +144,7 @@ export function ProductPage() {
   const myHold = s.holds.find(h => h.userId === s.activeUserId && h.productId === p.id && (h.status === 'pending' || h.status === 'reserved' && (h.expiresAt ?? Infinity) > now));
   const soldOut = status !== '판매 예정' && qty <= 0; const hms = (t: number) => new Date(t).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
   const headerTitle = status === '판매 예정' ? '판매 대기' : soldOut ? '구매 결과' : '상품 상세';
-  return <div className="space-y-4"><Header title={headerTitle} subtitle={status === '판매 예정' ? '오픈 예정' : '결제가 완료된 주문부터 확정돼요'}/><ProductPhotos key={p.id} product={p}/>
+  return <div className="space-y-4"><Header title={headerTitle} subtitle={status === '판매 예정' ? '오픈 예정' : '결제가 완료된 주문부터 확정돼요'}/><ProductPhotos key={`photos-${p.id}`} product={p}/>
     {!soldOut && <div className="flex items-center justify-between gap-3"><Badge live={status === '판매 중'}>{status === '판매 예정' ? '오픈 예정' : status}</Badge><p className="text-footnote text-red">{status === '판매 중' ? `마감까지 ${countdown(p.endsAt, now)}` : status === '판매 예정' ? `${p.category} · 3시간 한정` : '신규 구매가 종료되었어요'}</p></div>}
     {status === '판매 예정' && <div className="space-y-3"><div className="rounded-inner bg-blue-soft p-5 text-center"><p className="muted mb-2 text-footnote">판매 시작까지</p><p className="font-number text-display font-bold">{countdown(p.startsAt, now)}</p><p className="muted mt-2 text-caption">{dateTime(p.startsAt)} 오픈</p></div><button type="button" aria-pressed={notified} onClick={() => void toggleAlert(p.id)} className={`flex w-full items-center justify-between rounded-element border px-4 py-3 text-left ${notified ? 'border-ink bg-ink text-surface' : 'border-line'}`}><div><p className="text-body font-bold">상품 알림 받기</p><p className={`mt-0.5 text-footnote ${notified ? 'opacity-70' : 'muted'}`}>판매 시작·가격 인하·수량 임박 때 알려드려요</p></div><span className={`text-footnote font-semibold ${notified ? '' : 'text-muted'}`}>{notified ? '알림 설정됨' : '신청하기'}</span></button></div>}
     {status === '판매 중' && notified && <button type="button" onClick={() => void toggleAlert(p.id)} className="flex w-full items-center justify-between rounded-element border border-line px-4 py-3 text-left"><div><p className="text-body font-bold">상품 알림 받는 중</p><p className="muted mt-0.5 text-footnote">가격 인하·수량 임박 때 알려드려요</p></div><span className="text-footnote font-semibold text-muted">알림 끄기</span></button>}
@@ -161,7 +162,7 @@ export function ProductPage() {
     {p.shippingNotice && <section className="space-y-2"><h2 className="text-subhead font-bold">배송 안내</h2><p className="whitespace-pre-line break-words text-label">{p.shippingNotice}</p></section>}
     {p.purchaseNotice && <section className="space-y-2"><h2 className="text-subhead font-bold">구매 안내</h2><p className="whitespace-pre-line break-words text-label">{p.purchaseNotice}</p></section>}
     <section className="space-y-3 py-3"><h2 className="text-subhead font-bold">상품 정보</h2><p className="whitespace-pre-line text-label leading-[1.8]">{p.description}</p>{p.dimensions.map((d, i) => <InfoRow key={`dimension-${i}`} label={d.name} value={d.values}/>)}{p.extras.map((e, i) => <InfoRow key={i} label={e.key} value={e.value}/>)}<InfoRow label="재고 처분 사유" value={p.reason}/></section>
-    <ProductFaqs key={p.id} faqs={p.faqs}/>
+    <ProductFaqs key={`faqs-${p.id}`} faqs={p.faqs}/>
 <p className="muted text-caption leading-relaxed">교환은 지원하지 않습니다. 반품·환불은 STOCKDROP이 처리하지 않으며, 주문 내역의 판매자 문의로 판매자와 직접 협의해 주세요.</p>
     <ProductInquirySection product={p} blocked={!!block}/>
     {soldOut && <section className="space-y-3"><h2 className="text-subhead font-bold">{myOrder ? '비슷한 상품' : '놓친 상품과 비슷한 상품'}</h2><div className="grid grid-cols-2 gap-x-2 gap-y-4">{s.products.filter(r => r.published && r.id !== p.id && r.category === p.category && r.endsAt > now).slice(0, 4).map(r => <ProductCard key={r.id} product={r} now={now}/>)}</div>{s.products.some(r => r.published && r.id !== p.id && r.category === p.category && r.endsAt > now) && <Button outline className="w-full" to={`/?category=${encodeURIComponent(categoryGroup(p.category) ?? '')}`}>전체보기</Button>}</section>}
@@ -267,7 +268,7 @@ export function CheckoutPage() {
   const expiredShown = useRef(false);
   useEffect(() => { if (!expired || USE_MOCK || expiredShown.current) return; expiredShown.current = true; live.reload(); }, [expired]);
   if (failure === DUPLICATE) return <Empty title="이미 이 상품을 주문했어요" message="주문 내역에서 확인해 주세요."><Button to="/orders">주문 내역</Button></Empty>;
-  if (!hold || !p) return live.loading || live.error ? <LiveStatus state={live}/> : <Empty title="진행 중인 주문이 없어요"><Button to="/">상품 둘러보기</Button></Empty>;
+  if (!hold || !p) return retryable(live) ? <LiveStatus state={live}/> : <Empty title="진행 중인 주문이 없어요"><Button to="/">상품 둘러보기</Button></Empty>;
   // 결제창에서 실패·취소하고 돌아왔고 아직 재고 확보 중이면 같은 주문으로 다시 결제할 수 있다
   if (payFailure && !failure && hold.status === 'reserved') return <PaymentFailed hold={hold} product={p} now={now} held={!expired} title={payFailure.code === 'PAY_PROCESS_CANCELED' ? '결제를 취소했어요' : undefined} reason={payFailure.message || FAILURE_REASON[payFailure.code] || `결제를 완료하지 못했어요 (${payFailure.code})`} onRetry={() => navigate(`/checkout/${id}`, { replace: true, state: null })}/>;
   if (failure) return isStockFailure(failure) ? <LiveStatus state={{ loading: true, error: '', reload: () => {} }}/> : <PaymentFailed hold={hold} product={p} now={now} reason={FAILURE_REASON[failure] ?? `결제를 완료하지 못했어요 (${failure})`}/>;
@@ -342,7 +343,7 @@ export function OrderDetailPage() {
     const prod = pid && !has ? await getProduct(pid, signal).catch(() => undefined) : undefined; // 사진을 못 받아도 주문은 보여 준다
     return { d, prod };
   }, (st, r) => { if (r.prod) mergeProducts(st, [r.prod]); if (r.d) mergeOrders(st, [r.d]); }, [id]);
-  if (!o) return live.loading || live.error ? <LiveStatus state={live}/> : <Empty title="주문을 찾을 수 없어요"><Button to="/orders">주문 목록</Button></Empty>;
+  if (!o) return retryable(live) ? <LiveStatus state={live}/> : <Empty title="주문을 찾을 수 없어요"><Button to="/orders">주문 목록</Button></Empty>;
   // 실제로 일어난 일만 보여 준다: 결제 → 송장 등록(배송 출발) → 판매자 배송 완료 처리
   const paidAt = o.paidAt ?? o.createdAt, doneAt = o.deliveredAt ?? o.processedAt;
   const events: [number, string, string][] = [...(o.purchaseConfirmedAt ? [[o.purchaseConfirmedAt, '구매 확정', '구매를 확정했어요'] as [number, string, string]] : []), ...(doneAt ? [[doneAt, '배송 완료', '판매자가 배송 완료로 처리했어요'] as [number, string, string]] : []), ...(o.shippedAt ? [[o.shippedAt, '배송 출발', [o.carrier, o.tracking && `송장 ${o.tracking}`].filter(Boolean).join(' · ')] as [number, string, string]] : []), [paidAt, '결제 완료', '주문이 확정되었어요']];
@@ -377,7 +378,7 @@ export function OrderInquiryPage() {
   // 새로고침·알림 등으로 바로 들어오면 store에 주문이 없다: 주문을 불러와 주문 번호를 보여 준다(조회 모델 반영 지연·일시 실패는 자동 재시도)
   const known = !!order;
   const live = useLive(sig => known || !id ? Promise.resolve(null) : retryProjection(() => getOrder(id, getState().activeUserId, sig), sig).catch(e => { if (isApiError(e) && e.status === 404) return null; throw e; }), (st, d) => { if (d) mergeOrders(st, [d]); }, [id, user.id]);
-  if (!order) return live.loading || live.error ? <LiveStatus state={live}/> : <Empty title="주문을 찾을 수 없어요"><Button to="/orders">주문 목록</Button></Empty>;
+  if (!order) return retryable(live) ? <LiveStatus state={live}/> : <Empty title="주문을 찾을 수 없어요"><Button to="/orders">주문 목록</Button></Empty>;
   const quantity = order.lines.reduce((n, l) => n + l.quantity, 0);
   const sent = () => { try { sessionStorage.removeItem(inquiryDraftKey(id)); } catch { /* 무시 */ } };
   async function attach(fl: FileList | null) { if (!fl?.length) return; try { if (images.length + fl.length > 5) throw new Error('사진은 최대 5장까지 첨부할 수 있어요.'); const added = await Promise.all([...fl].map(imageData)); setImages([...images, ...added]); setFiles([...files, ...fl]); } catch (e) { setError((e as Error).message); } }

@@ -23,6 +23,7 @@ import { CorrectionRequestSheet, SentCorrection } from './adminCorrection';
 import { PhotoViewer } from '../components/PhotoViewer';
 import { getProductInquiry } from '../api/inquiries';
 import { BankField } from '../components/BankField';
+import { retryable } from '../api/live';
 function ProfileEditModal({ userId, name: initialName, phone: initialPhone, onClose }: { userId: string; name: string; phone: string; onClose: () => void }) {
   const [name, setName] = useState(initialName), [phone, setPhone] = useState(initialPhone), [error, setError] = useState(''), [busy, setBusy] = useState(false); const toast = useToast();
   return <Modal title="내 정보 수정" onClose={onClose}><form className="space-y-4" onSubmit={async e => { e.preventDefault(); if (!name.trim()) { setError('이름을 입력해 주세요.'); return; } setBusy(true); setError(''); try { if (!USE_MOCK) await updateMyName(name.trim()); /* TODO(api-gap): 연락처 수정 API 없음 — 연락처는 이 기기에만 저장 */ mutate(s => { const u = s.users.find(u => u.id === userId); if (u) { u.name = name.trim(); u.phone = phone.trim(); } }); toast('정보를 수정했습니다.'); onClose(); } catch (e) { setError((e as Error).message); } finally { setBusy(false); } }}><Field label="이름" required><input aria-label="이름" className="field" value={name} onChange={e => setName(e.target.value)} required/></Field><Field label="연락처"><input aria-label="연락처" className="field" value={phone} onChange={e => setPhone(e.target.value)} type="tel"/></Field><p className="muted text-footnote">이메일은 변경할 수 없습니다.</p><ErrorBox message={error}/><Button type="submit" className="w-full" disabled={busy}>{busy ? '저장 중…' : '저장하기'}</Button></form></Modal>;
@@ -371,7 +372,7 @@ export function AdminDetailPage() {
   }, [app?.id, user.admin]);
   const live = useLive(sig => user.admin && id ? getAdminApplication(id, sig) : Promise.resolve(null), (st, a) => { if (a) mergeAdminApplications(st, [a]); }, [id, user.admin]);
   if (!user.admin) return <Unavailable message="운영자만 사용할 수 있습니다."/>;
-  if (!app) return live.loading || live.error ? <LiveStatus state={live}/> : <Empty title="신청 정보를 찾을 수 없어요"/>;
+  if (!app) return retryable(live) ? <LiveStatus state={live}/> : <Empty title="신청 정보를 찾을 수 없어요"/>;
   const reviewDeadline = app.submittedAt + 2 * 86_400_000;
   const days = ['일','월','화','수','목','금','토'];
   const dl = new Date(reviewDeadline);
@@ -593,7 +594,7 @@ export function AdminProductDetailPage() {
   // 작성 중: 반려 화면에서 사유를 고르거나 적었을 때
   const leave = useLeaveGuard(reject && (Object.values(checkedReasons).some(Boolean) || Object.values(reasonTexts).some(v => v.trim())));
   if (!user.admin) return <Unavailable message="운영자만 사용할 수 있습니다."/>;
-  if (!p) return live.loading || live.error ? <LiveStatus state={live}/> : <Empty title="상품을 찾을 수 없어요"><Button to="/admin/products">심사 목록으로</Button></Empty>;
+  if (!p) return retryable(live) ? <LiveStatus state={live}/> : <Empty title="상품을 찾을 수 없어요"><Button to="/admin/products">심사 목록으로</Button></Empty>;
   const openLabel = `오픈 ${kstShort(p.startsAt)}`;
   const dDay = Math.ceil((p.startsAt - Date.now()) / 86_400_000);
   const totalStock = p.options.reduce((s, o) => s + o.stock, 0);
@@ -1097,7 +1098,7 @@ export function InquiryDetailPage() {
     if (!q && !USE_MOCK && id) throw new ApiError('문의를 찾을 수 없어요.', 404, NOT_PROJECTED);
     return null;
   }, sig).catch(e => { if (isApiError(e) && e.code === NOT_PROJECTED) return null; throw e; }), (st, d) => { if (d) mergeInquiries(st, [d]); }, [id, s.activeUserId, productId, relatedOrderId]);
-  if (!q) return live.loading || live.error ? <LiveStatus state={live}/> : <Empty title="문의를 찾을 수 없어요"><Button to="/inquiries">문의 목록</Button></Empty>;
+  if (!q) return retryable(live) ? <LiveStatus state={live}/> : <Empty title="문의를 찾을 수 없어요"><Button to="/inquiries">문의 목록</Button></Empty>;
   if (q.sellerId === 'stockdrop') return <div className="space-y-5">
     <Header title="문의 상세" back={true}/>
     <div className="flex items-center justify-between"><span className={`rounded px-2 py-0.5 text-caption font-semibold ${q.answer ? 'bg-positive-soft text-positive' : 'bg-blue-soft text-muted'}`}>{q.answer ? '답변 완료' : '접수됨'}</span><span className="muted text-caption">{q.kind} · {dateTime(q.createdAt)}</span></div>

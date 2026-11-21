@@ -19,6 +19,7 @@ import { api } from '../api';
 import { productSettlement } from '../api/sellerOrders';
 import { USE_MOCK } from '../config';
 import { useProductPhotos } from '../productPhotos';
+import { retryable } from '../api/live';
 const hm = (t: number) => new Date(t).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false });
 const md = (t: number) => { const d = new Date(t); return `${d.getMonth() + 1}.${d.getDate()} (${'일월화수목금토'[d.getDay()]})`; };
 /** 판매 현황 요약 — 이번 달 판매·남은 수량(상품 집계), 상품 상태별 수, 처리할 주문(주문 집계), 지금 판매 중인 상품 */
@@ -142,7 +143,7 @@ export function SellerProductPage() {
     return { amounts, product };
   }, [id, user.id, month]);
   if (!user.seller) return <Unavailable/>;
-  if (!p) return live.loading || live.error ? <LiveStatus state={live}/> : <Unavailable/>;
+  if (!p) return retryable(live) ? <LiveStatus state={live}/> : <Unavailable/>;
   const rev = [...(revs.data ?? [])].sort((a, b) => Date.parse(b.submittedAt) - Date.parse(a.submittedAt))[0];
   // 실제 모드: 심사 중·반려 상품은 (알림에서 /seller/product/:id로 들어와도) 심사 결과 화면을 보여 준다
   const status = saleState(p, now), fee = feeFor(s, p), published = location.pathname.includes('/published/') || (!USE_MOCK && (p.reviewStatus === 'IN_REVIEW' || p.reviewStatus === 'REJECTED'));
@@ -404,7 +405,7 @@ export function SellerInquiryDetailPage() {
   }, (st, list) => { if (list) mergeInquiries(st, list); }, [id]);
   useEffect(() => { if (q && !q.orderId) setPublic(q.public); }, [q?.id]);
   if (!user.seller) return <Unavailable message="문의를 찾을 수 없습니다."/>;
-  if (!q) return live.loading || live.error ? <LiveStatus state={live}/> : <Unavailable message="문의를 찾을 수 없습니다."/>;
+  if (!q) return retryable(live) ? <LiveStatus state={live}/> : <Unavailable message="문의를 찾을 수 없습니다."/>;
   const buyer = s.users.find(u => u.id === q.userId); const buyerMasked = buyer?.name.replace(/^(.)(.)(.)$/, '$1*$3') ?? buyer?.name.replace(/^(.).+(.)$/, (_, a, z) => `${a}*${z}`) ?? '구매자';
   return <div className="space-y-4"><Header title="문의 상세"/>{q.orderId && <div className="rounded-inner bg-blue-soft p-3.5 space-y-1"><p className="text-body font-bold">{q.productName}</p><p className="muted text-footnote">주문번호 {q.orderId} · 구매자 {buyerMasked}</p></div>}<div className="divider space-y-3 pb-5"><div className="flex items-center justify-between"><Badge live={!q.answer}>{q.answer ? '답변 완료' : '답변 대기'}</Badge><span className="muted text-caption">{dateTime(q.createdAt)}</span></div><p className="text-label font-bold">{q.kind}</p>{q.messages?.length ? q.messages.map((m, i) => <p key={i} className={`whitespace-pre-line text-body leading-relaxed ${m.seller ? 'rounded-inner bg-canvas p-3' : ''}`}>{m.seller ? '[판매자] ' : ''}{m.body}</p>) : <><p className="whitespace-pre-line text-body leading-relaxed">{q.question}</p>{q.answer && <p className="whitespace-pre-line rounded-inner bg-canvas p-3 text-body leading-relaxed">[판매자] {q.answer}</p>}</>}{q.orderId && !!q.imageIds?.length && <div className="flex gap-2 overflow-x-auto" aria-label="구매자 첨부 사진">{q.imageIds.map(imageId => <SellerInquiryImage key={imageId} orderId={q.orderId!} imageId={imageId}/>)}</div>}</div><Note>영업일 기준 1일 안에 답변해 주세요. 2영업일 안에 답변이 없으면 StockDrop이 직접 확인하고 구매자에게 연락해요.</Note><form className="space-y-3" onSubmit={async e => { e.preventDefault(); if (sending.current) return; setError(''); const text = answer.trim(); try { if (!text) throw new Error('답변을 입력해 주세요.'); sending.current = true; setBusy(true);
     if (!USE_MOCK) { // 주문 문의=답변 메시지 추가, 상품 문의=답변 작성·수정(문의 version, FAQ 반영 선택). 서버 응답으로 한 번만 반영한다
@@ -459,7 +460,7 @@ export function SellerOrderPage() {
   const photo = useProductPhotos([order?.productId]); // 주문 상세에도 상품 사진이 없다
   const dispatch = useApi(async signal => (USE_MOCK || !order?.productId ? null : { productId: order.productId, address: await getProductDispatchAddress(order.productId, signal).catch(() => '') }), [order?.productId]);
   if (!user.seller) return <Unavailable message="판매자 주문을 찾을 수 없습니다."/>;
-  if (!order) return live.loading || live.error ? <LiveStatus state={live}/> : <Unavailable message="판매자 주문을 찾을 수 없습니다."/>;
+  if (!order) return retryable(live) ? <LiveStatus state={live}/> : <Unavailable message="판매자 주문을 찾을 수 없습니다."/>;
   // 출고 기한은 상품에 설정한 영업일(토·일 제외)로 계산한다
   const o = order; const paidAt = o.paidAt ?? o.createdAt; const dueStr = o.dispatchDays ? `결제 후 ${o.dispatchDays}영업일 이내 출고 · ${kstDay(addBusinessDays(paidAt, o.dispatchDays))}까지` : '';
   const dispatchFrom = USE_MOCK ? s.sellerSettings[user.id]?.shippingAddress || '성수 물류창고' : (dispatch.data?.productId === o.productId ? dispatch.data.address : ''); const doneAt = o.deliveredAt ?? o.processedAt;
