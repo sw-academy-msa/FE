@@ -24,21 +24,21 @@ export function CorrectionRequestSheet({ applicationId, onClose, onSent }: { app
     try { onSent(await requestCorrection(applicationId, deadline, items)); } catch (e) { setError(errorMessage(e)); } finally { setBusy(false); }
   }
   return <div className="fixed inset-0 z-50 flex items-end bg-black/60" role="dialog" aria-label="보완 요청">
-    <div className="mx-auto max-h-[90dvh] w-full max-w-[390px] overflow-y-auto rounded-t-[16px] bg-white px-4 pb-8 pt-2">
-      <div className="mx-auto mb-4 h-1 w-8 rounded-full bg-[#DEDEDE]"/>
-      <h2 className="mb-1 text-[18px] font-bold">보완을 요청할까요?</h2>
-      <p className="mb-4 text-[13px] text-[#7B7B7B]">고를 항목과 사유가 신청자에게 그대로 전달돼요.<br/>신청자는 고른 항목만 고쳐서 다시 제출할 수 있어요.</p>
+    <div className="mx-auto max-h-[90dvh] w-full max-w-[390px] overflow-y-auto rounded-t-container bg-white px-4 pb-8 pt-2">
+      <div className="mx-auto mb-4 h-1 w-8 rounded-full bg-border"/>
+      <h2 className="mb-1 text-title font-bold">보완을 요청할까요?</h2>
+      <p className="mb-4 text-body text-aux">고를 항목과 사유가 신청자에게 그대로 전달돼요.<br/>신청자는 고른 항목만 고쳐서 다시 제출할 수 있어요.</p>
       <div className="space-y-3">
-        {CORRECTION_FIELDS.map(f => <div key={f} className="rounded-[6px] border border-[var(--line)] p-3">
-          <label className="flex items-center gap-2 text-[13px] font-bold"><input type="checkbox" checked={reasons[f] !== undefined} onChange={e => setReasons(r => { const next = { ...r }; if (e.target.checked) next[f] = ''; else delete next[f]; return next; })}/>{FIELD_LABEL[f]}</label>
+        {CORRECTION_FIELDS.map(f => <div key={f} className="rounded-element border border-line p-3">
+          <label className="flex items-center gap-2 text-body font-bold"><input type="checkbox" checked={reasons[f] !== undefined} onChange={e => setReasons(r => { const next = { ...r }; if (e.target.checked) next[f] = ''; else delete next[f]; return next; })}/>{FIELD_LABEL[f]}</label>
           {reasons[f] !== undefined && <textarea aria-label={`${FIELD_LABEL[f]} 보완 사유`} className="field field-box mt-2 w-full" rows={2} maxLength={500} value={reasons[f]} onChange={e => setReasons(r => ({ ...r, [f]: e.target.value }))} placeholder="보완이 필요한 이유를 입력해 주세요."/>}
         </div>)}
         <label className="block"><span className="label">보완 기한</span><input aria-label="보완 기한" type="date" className="field" min={ymd(Date.now() + 86_400_000)} value={day} onChange={e => setDay(e.target.value)}/></label>
-        <p className="muted text-[11px]">기한 날짜의 23:59(한국 시간)까지 보완하지 않으면 신청이 자동으로 취소돼요.</p>
+        <p className="muted text-footnote">기한 날짜의 23:59(한국 시간)까지 보완하지 않으면 신청이 자동으로 취소돼요.</p>
       </div>
       <div className="mt-4"><ErrorBox message={error}/></div>
       <div className="mt-4 flex gap-2">
-        <Button outline className="w-[86px]" onClick={onClose} disabled={busy}>취소</Button>
+        <Button outline className="w-21.5" onClick={onClose} disabled={busy}>취소</Button>
         <Button className="flex-1" disabled={busy || !picked.length} onClick={send}>{busy ? '보내는 중…' : `${picked.length}개 항목 보완 요청`}</Button>
       </div>
     </div>
@@ -51,8 +51,8 @@ export function SentCorrection({ applicationId }: { applicationId: string }) {
   if (!r.data) return <LiveStatus state={r}/>;
   const c = r.data;
   return <section className="mb-6 space-y-3" aria-label="보낸 보완 요청">
-    <div className="flex items-center justify-between"><h2 className="text-[15px] font-bold">보낸 보완 요청</h2><span className="rounded-[4px] bg-[var(--soft)] px-2 py-0.5 text-[11px] font-bold text-[#7B7B7B]">{STATE_LABEL[c.state] ?? c.state}</span></div>
-    <p className="text-[12px] text-[#7B7B7B]">보완 기한 {dateTime(Date.parse(c.deadline))}</p>
-    {c.items.map(i => <div key={i.field} className="rounded-[6px] border border-[var(--line)] p-3"><p className="text-[13px] font-bold">{FIELD_LABEL[i.field] ?? i.field}</p><p className="mt-1 whitespace-pre-line text-[12px] leading-relaxed text-[#7B7B7B]">{i.reason}</p></div>)}
+    <div className="flex items-center justify-between"><h2 className="text-subhead font-bold">보낸 보완 요청</h2><span className="rounded-inner bg-soft px-2 py-0.5 text-footnote font-bold text-aux">{STATE_LABEL[c.state] ?? c.state}</span></div>
+    <p className="text-label text-aux">보완 기한 {dateTime(Date.parse(c.deadline))}</p>
+    {c.items.map(i => <div key={i.field} className="rounded-element border border-line p-3"><p className="text-body font-bold">{FIELD_LABEL[i.field] ?? i.field}</p><p className="mt-1 whitespace-pre-line text-label leading-relaxed text-aux">{i.reason}</p></div>)}
   </section>;
 }

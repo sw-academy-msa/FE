@@ -135,8 +135,8 @@ test('관심 카테고리를 서버 선택지에서 고르고 저장하며 맞�
   await page.getByRole('button', { name: /관심사와 맞춤 추천/ }).click();
   await expect(page).toHaveURL(/#\/my\/interests$/);
   const chips = page.getByRole('region', { name: '관심 카테고리' });
-  await expect(chips.getByRole('button', { name: '패션' })).toHaveClass(/bg-\[var\(--ink\)\]/); // 선택된 칩
-  await expect(chips.getByRole('button', { name: '리빙' })).not.toHaveClass(/bg-\[var\(--ink\)\]/);
+  await expect(chips.getByRole('button', { name: '패션' })).toHaveAttribute('aria-pressed', 'true'); // 선택된 칩
+  await expect(chips.getByRole('button', { name: '리빙' })).toHaveAttribute('aria-pressed', 'false');
   await expect(page.getByRole('button', { name: '관심 카테고리 저장' })).toBeDisabled();
   await chips.getByRole('button', { name: '리빙' }).click();
   await page.getByRole('button', { name: '관심 카테고리 저장' }).click();

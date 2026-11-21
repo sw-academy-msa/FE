@@ -14,14 +14,14 @@ export function PushDebug() {
     ['서비스 워커', d.sw], ['브라우저 구독', d.subscription],
     ['서버 등록', d.last ? `${new Date(d.last.at).toLocaleString('ko-KR')} · ${d.last.ok ? '성공' : `실패 ${d.last.message ?? ''}`}` : '기록 없음'],
   ] : [];
-  return <section className="space-y-2 rounded-[6px] border border-dashed border-[var(--line)] p-4 text-[12px]" aria-label="푸시 상태 점검">
+  return <section className="space-y-2 rounded-element border border-dashed border-line p-4 text-label" aria-label="푸시 상태 점검">
     <p className="font-bold">푸시 상태 점검 (미리보기 전용)</p>
-    {rows.map(([k, v]) => <div key={k} className="flex gap-3"><span className="muted w-[110px] shrink-0">{k}</span><span className="break-all">{v}</span></div>)}
-    {msg && <p className="text-[var(--red)]">{msg}</p>}
+    {rows.map(([k, v]) => <div key={k} className="flex gap-3"><span className="muted w-27.5 shrink-0">{k}</span><span className="break-all">{v}</span></div>)}
+    {msg && <p className="text-red">{msg}</p>}
     <div className="flex gap-2 pt-1">
-      <button type="button" className="rounded-[4px] border border-[var(--ink)] px-3 py-2 font-bold" disabled={busy} onClick={async () => { setBusy(true); setMsg(''); try { setMsg(RESULT[await resubscribePush()] ?? '완료'); } catch (e) { setMsg(`실패: ${errorMessage(e)}`); } finally { setBusy(false); void load(); } }}>{busy ? '등록 중…' : '구독 다시 등록'}</button>
-      <button type="button" className="muted rounded-[4px] border border-[var(--line)] px-3 py-2" onClick={() => void load()}>새로 고침</button>
+      <button type="button" className="rounded-inner border border-ink px-3 py-2 font-bold" disabled={busy} onClick={async () => { setBusy(true); setMsg(''); try { setMsg(RESULT[await resubscribePush()] ?? '완료'); } catch (e) { setMsg(`실패: ${errorMessage(e)}`); } finally { setBusy(false); void load(); } }}>{busy ? '등록 중…' : '구독 다시 등록'}</button>
+      <button type="button" className="muted rounded-inner border border-line px-3 py-2" onClick={() => void load()}>새로 고침</button>
     </div>
-    <p className="muted text-[11px]">테스트 알림 발송 API는 명세에 없어요. 실제 알림(예: 관심 상품 판매 시작)으로 확인해 주세요.</p>
+    <p className="muted text-footnote">테스트 알림 발송 API는 명세에 없어요. 실제 알림(예: 관심 상품 판매 시작)으로 확인해 주세요.</p>
   </section>;
 }

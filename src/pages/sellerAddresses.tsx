@@ -26,31 +26,31 @@ export function AddressBookPage() {
   const items = [...(list.data ?? [])].sort((a, b) => Number(b.defaultAddress) - Number(a.defaultAddress));
   return <div>
     <Header title="출고지 · 반품지 관리"/>
-    <p className="muted mb-4 text-[12px] leading-relaxed">기본 출고지·반품지는 새로 등록하는 상품에 자동으로 지정돼요.<br/>상품 등록 화면에서 다른 주소를 고를 수도 있어요.</p>
-    <div className="mb-4 flex border-b border-[var(--line)]">
-      {(['DISPATCH', 'RETURN'] as const).map(t => <button key={t} type="button" onClick={() => setParams({ tab: t }, { replace: true })} className={`flex-1 border-b-2 py-3 text-[13px] font-bold ${tab === t ? 'border-[var(--ink)]' : 'muted border-transparent'}`}>{LABEL[t]}{tab === t && list.data ? ` ${list.data.length}` : ''}</button>)}
+    <p className="muted mb-4 text-label leading-relaxed">기본 출고지·반품지는 새로 등록하는 상품에 자동으로 지정돼요.<br/>상품 등록 화면에서 다른 주소를 고를 수도 있어요.</p>
+    <div className="mb-4 flex border-b border-line">
+      {(['DISPATCH', 'RETURN'] as const).map(t => <button key={t} type="button" onClick={() => setParams({ tab: t }, { replace: true })} className={`flex-1 border-b-2 py-3 text-body font-bold ${tab === t ? 'border-ink' : 'muted border-transparent'}`}>{LABEL[t]}{tab === t && list.data ? ` ${list.data.length}` : ''}</button>)}
     </div>
     <div className="space-y-3">
       <LiveStatus state={list}/>
       <ErrorBox message={error}/>
-      {list.data && !items.length && <p className="muted py-6 text-center text-[13px]">등록된 {LABEL[tab]}가 없어요</p>}
-      {items.map(a => <div key={a.id} className="space-y-2 rounded-[8px] border border-[var(--line)] p-4">
+      {list.data && !items.length && <p className="muted py-6 text-center text-body">등록된 {LABEL[tab]}가 없어요</p>}
+      {items.map(a => <div key={a.id} className="space-y-2 rounded-dialog border border-line p-4">
         <div className="flex items-center justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-2"><p className="truncate text-[14px] font-bold">{a.label}</p>{a.defaultAddress && <span className="shrink-0 rounded-full bg-[var(--canvas)] px-2 py-0.5 text-[10px] font-bold">기본</span>}</div>
+          <div className="flex min-w-0 items-center gap-2"><p className="truncate text-callout font-bold">{a.label}</p>{a.defaultAddress && <span className="shrink-0 rounded-full bg-canvas px-2 py-0.5 text-caption font-bold">기본</span>}</div>
           <div className="flex shrink-0 gap-3">
-            {!a.defaultAddress && <button type="button" disabled={!!busy} onClick={() => void run(a.id, () => setDefaultAddressBook(tab, a.id))} className="muted text-[12px]">기본 설정</button>}
-            <Link to={`/seller/settings/ship-edit?type=${tab}&id=${encodeURIComponent(a.id)}`} className="text-[12px] font-bold">수정</Link>
-            {!a.defaultAddress && <button type="button" disabled={!!busy} onClick={() => setRemoving(a)} className="text-[12px] text-[var(--red)]">삭제</button>}
+            {!a.defaultAddress && <button type="button" disabled={!!busy} onClick={() => void run(a.id, () => setDefaultAddressBook(tab, a.id))} className="muted text-label">기본 설정</button>}
+            <Link to={`/seller/settings/ship-edit?type=${tab}&id=${encodeURIComponent(a.id)}`} className="text-label font-bold">수정</Link>
+            {!a.defaultAddress && <button type="button" disabled={!!busy} onClick={() => setRemoving(a)} className="text-label text-red">삭제</button>}
           </div>
         </div>
-        <p className="muted text-[12px]">{line(a)}</p>
-        <p className="muted text-[12px]">{a.contactName} · {a.contactPhone}</p>
+        <p className="muted text-label">{line(a)}</p>
+        <p className="muted text-label">{a.contactName} · {a.contactPhone}</p>
       </div>)}
       <Button outline className="w-full" onClick={() => navigate(`/seller/settings/ship-edit?type=${tab}`)}>{LABEL[tab]} 추가</Button>
     </div>
     {removing && <Modal title={`${LABEL[tab]}를 삭제할까요?`} onClose={() => setRemoving(null)}><div className="space-y-4">
-      <div className="space-y-1 rounded-[4px] bg-[var(--canvas)] p-3"><p className="text-[13px] font-bold">{removing.label}</p><p className="muted text-[12px]">{line(removing)}</p></div>
-      <div className="flex gap-2"><Button outline className="flex-1" onClick={() => setRemoving(null)}>취소</Button><Button className="flex-1" disabled={!!busy} onClick={() => { const a = removing; setRemoving(null); void run(a.id, () => deleteAddressBook(tab, a.id)); }}>삭제</Button></div>
+      <div className="space-y-1 rounded-inner bg-canvas p-3"><p className="text-body font-bold">{removing.label}</p><p className="muted text-label">{line(removing)}</p></div>
+      <div className="flex gap-2"><Button outline className="flex-1" closeSheet>취소</Button><Button className="flex-1" disabled={!!busy} onClick={() => { const a = removing; setRemoving(null); void run(a.id, () => deleteAddressBook(tab, a.id)); }}>삭제</Button></div>
     </div></Modal>}
   </div>;
 }
@@ -108,18 +108,18 @@ export function AddressBookFormPage({ fallback }: { fallback: AddressType }) {
   return <form className="space-y-5" onSubmit={save}>
     <Header title={`${LABEL[type]} ${id ? '수정' : '추가'}`}/>
     <LiveStatus state={current}/>
-    {type === 'RETURN' && defaultDispatch && <button type="button" onClick={() => setForm(f => ({ ...f, address: { ...defaultDispatch.address, detailAddress: defaultDispatch.address.detailAddress ?? '' }, contactName: f.contactName || defaultDispatch.contactName, contactPhone: f.contactPhone || defaultDispatch.contactPhone }))} className="w-full rounded-[8px] bg-[var(--canvas)] p-3 text-left"><p className="text-[13px] font-bold">기본 출고지 주소 불러오기</p><p className="muted text-[11px]">{defaultDispatch.label} · {line(defaultDispatch)}</p></button>}
+    {type === 'RETURN' && defaultDispatch && <button type="button" onClick={() => setForm(f => ({ ...f, address: { ...defaultDispatch.address, detailAddress: defaultDispatch.address.detailAddress ?? '' }, contactName: f.contactName || defaultDispatch.contactName, contactPhone: f.contactPhone || defaultDispatch.contactPhone }))} className="w-full rounded-dialog bg-canvas p-3 text-left"><p className="text-body font-bold">기본 출고지 주소 불러오기</p><p className="muted text-footnote">{defaultDispatch.label} · {line(defaultDispatch)}</p></button>}
     <Field label={`${LABEL[type]} 이름`} required error={errors.label}><input aria-label={`${LABEL[type]} 이름`} className="field" maxLength={50} value={form.label} onChange={e => set({ label: e.target.value })} placeholder={type === 'DISPATCH' ? '예: 성수 물류창고' : '예: 반품 센터'}/></Field>
     <Field label="담당자" required error={errors.contactName}><input aria-label="담당자" className="field" maxLength={100} value={form.contactName} onChange={e => set({ contactName: e.target.value })}/></Field>
     <Field label="연락처" required error={errors.contactPhone}><input aria-label="연락처" className="field" type="tel" inputMode="tel" value={form.contactPhone} onChange={e => set({ contactPhone: e.target.value })} placeholder="010-0000-0000"/></Field>
     <Field label="주소" required error={errors.address ?? errors['address.postalCode'] ?? errors['address.roadAddress']}>
       <div className="space-y-2">
-        <div className="flex gap-2"><input aria-label="우편번호" className="field flex-1" value={form.address.postalCode} readOnly placeholder="우편번호"/><Button outline className="shrink-0 text-[12px]!" onClick={search}>주소 검색</Button></div>
+        <div className="flex gap-2"><input aria-label="우편번호" className="field flex-1" value={form.address.postalCode} readOnly placeholder="우편번호"/><Button outline className="shrink-0 text-label!" onClick={search}>주소 검색</Button></div>
         <input aria-label="도로명 주소" className="field" value={form.address.roadAddress} readOnly placeholder="주소 검색으로 선택해 주세요"/>
         <input aria-label="상세 주소" className="field" maxLength={200} value={form.address.detailAddress ?? ''} onChange={e => setAddr({ detailAddress: e.target.value })} placeholder="상세 주소(선택)"/>
       </div>
     </Field>
-    {!(id && current.data?.defaultAddress) && <label className="flex items-center gap-3"><input type="checkbox" className="h-4 w-4" checked={form.makeDefault} onChange={e => set({ makeDefault: e.target.checked })}/><div><p className="text-[13px] font-bold">기본 {LABEL[type]}로 설정</p><p className="muted text-[11px]">새로 등록하는 상품의 {LABEL[type]}로 자동 지정돼요</p></div></label>}
+    {!(id && current.data?.defaultAddress) && <label className="flex items-center gap-3"><input type="checkbox" className="h-4 w-4" checked={form.makeDefault} onChange={e => set({ makeDefault: e.target.checked })}/><div><p className="text-body font-bold">기본 {LABEL[type]}로 설정</p><p className="muted text-footnote">새로 등록하는 상품의 {LABEL[type]}로 자동 지정돼요</p></div></label>}
     <ErrorBox message={error}/>
     <Button type="submit" className="w-full" disabled={busy || !ready}>{busy ? '저장 중…' : '저장하기'}</Button>
   </form>;

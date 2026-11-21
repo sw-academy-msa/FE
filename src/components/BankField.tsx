@@ -10,11 +10,11 @@ export function BankField({ value, onChange, label = '정산 은행' }: { value:
   const [open, setOpen] = useState(false);
   return <>
     <button type="button" aria-label={label} aria-haspopup="dialog" onClick={() => setOpen(true)} className="field flex w-full items-center justify-between text-left">
-      <span className={value ? '' : 'text-[var(--placeholder)]'}>{value || '은행을 선택해 주세요'}</span><ChevronDown size={18} className="muted shrink-0"/>
+      <span className={value ? '' : 'text-placeholder'}>{value || '은행을 선택해 주세요'}</span><ChevronDown size={18} className="muted shrink-0"/>
     </button>
     {open && <BottomSheet title="은행 선택" onClose={() => setOpen(false)}>
       <div role="listbox" aria-label="은행 목록" className="grid max-h-[60dvh] grid-cols-2 gap-2 overflow-y-auto px-4 pb-6">
-        {BANKS.map(b => <button key={b} type="button" role="option" aria-selected={value === b} onClick={() => { onChange(b); setOpen(false); }} className={`h-12 rounded-[8px] border text-[14px] ${value === b ? 'border-[var(--ink)] bg-[var(--soft)] font-bold' : 'border-[var(--line)]'}`}>{b}</button>)}
+        {BANKS.map(b => <button key={b} type="button" role="option" aria-selected={value === b} onClick={() => { onChange(b); setOpen(false); }} className={`h-12 rounded-dialog border text-callout ${value === b ? 'border-ink bg-soft font-bold' : 'border-line'}`}>{b}</button>)}
       </div>
     </BottomSheet>}
   </>;
