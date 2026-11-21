@@ -5,7 +5,7 @@ import { blockExternal } from './session';
 /** 판매 등록 5단계(1 기본 → 2 가격 → 3 일정 → 4 카테고리와 AI → 5 결과 확인): 단계 이동, 뒤로 가기, 단계별 검사, 비동기 AI 분석, 초안 이어 쓰기, 수정 흐름, 나가기 확인창 */
 const stepGroup = (page: Page, n: number) => page.getByRole('group', { name: new RegExp(`판매 등록 ${n}/5단계`) });
 const next = (page: Page) => page.getByRole('button', { name: '다음', exact: true }).click();
-const confirmDialog = (page: Page) => page.getByRole('dialog', { name: '작성을 그만할까요?' });
+const confirmDialog = (page: Page) => page.getByRole('dialog', { name: /작성을 그만할까요|작성 중인 내용을 임시 저장할까요/ });
 const aiState = (page: Page) => page.getByLabel('AI 분석 상태');
 
 async function seller(page: Page, aiOutcome = 'auto') {
@@ -98,9 +98,9 @@ test('나가기를 고르면 초안을 지워 다시 열면 빈 화면, 계속 �
   await page.reload(); await expect(stepGroup(page, 2)).toBeVisible(); await expect(page.getByLabel('한정 판매가')).toHaveValue('9,000');
   await page.getByRole('button', { name: '이전 화면' }).click(); await expect(stepGroup(page, 1)).toBeVisible();
   await page.getByRole('button', { name: '이전 화면' }).click();
-  await expect(confirmDialog(page)).toBeVisible(); await expect(confirmDialog(page)).toContainText('지금 나가면 작성 중인 내용이 사라져요.');
+  await expect(confirmDialog(page)).toBeVisible(); await expect(confirmDialog(page)).toContainText('임시 저장한 상품은 판매 상품 관리에서 이어서 등록할 수 있어요.');
   await confirmDialog(page).getByRole('button', { name: '계속 작성' }).click(); await expect(stepGroup(page, 1)).toBeVisible(); await expect(page.getByLabel('상품명')).toHaveValue('리넨 셔츠');
-  await page.getByRole('button', { name: '이전 화면' }).click(); await confirmDialog(page).getByRole('button', { name: '나가기' }).click();
+  await page.getByRole('button', { name: '이전 화면' }).click(); await confirmDialog(page).getByRole('button', { name: '삭제하고 나가기' }).click();
   await expect(page).toHaveURL(/seller\/products/);
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('stockdrop:v1')!).drafts.seller)).toBeUndefined();
   await page.getByRole('link', { name: '상품 등록' }).click(); await expect(stepGroup(page, 1)).toBeVisible();

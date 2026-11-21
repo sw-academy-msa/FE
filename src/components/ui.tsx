@@ -239,7 +239,8 @@ function CenterDialog({ title, onDismiss, dismissOnBackdrop = false, children }:
 export const LEAVE_MESSAGE = '지금 나가면 작성 중인 내용이 사라져요.';
 /** 주소 검색처럼 입력을 맡겨 두고 다녀오는 화면(돌아오면 입력이 이어진다) */
 const LEAVE_OK = ['/address-search'];
-type LeaveGuard = { dirty: boolean; bypass: boolean; message?: string; allow?: (pathname: string) => boolean; onLeave?: () => void };
+type LeaveActions = { onSave?: () => void | Promise<void>; onDelete?: () => void | Promise<void> };
+type LeaveGuard = LeaveActions & { dirty: boolean; bypass: boolean; message?: string; allow?: (pathname: string) => boolean; onLeave?: () => void };
 /** 지금 화면에 걸린 작성 중 표시. react-router는 막는 함수(useBlocker)를 하나만 지원해서, 화면들은 여기에 등록하고 LeaveGuardHost 하나가 막는다 */
 const leaveGuards = new Set<LeaveGuard>();
 const stopping = (next: string, current: string) => { if (next === current || LEAVE_OK.includes(next)) return undefined; return [...leaveGuards].reverse().find(g => g.dirty && !g.bypass && !g.allow?.(next)); };
@@ -252,9 +253,9 @@ const stopping = (next: string, current: string) => { if (next === current || LE
  * 계속 작성이면 주소와 입력이 그대로 남는다
  */
 /** onLeave: 확인창에서 나가기를 골랐을 때만(새로고침, 단계 이동, 앱 종료는 아님) 이동 뒤에 부른다. 예: 판매 등록 초안 지우기 */
-export function useLeaveGuard(dirty: boolean, { message, allow, onLeave }: { message?: string; allow?: (pathname: string) => boolean; onLeave?: () => void } = {}) {
+export function useLeaveGuard(dirty: boolean, { message, allow, onLeave, onSave, onDelete }: LeaveActions & { message?: string; allow?: (pathname: string) => boolean; onLeave?: () => void } = {}) {
   const [guard] = useState<LeaveGuard>(() => ({ dirty, bypass: false }));
-  guard.dirty = dirty; guard.message = message; guard.allow = allow; guard.onLeave = onLeave;
+  guard.dirty = dirty; guard.message = message; guard.allow = allow; guard.onLeave = onLeave; guard.onSave = onSave; guard.onDelete = onDelete;
   useEffect(() => { leaveGuards.add(guard); return () => { leaveGuards.delete(guard); }; }, [guard]);
   useEffect(() => {
     if (!dirty) return;
@@ -271,17 +272,25 @@ export function LeaveGuardHost() {
   const blocker = useBlocker(useCallback(({ currentLocation, nextLocation }: { currentLocation: { pathname: string }; nextLocation: { pathname: string } }) => {
     const g = stopping(nextLocation.pathname, currentLocation.pathname); blocking.current = g; if (g) setMessage(g.message); return !!g;
   }, []));
-  return blocker.state === 'blocked' ? <ConfirmLeave message={message} onLeave={() => { const g = blocking.current; blocker.proceed(); g?.onLeave?.(); }} onStay={() => blocker.reset()}/> : null;
+  return blocker.state === 'blocked' ? <ConfirmLeave message={message} onSave={blocking.current?.onSave ? async () => { await blocking.current?.onSave?.(); blocker.proceed?.(); } : undefined} onDelete={blocking.current?.onDelete ? async () => { await blocking.current?.onDelete?.(); blocker.proceed?.(); } : undefined} onLeave={() => { const g = blocking.current; blocker.proceed(); g?.onLeave?.(); }} onStay={() => blocker.reset()}/> : null;
 }
 
 /** 작성 중 나가기 확인 대화상자. Esc는 계속 작성. message: 화면마다 사실에 맞는 안내(기본은 저장되지 않음) */
-export function ConfirmLeave({ onLeave, onStay, message = LEAVE_MESSAGE }: { onLeave: () => void; onStay: () => void; message?: string }) {
-  return <CenterDialog title="작성을 그만할까요?" onDismiss={onStay}>
-    <p className="muted text-body leading-relaxed">{message}</p>
-    <div className="flex gap-2">
+export function ConfirmLeave({ onLeave, onStay, onSave, onDelete, message }: LeaveActions & { onLeave: () => void; onStay: () => void; message?: string }) {
+  const [busy, setBusy] = useState(false), [error, setError] = useState('');
+  const choice = !!onSave && !!onDelete;
+  async function run(action: () => void | Promise<void>) { if (busy) return; setBusy(true); setError(''); try { await action(); } catch (e) { setError(e instanceof Error ? e.message : '처리하지 못했어요. 다시 시도해 주세요.'); } finally { setBusy(false); } }
+  return <CenterDialog title={choice ? '작성 중인 내용을 임시 저장할까요?' : '작성을 그만할까요?'} onDismiss={() => { if (!busy) onStay(); }}>
+    <p className="muted text-body leading-relaxed">{message ?? (choice ? '임시 저장하면 다시 들어와 이어서 작성할 수 있어요.' : LEAVE_MESSAGE)}</p>
+    <ErrorBox message={error}/>
+    {choice ? <div className="flex flex-col gap-2">
+      <Button className="min-h-11 w-full" disabled={busy} onClick={() => void run(onSave!)}>임시 저장하고 나가기</Button>
+      <Button outline className="min-h-11 w-full" disabled={busy} onClick={() => void run(onDelete!)}>삭제하고 나가기</Button>
+      <Button outline className="min-h-11 w-full" disabled={busy} onClick={onStay}>계속 작성</Button>
+    </div> : <div className="flex gap-2">
       <Button outline className="flex-1" onClick={onLeave}>나가기</Button>
       <Button className="flex-1" onClick={onStay}>계속 작성</Button>
-    </div>
+    </div>}
   </CenterDialog>;
 }
 

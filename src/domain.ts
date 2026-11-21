@@ -8,7 +8,9 @@ export interface Extra { key: string; value: string }
 export interface Faq { id: string; question: string; answer: string; /** false = AI 예상 답변을 판매자가 아직 확인하지 않은 초안(저장하지 않는다) */ confirmed: boolean; /** AI 질문에서 온 FAQ(서버 suggestionId) */ suggestionId?: string }
 export interface Option { id: string; name: string; stock: number }
 export interface Dimension { name: string; values: string }
+type DraftAddresses = { dispatch: { postalCode: string; roadAddress: string; detailAddress: string | null } | null; return: { postalCode: string; roadAddress: string; detailAddress: string | null } | null };
 export interface Product {
+  /** 판매자 초안 조회의 주소 스냅샷. 다른 기기에서 주소록 선택을 복원한다. 공개 상세에는 없음 */ draftAddresses?: DraftAddresses;
   id: string; sellerId: string; name: string; brand: string; category: string; description: string;
   images: string[]; originalUrl: string; price: number; shipping: number; maxPerAccount: number;
   dispatchDays: number; startsAt: number; endsAt: number; published: boolean; options: Option[];
@@ -68,6 +70,7 @@ export interface Inquiry { id: string; userId: string; sellerId: string; product
   /** 실제 API 주문 문의: 메시지 전체(seller=true는 판매자)와 첨부 imageId (열람은 download API) */ messages?: { seller: boolean; body: string; createdAt: number }[]; imageIds?: string[] }
 export type AiStatus = 'before' | 'analyzing' | 'recommended' | 'uncertain' | 'failed' | 'unsupported' | 'stale' | 'delayed';
 export interface Draft {
+  draftAddresses?: DraftAddresses;
   /** 승인 상품 수정: 편집을 시작할 때의 상품 version. 수정 심사 제출의 expectedVersion으로 보내, 그사이 바뀐 상품을 덮어쓰지 않게 한다 */ editingVersion?: number;
   editingId?: string; step: number;
   /** 판매 등록 단계 화면(1~5)에서 마지막으로 본 단계. 다시 열면 이 단계부터 이어 쓴다 */ wizardStep?: number;

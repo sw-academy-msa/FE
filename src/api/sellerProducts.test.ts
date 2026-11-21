@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { api } from './client';
-import { StageError, sourceUrlProblem, ATTRIBUTE_NAMES, MOCK_REGISTRATION_METADATA, MAX_ANALYSIS_BYTES, attributeName, attributeProblem, composeShippingNotice, PRODUCT_STATE_MESSAGE, addProductFaq, analysisBlocker, listingProblems, categoriesForCode, categoryForCode, criteriaFor, analysisProblems, analyzeDraft, answerProductInquiry, basicInfoOf, createProductDraft, deleteProductFaq, deleteProductImage, getAiAnalysis, getProductImageUrl, getRegistrationMetadata, getSalesSummary, getSellerProduct, getSellerProductWithImages, listProductImages, listRevisions, listSellerProductInquiries, listSellerProducts, optionPayload, pollAiAnalysis, reorderProductImages, requestAiAnalysis, saveBasicInfo, saveDetails, saveOptions, savePricingShipping, saveRegistrationFaqs, saveSchedule, sellerProductFromApi, submitListing, submitReview, submitRevision, submitRevisionFromDraft, updateProductFaq, uploadProductImage } from './sellerProducts';
+import { StageError, sourceUrlProblem, ATTRIBUTE_NAMES, MOCK_REGISTRATION_METADATA, MAX_ANALYSIS_BYTES, attributeName, attributeProblem, composeShippingNotice, PRODUCT_STATE_MESSAGE, addProductFaq, analysisBlocker, listingProblems, categoriesForCode, categoryForCode, criteriaFor, analysisProblems, analyzeDraft, answerProductInquiry, basicInfoOf, saveProductDraft, deleteProductDraft, createProductDraft, deleteProductFaq, deleteProductImage, getAiAnalysis, getProductImageUrl, getRegistrationMetadata, getSalesSummary, getSellerProduct, getSellerProductWithImages, listProductImages, listRevisions, listSellerProductInquiries, listSellerProducts, optionPayload, pollAiAnalysis, reorderProductImages, requestAiAnalysis, saveBasicInfo, saveDetails, saveOptions, savePricingShipping, saveRegistrationFaqs, saveSchedule, sellerProductFromApi, submitListing, submitReview, submitRevision, submitRevisionFromDraft, updateProductFaq, uploadProductImage } from './sellerProducts';
 import { blankDraft, optionKey } from '../domain';
 import type { Draft } from '../domain';
 import type { SellerProductDto } from './types';
@@ -252,5 +252,30 @@ describe('심사 제출 전 검사', () => {
     const f = listingProblems({ ...blankDraft(), imageIds: [], category: '패션', originalUrl: 'nope', price: 0, shipping: -1, dispatchDays: 0, maxPerAccount: 0, startsAt: '2029-12-31T10:00', axes: { size: false, color: false }, stock: {} }, { ...o, dispatch: false });
     expect(Object.keys(f)).toEqual(['images', 'name', 'description', 'disposalReason', 'category', 'sourceUrl', 'price', 'options', 'startsAt', 'dispatchDays', 'shipping', 'maxPerAccount', 'addresses']);
     expect(f.addresses).toBe('출고지를 등록해 주세요.');
+  });
+});
+
+describe('서버 초안 저장과 삭제', () => {
+  it('심사 요청 없이 모든 단계와 응답 version을 이어 저장한다', async () => {
+    let version = 0;
+    const calls = fake(c => dto({ version: c.method === 'PUT' ? ++version : version }));
+    const draft = { ...blankDraft(), name: '임시 상품', noOptions: true, optionDims: [], stock: { '[]': 3 }, price: 12000, shipping: 3000, shippingNotice: '택배 안내' };
+    const result = await saveProductDraft(draft, 'p1');
+    expect(result.localOnly).toEqual([]);
+    expect(calls.filter(c => c.method === 'PUT').map(c => c.url.split('/').at(-1))).toEqual(['basic-info', 'details', 'options', 'pricing-shipping', 'schedule', 'faqs']);
+    expect(calls.filter(c => c.method === 'PUT').map(c => c.body.expectedVersion)).toEqual([0, 1, 2, 3, 4, 5]);
+    expect(calls.some(c => c.url.endsWith('review-submissions'))).toBe(false);
+    await deleteProductDraft('p1'); expect(calls.at(-1)?.method).toBe('DELETE'); expect(calls.at(-1)?.url).toMatch(/seller\/products\/p1$/);
+  });
+  it('미완성 값 검증 실패 단계는 기기에 남길 목록으로 반환하고 나머지 단계는 저장한다', async () => {
+    let version = 0;
+    api.configure({ mock: false, fetch: (async (u, init) => String(u).endsWith('pricing-shipping') ? new Response(JSON.stringify({ code: 'COMMON_INVALID_REQUEST', message: '가격 필요' }), { status: 400 }) : new Response(JSON.stringify({ success: true, data: dto({ version: init?.method === 'PUT' ? ++version : version }) }), { status: 200, headers: { 'content-type': 'application/json' } })) as typeof fetch });
+    const result = await saveProductDraft(blankDraft(), 'p1');
+    expect(result.localOnly).toContain('가격과 배송'); expect(result.localOnly).toContain('미완성 옵션과 수량'); expect(result.product.version).toBeGreaterThan(1);
+  });
+  it('권한 오류와 상태 변경은 성공으로 처리하지 않는다', async () => {
+    fake(() => dto({ status: 'REJECTED' })); await expect(saveProductDraft(blankDraft(), 'p1')).rejects.toThrow('작성 중인 상품만');
+    api.configure({ mock: false, fetch: (async () => new Response(JSON.stringify({ code: 'PRODUCT_DRAFT_DELETE_NOT_ALLOWED', message: '작성 중인 상품만 삭제할 수 있어요.' }), { status: 409 })) as typeof fetch });
+    await expect(deleteProductDraft('p1')).rejects.toMatchObject({ code: 'PRODUCT_DRAFT_DELETE_NOT_ALLOWED' });
   });
 });
