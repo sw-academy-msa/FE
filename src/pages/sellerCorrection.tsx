@@ -29,7 +29,7 @@ export function CorrectionForm({ app, codes, onSubmitted }: { app: Application; 
   const set = (k: keyof CorrectionValues, value: string) => save({ ...v, [k]: value });
   // 작성 중: 처음 연 값(이 창에 남아 있던 입력 포함)과 다르거나 서류를 붙였을 때. 계좌번호와 서류는 이 창에도 남지 않는다
   const [start] = useState(() => JSON.stringify(v));
-  const leave = useLeaveGuard(JSON.stringify(v) !== start || !!doc, { message: '적은 내용은 다시 들어오면 이어서 쓸 수 있지만, 계좌번호와 첨부한 서류는 다시 넣어야 해요.' });
+  const leave = useLeaveGuard(JSON.stringify(v) !== start || !!doc || !!sessionStorage.getItem(draftKey(app.id)), { message: '임시 저장은 이 창에서만 유지돼요. 계좌번호와 첨부 서류는 저장되지 않아요.', onSave: () => { sessionStorage.setItem(draftKey(app.id), JSON.stringify({ ...v, account: '' })); }, onDelete: () => { sessionStorage.removeItem(draftKey(app.id)); } });
   useEffect(() => {
     const target = params.get('pick'); if (target !== 'dispatch' && target !== 'return') return;
     const picked = takeAddressPick();

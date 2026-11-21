@@ -15,7 +15,7 @@ import { AddressBookFormPage, AddressBookPage } from './sellerAddresses';
 import { SalesRestrictionBanner } from './sellerReview';
 import type { ProductRevisionDto } from '../api';
 import { getSellerSettlement, settlementNet, getProductDispatchAddress, answerOrderInquiry, listSellerOrderInquiries, answerProductInquiry, deleteSellerLogo, deliverOrder, errorMessage, getSalesSummary, getSellerOrder, getSellerInquiryImageUrl, getSellerOrderInquiry, getSellerOrderSummary, getSellerProduct, getSellerProductWithImages, listRevisions, listSellerOrderInquiryInbox, listSellerOrders, listSellerProductInquiries, listSellerProducts, mergeInquiries, mergeOrders, mergeProducts, shipOrder, useLive, fetchSellerLogo, fetchSellerMe, fetchSellerStore, fetchWithdrawalEligibility, updateSellerAddresses, updateSellerBank, updateSellerContact, updateSellerStore, uploadSellerLogo, useApi, withdrawAccount } from '../api';
-import { api } from '../api';
+import { api, deleteProductDraft } from '../api';
 import { productSettlement } from '../api/sellerOrders';
 import { USE_MOCK } from '../config';
 import { useProductPhotos } from '../productPhotos';
@@ -62,6 +62,12 @@ export function SellerSalesPage() {
 }
 export function SellerProductsPage() {
   const s = useStore(), user = activeUser(s), now = useClock(); const [params, setParams] = useSearchParams(); const tab = params.get('state') ?? '전체';
+  const [deleting, setDeleting] = useState<string | null>(null), [deleteBusy, setDeleteBusy] = useState(false), [deleteError, setDeleteError] = useState('');
+  async function removeDraft() {
+    if (!deleting || deleteBusy) return; setDeleteBusy(true); setDeleteError('');
+    try { if (!USE_MOCK) await deleteProductDraft(deleting); mutate(st => { st.products = st.products.filter(p => p.id !== deleting); const d = st.drafts[user.id]; if (d?.editingId === deleting || d?.serverId === deleting) delete st.drafts[user.id]; }); setDeleting(null); }
+    catch (e) { setDeleteError(errorMessage(e)); } finally { setDeleteBusy(false); }
+  }
   // 실제 모드: 본인 상품 목록과 이번 달 판매 집계를 서버에서 받는다(mock은 store 목업 그대로)
   const live = useLive(async signal => listSellerProducts(user.id, {}, signal), (st, items) => mergeProducts(st, items), [user.id]);
   const month = `${new Date(now).getFullYear()}-${String(new Date(now).getMonth() + 1).padStart(2, '0')}`;
@@ -82,6 +88,7 @@ export function SellerProductsPage() {
   const chips: [string, number][] = [['전체', allProducts.length], ['판매 중', allProducts.filter(p => saleState(p, now) === '판매 중').length], ['판매 예정', allProducts.filter(p => saleState(p, now) === '판매 예정').length], ['판매 심사 중', allProducts.filter(p => p.reviewStatus === 'IN_REVIEW').length], ['판매 종료', endedCount]];
   return <div className="space-y-0">
     <Header title="판매 상품 관리" backTo="/my" action={<Link to="/seller/new" aria-label="상품 등록"><Plus size={22}/></Link>}/>
+    {deleting && <Modal title="작성 중인 상품을 삭제할까요? 되돌릴 수 없어요" onClose={() => { if (!deleteBusy) setDeleting(null); }}><ErrorBox message={deleteError}/><div className="flex gap-2"><Button outline className="min-h-11 flex-1" disabled={deleteBusy} onClick={() => setDeleting(null)}>취소</Button><Button className="min-h-11 flex-1" disabled={deleteBusy} onClick={() => void removeDraft()}>삭제</Button></div></Modal>}
     <div className="flex items-center justify-between py-3"><span className="text-body font-bold">{settings?.displayName ?? user.name}</span><span className="muted text-label">{new Date(now).getMonth()+1}월 기준</span></div>
     <LiveStatus state={live}/>
     <div className="mb-4 flex justify-around rounded-inner bg-canvas py-4">{([['이번 달 판매', `${thisMonth}개`], ...(USE_MOCK ? [['알림 신청', `${alarmCount}명`]] : []), ['완판', `${soldOutCount}건`]] as [string,string][]).map(([label, value]) => <div key={label} className="text-center"><p className="font-number text-headline font-bold">{value}</p><p className="muted mt-1 text-footnote">{label}</p></div>)}</div>
@@ -93,7 +100,7 @@ export function SellerProductsPage() {
         <div className="flex gap-3">
           <ProductImage src={p.images[0]} alt={p.name} className="h-18 w-18 shrink-0"/>
           <div className="min-w-0 flex-1 space-y-1">
-            <div className="flex items-center gap-2"><span className={`rounded-badge px-2 py-0.5 text-footnote font-bold ${isLive ? 'bg-positive-soft text-positive' : !USE_MOCK && p.reviewStatus === 'REJECTED' ? 'bg-red-soft text-red' : 'bg-soft text-muted'}`}>{isLive ? '판매 중' : soldOut ? '완판' : status === '게시 전' && !USE_MOCK && p.reviewStatus ? REVIEW_LABEL[p.reviewStatus] : status}</span>{revStatus.data?.[p.id]?.status === 'IN_REVIEW' && <span className="rounded-badge bg-[#FFF3E0] px-2 py-0.5 text-footnote font-bold text-[#B25E09]">수정 심사 중</span>}{revStatus.data?.[p.id]?.status === 'REJECTED' && <span className="rounded-badge bg-red-soft px-2 py-0.5 text-footnote font-bold text-red">수정 반려</span>}<span className="muted text-footnote font-bold">{onSaleTime ? `오늘 ${hm(p.startsAt)} – ${hm(p.endsAt)}` : ended ? `${md(p.endsAt)} ${hm(p.endsAt)} 종료` : `${md(p.startsAt)} ${hm(p.startsAt)} 오픈`}</span></div>
+            <div className="flex items-center gap-2"><span className={`rounded-badge px-2 py-0.5 text-footnote font-bold ${isLive ? 'bg-positive-soft text-positive' : !USE_MOCK && p.reviewStatus === 'REJECTED' ? 'bg-red-soft text-red' : 'bg-soft text-muted'}`}>{isLive ? '판매 중' : soldOut ? '완판' : status === '게시 전' && p.reviewStatus && (!USE_MOCK || p.reviewStatus === 'DRAFT') ? REVIEW_LABEL[p.reviewStatus] : status}</span>{revStatus.data?.[p.id]?.status === 'IN_REVIEW' && <span className="rounded-badge bg-[#FFF3E0] px-2 py-0.5 text-footnote font-bold text-[#B25E09]">수정 심사 중</span>}{revStatus.data?.[p.id]?.status === 'REJECTED' && <span className="rounded-badge bg-red-soft px-2 py-0.5 text-footnote font-bold text-red">수정 반려</span>}<span className="muted text-footnote font-bold">{onSaleTime ? `오늘 ${hm(p.startsAt)} – ${hm(p.endsAt)}` : ended ? `${md(p.endsAt)} ${hm(p.endsAt)} 종료` : `${md(p.startsAt)} ${hm(p.startsAt)} 오픈`}</span></div>
             <p className="text-callout">{p.name}</p>
             <p className="font-number text-subhead font-bold">{money(p.price)} <span className="muted text-label font-normal">{total}개 한정</span></p>
           </div>
@@ -103,6 +110,7 @@ export function SellerProductsPage() {
         {status === '판매 예정' && <p className="muted text-label">{openDay(p.startsAt, now)}{USE_MOCK && ` · 알림 신청 ${alarmCount}명`}</p>}
         {isLive || ended ? <Button outline to={`/seller/product/${p.id}`} className="w-full text-body!">{isLive ? '판매 현황' : '판매 결과'}</Button> : status === '판매 예정' && <Button outline to={`/seller/new?edit=${p.id}`} className="w-full text-body!">판매 정보 수정</Button>}
         {status === '게시 전' && (p.reviewStatus === 'IN_REVIEW' ? <Button outline to={`/seller/published/${p.id}`} className="w-full text-body!">심사 상태 보기</Button> : p.reviewStatus === 'REJECTED' && !USE_MOCK ? <RejectedActions p={p}/> : <Button outline to={`/seller/new?edit=${p.id}`} className="w-full text-body!">{p.reviewStatus === 'REJECTED' ? '수정하고 다시 요청' : '이어서 등록'}</Button>)}
+        {p.reviewStatus === 'DRAFT' && <Button outline className="min-h-11 w-full" onClick={() => { setDeleteError(''); setDeleting(p.id); }}>삭제</Button>}
       </div>;
     })}
     {!products.length && !live.loading && <Empty title={tab === '전체' ? '등록한 상품이 없어요' : `${tab} 상품이 없어요`}/>}
