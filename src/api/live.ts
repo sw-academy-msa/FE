@@ -5,8 +5,11 @@ import { mutate } from '../store';
 import { useApi } from './hooks';
 
 
-export interface LiveState { loading: boolean; error: string; reload: () => void; live: boolean }
-const MOCK_STATE: LiveState = { loading: false, error: '', reload: () => {}, live: false };
+/** notFound: 서버가 404(없는 리소스)를 줬다. 네트워크 오류나 5xx만 다시 시도를 보여 준다 */
+export interface LiveState { loading: boolean; error: string; notFound: boolean; reload: () => void; live: boolean }
+const MOCK_STATE: LiveState = { loading: false, error: '', notFound: false, reload: () => {}, live: false };
+/** 다시 시도할 수 있는 상태(불러오는 중이거나 404가 아닌 실패)인지. 404면 화면의 '찾을 수 없어요'를 보여 준다 */
+export const retryable = (s: { loading: boolean; error: string; notFound: boolean }) => s.loading || (!!s.error && !s.notFound);
 
 /**
  * 서버 데이터를 화면이 읽는 store에 반영한다. 화면은 지금처럼 `useStore()`로 읽고, 이 훅이 주는 loading·error로 상태만 그린다.
@@ -26,5 +29,5 @@ export function useLive<T>(load: (signal: AbortSignal) => Promise<T>, apply: (s:
   const last = useRef(0);
   // eslint-disable-next-line react-hooks/rules-of-hooks
   useEffect(() => { const on = () => { if (Date.now() - last.current < 15_000) return; last.current = Date.now(); state.reload(); }; window.addEventListener(IMAGE_EXPIRED, on); return () => window.removeEventListener(IMAGE_EXPIRED, on); }, [state.reload]);
-  return { loading: state.loading, error: state.error, reload: state.reload, live: true };
+  return { loading: state.loading, error: state.error, notFound: state.notFound, reload: state.reload, live: true };
 }
