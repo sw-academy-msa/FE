@@ -374,7 +374,8 @@ export function OrderInquiryPage() {
   useEffect(() => { try { if (question.trim()) sessionStorage.setItem(inquiryDraftKey(id), JSON.stringify({ kind, question })); else sessionStorage.removeItem(inquiryDraftKey(id)); } catch { /* 저장 차단: 화면 값만 유지 */ } }, [id, kind, question]);
   // 작성 중: 처음 연 값(이 창에 남아 있던 글 포함)과 유형이나 내용이 다르거나 사진을 붙였을 때. 글은 이 창에 남고 사진은 남지 않는다
   const [start] = useState({ kind, question });
-  const leave = useLeaveGuard(kind !== start.kind || question !== start.question || images.length > 0, { message: images.length ? '적은 내용은 다시 들어오면 이어서 쓸 수 있지만, 첨부한 사진은 사라져요.' : '적은 내용은 다시 들어오면 이어서 쓸 수 있어요.' });
+  // 작성 중: 글, 사진, 처음과 다른 유형이 있으면(이 창에 남아 있던 글로 다시 열었어도) 묻는다. 나가기를 고르면 이 창에 남긴 글도 지운다(새로고침과 다시 열기는 이어 쓴다)
+  const leave = useLeaveGuard(!!question.trim() || images.length > 0 || kind !== start.kind || kind !== '하자·파손', { onLeave: () => { try { sessionStorage.removeItem(inquiryDraftKey(id)); } catch { /* 저장 차단 */ } } });
   // 새로고침·알림 등으로 바로 들어오면 store에 주문이 없다: 주문을 불러와 주문 번호를 보여 준다(조회 모델 반영 지연·일시 실패는 자동 재시도)
   const known = !!order;
   const live = useLive(sig => known || !id ? Promise.resolve(null) : retryProjection(() => getOrder(id, getState().activeUserId, sig), sig).catch(e => { if (isApiError(e) && e.status === 404) return null; throw e; }), (st, d) => { if (d) mergeOrders(st, [d]); }, [id, user.id]);
