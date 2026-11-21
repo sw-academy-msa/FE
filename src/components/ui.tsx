@@ -219,7 +219,7 @@ export function QuantityStepper({ value, min = 0, max, onChange }: { value: numb
 /** 칩 — 선택 시 ink 바탕 흰 글자, 기본 흰 바탕 border */
 export function Chip({ selected, onClick, children }: { selected: boolean; onClick: () => void; children: ReactNode }) {
   return (
-    <button onClick={onClick} className={`inline-flex h-8 items-center rounded-full px-3.5 text-label font-medium transition-colors ${selected ? 'bg-ink text-surface' : 'border border-border bg-surface text-ink'}`}>
+    <button onClick={onClick} aria-pressed={selected} className={`inline-flex h-8 items-center rounded-full px-3.5 text-label font-medium transition-colors ${selected ? 'bg-ink text-surface' : 'border border-border bg-surface text-ink'}`}>
       {children}
     </button>
   );
