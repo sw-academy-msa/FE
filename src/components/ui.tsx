@@ -238,7 +238,7 @@ function CenterDialog({ title, onDismiss, dismissOnBackdrop = false, children }:
 export const LEAVE_MESSAGE = '지금 나가면 입력한 내용이 저장되지 않아요.';
 /** 주소 검색처럼 입력을 맡겨 두고 다녀오는 화면(돌아오면 입력이 이어진다) */
 const LEAVE_OK = ['/address-search'];
-type LeaveGuard = { dirty: boolean; bypass: boolean; message?: string; allow?: (pathname: string) => boolean };
+type LeaveGuard = { dirty: boolean; bypass: boolean; message?: string; allow?: (pathname: string) => boolean; onLeave?: () => void };
 /** 지금 화면에 걸린 작성 중 표시. react-router는 막는 함수(useBlocker)를 하나만 지원해서, 화면들은 여기에 등록하고 LeaveGuardHost 하나가 막는다 */
 const leaveGuards = new Set<LeaveGuard>();
 const stopping = (next: string, current: string) => { if (next === current || LEAVE_OK.includes(next)) return undefined; return [...leaveGuards].reverse().find(g => g.dirty && !g.bypass && !g.allow?.(next)); };
@@ -250,9 +250,10 @@ const stopping = (next: string, current: string) => { if (next === current || LE
  * - 저장이나 제출이 끝난 뒤 이동하기 직전에 allowLeave()를 부르면 막지 않는다
  * 계속 작성이면 주소와 입력이 그대로 남는다
  */
-export function useLeaveGuard(dirty: boolean, { message, allow }: { message?: string; allow?: (pathname: string) => boolean } = {}) {
+/** onLeave: 확인창에서 나가기를 골랐을 때만(새로고침, 단계 이동, 앱 종료는 아님) 이동 뒤에 부른다. 예: 판매 등록 초안 지우기 */
+export function useLeaveGuard(dirty: boolean, { message, allow, onLeave }: { message?: string; allow?: (pathname: string) => boolean; onLeave?: () => void } = {}) {
   const [guard] = useState<LeaveGuard>(() => ({ dirty, bypass: false }));
-  guard.dirty = dirty; guard.message = message; guard.allow = allow;
+  guard.dirty = dirty; guard.message = message; guard.allow = allow; guard.onLeave = onLeave;
   useEffect(() => { leaveGuards.add(guard); return () => { leaveGuards.delete(guard); }; }, [guard]);
   useEffect(() => {
     if (!dirty) return;
@@ -265,10 +266,11 @@ export function useLeaveGuard(dirty: boolean, { message, allow }: { message?: st
 /** 앱에 하나: 등록된 작성 중 화면이 있으면 이동을 멈추고 ConfirmLeave를 띄운다. 나가기면 원래 하려던 이동을 그대로 하고, 계속 작성이면 머문다 */
 export function LeaveGuardHost() {
   const [message, setMessage] = useState<string>();
+  const blocking = useRef<LeaveGuard | undefined>(undefined);
   const blocker = useBlocker(useCallback(({ currentLocation, nextLocation }: { currentLocation: { pathname: string }; nextLocation: { pathname: string } }) => {
-    const g = stopping(nextLocation.pathname, currentLocation.pathname); if (g) setMessage(g.message); return !!g;
+    const g = stopping(nextLocation.pathname, currentLocation.pathname); blocking.current = g; if (g) setMessage(g.message); return !!g;
   }, []));
-  return blocker.state === 'blocked' ? <ConfirmLeave message={message} onLeave={() => blocker.proceed()} onStay={() => blocker.reset()}/> : null;
+  return blocker.state === 'blocked' ? <ConfirmLeave message={message} onLeave={() => { const g = blocking.current; blocker.proceed(); g?.onLeave?.(); }} onStay={() => blocker.reset()}/> : null;
 }
 
 /** 작성 중 나가기 확인 대화상자. Esc는 계속 작성. message: 화면마다 사실에 맞는 안내(기본은 저장되지 않음) */

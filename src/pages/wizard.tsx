@@ -210,7 +210,11 @@ export function WizardPage() {
   const draftKey = editId ?? 'new';
   const [opened, setOpened] = useState<{ key: string; signature: string } | null>(null);
   useEffect(() => { if (ready && opened?.key !== draftKey) setOpened({ key: draftKey, signature }); }, [ready, draftKey]);
-  const leave = useLeaveGuard(opened?.key === draftKey && signature !== opened.signature, { allow: p => p.startsWith('/seller/new'), message: editId ? undefined : '작성한 내용은 이 기기에 임시 저장돼서 다시 판매 등록을 열면 이어서 쓸 수 있어요.' });
+  // 새 등록에서 확인창의 나가기를 고르면 이 기기의 초안을 지워 다시 열면 빈 화면부터 시작한다(단계 이동, 새로고침, 앱 종료는 초안을 남겨 이어 쓴다).
+  // 서버에는 초안 상품을 지우는 API가 없어 서버 초안(DRAFT)과 진행 중인 분석은 그대로 두고, 늦게 온 분석 결과는 지운 초안에 반영되지 않는다(서명이 달라 무시)
+  // 새 등록은 이어 쓰던 초안이라도 내용이 있으면 작성 중이다(나가기를 고르면 초안을 지우므로 묻는다). 수정은 연 뒤 바뀐 것만 본다
+  const hasContent = !!d && !!(d.images.length || d.name.trim() || d.description.trim() || d.reason.trim() || d.category || d.originalUrl.trim() || d.price || d.optionDims?.length || Object.values(d.stock ?? {}).some(n => n > 0) || d.extras.some(e => e.value.trim()) || d.faqs.length || d.carrier || d.returnFee);
+  const leave = useLeaveGuard(opened?.key === draftKey && (signature !== opened.signature || (!editId && hasContent)), { allow: p => p.startsWith('/seller/new'), onLeave: editId ? undefined : () => mutate(st => { delete st.drafts[user.id]; }) });
   // 단계: 주소(?step=)에 남겨 휴대폰 뒤로 가기가 이전 단계로 간다. 단계 사이 이동은 같은 화면이라 나가기 확인창을 띄우지 않는다
   const location = useLocation();
   const stepParam = Number(params.get('step')), step = Number.isInteger(stepParam) && stepParam >= 1 && stepParam <= STEPS ? stepParam : 1;

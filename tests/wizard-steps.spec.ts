@@ -91,15 +91,25 @@ test('결과 확인 단계에서 심사 요청 때 빠진 칸이 있으면 그 �
   await expect(page.locator('[data-field="sourceUrl"]').getByRole('alert')).toBeVisible();
 });
 
-test('나갔다 다시 열면 임시 저장한 초안을 마지막 단계부터 이어 쓴다. 등록 흐름을 떠날 때만 확인창이 뜬다', async ({ page }) => {
+test('나가기를 고르면 초안을 지워 다시 열면 빈 화면, 계속 작성과 새로고침은 이어 쓴다', async ({ page }) => {
   await fillStep1(page); await next(page); await expect(stepGroup(page, 2)).toBeVisible();
   await page.getByLabel('한정 판매가').fill('9000');
+  // 새로고침해도 초안과 단계가 남는다
+  await page.reload(); await expect(stepGroup(page, 2)).toBeVisible(); await expect(page.getByLabel('한정 판매가')).toHaveValue('9,000');
   await page.getByRole('button', { name: '이전 화면' }).click(); await expect(stepGroup(page, 1)).toBeVisible();
   await page.getByRole('button', { name: '이전 화면' }).click();
-  await expect(confirmDialog(page)).toBeVisible(); await expect(confirmDialog(page)).toContainText('임시 저장');
-  await confirmDialog(page).getByRole('button', { name: '계속 작성' }).click(); await expect(stepGroup(page, 1)).toBeVisible();
+  await expect(confirmDialog(page)).toBeVisible(); await expect(confirmDialog(page)).toContainText('지금 나가면 입력한 내용이 저장되지 않아요.');
+  await confirmDialog(page).getByRole('button', { name: '계속 작성' }).click(); await expect(stepGroup(page, 1)).toBeVisible(); await expect(page.getByLabel('상품명')).toHaveValue('리넨 셔츠');
   await page.getByRole('button', { name: '이전 화면' }).click(); await confirmDialog(page).getByRole('button', { name: '나가기' }).click();
   await expect(page).toHaveURL(/seller\/products/);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('stockdrop:v1')!).drafts.seller)).toBeUndefined();
+  await page.getByRole('link', { name: '상품 등록' }).click(); await expect(stepGroup(page, 1)).toBeVisible();
+  await expect(page.getByLabel('상품명')).toHaveValue(''); await expect(page.getByText('0/10')).toBeVisible();
+});
+
+test('나갔다가 마지막 단계부터 이어 쓴다(초안의 단계 기억)', async ({ page }) => {
+  await fillStep1(page); await next(page); await page.getByLabel('한정 판매가').fill('9000');
+  await page.goto('/#/seller/products');
   await page.evaluate(() => { const s = JSON.parse(localStorage.getItem('stockdrop:v1')!); s.drafts.seller.wizardStep = 2; localStorage.setItem('stockdrop:v1', JSON.stringify(s)); });
   await page.reload(); await page.goto('/#/seller/new');
   await expect(page).toHaveURL(/step=2/); await expect(stepGroup(page, 2)).toBeVisible();
