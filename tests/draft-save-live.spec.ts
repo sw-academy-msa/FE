@@ -2,9 +2,10 @@ import { expect, test, type Page } from '@playwright/test';
 test.skip(process.env.STOCKDROP_REAL_TEST !== 'true', '실제 API 모드 HTTP fixture 전용');
 test.use({ viewport: { width: 402, height: 874 } });
 const dialog = (page: Page) => page.getByRole('dialog', { name: '작성 중인 내용을 임시 저장할까요?' });
-async function setup(page: Page, rejectPrice = false, deleteCode = '') {
+async function setup(page: Page, rejectPrice = false, deleteCode = '', storedAddress = false) {
   const product: any = { id: 'draft1', sellerId: 'test-seller', status: 'DRAFT', version: 1, name: '서버 초안', description: '설명', brandOrStore: '상점', category: null, sourceUrl: null, price: 12000, shippingFee: 3000, dispatchBusinessDays: 2, perAccountLimit: 2, startsAt: '2099-01-01T03:00:00Z', endsAt: '2099-01-01T06:00:00Z', options: [], optionDimensions: [], attributes: [], faqs: [] };
   let deleted = false; const sent: { path: string; method: string; body: any }[] = [];
+  if (storedAddress) product.dispatchAddress = product.returnAddress = { postalCode: '12345', roadAddress: '저장한 창고', detailAddress: '2층' };
   await page.route('**/__dev/registration-metadata', r => r.fulfill({ status: 204 }));
   await page.route(/\/(?:pg\/)?api\/v1\//, async route => {
     const path = new URL(route.request().url()).pathname.replace(/^\/pg/, ''), method = route.request().method(), body = route.request().postDataJSON(); let data: unknown = {};
@@ -12,7 +13,7 @@ async function setup(page: Page, rejectPrice = false, deleteCode = '') {
     else if (/\/auth\/(login|refresh)$/.test(path)) data = { accessToken: 'test-token', accountId: 'test-seller', roles: ['BUYER', 'SELLER'], expiresAt: '2099-01-01T00:00:00Z' };
     else if (path.endsWith('/accounts/me')) data = { id: 'test-seller', name: '판매자', roles: ['SELLER'] };
     else if (path.endsWith('/registration-metadata')) data = { categories: ['의류'], categoryCriteria: [] };
-    else if (/address-book\/(DISPATCH|RETURN)$/.test(path)) data = [];
+    else if (/address-book\/(DISPATCH|RETURN)$/.test(path)) data = storedAddress ? [{ id: 'default', label: '기본', defaultAddress: true, address: { postalCode: '00000', roadAddress: '다른 창고', detailAddress: '' } }, { id: 'saved', label: '저장한 창고', defaultAddress: false, address: product.dispatchAddress }] : [];
     else if (path.endsWith('/seller/products')) data = { items: deleted ? [] : [product], page: 0, totalPages: 1, totalElements: deleted ? 0 : 1 };
     else if (path.endsWith('/draft1/images')) data = [];
     else if (path.endsWith('/draft1') && method === 'DELETE') { sent.push({ path, method, body }); if (deleteCode) return route.fulfill({ status: 409, json: { code: deleteCode, message: '거절' } }); deleted = true; data = null; }
@@ -31,6 +32,12 @@ async function setup(page: Page, rejectPrice = false, deleteCode = '') {
   await page.getByRole('link', { name: '이어서 등록', exact: true }).click(); await expect(page.getByLabel('상품명', { exact: true })).toHaveValue('서버 초안');
   return { product, sent };
 }
+test('기기 초안 없이도 서버 주소 스냅샷과 맞는 주소록을 선택한다', async ({ page }) => {
+  await setup(page, false, '', true);
+  await page.evaluate(() => { const s = JSON.parse(localStorage.getItem('stockdrop:v1:live')!); delete s.drafts['test-seller']; localStorage.setItem('stockdrop:v1:live', JSON.stringify(s)); });
+  await page.goto('/#/seller/new?edit=draft1&step=3'); await page.reload();
+  await expect(page.getByRole('combobox', { name: '출고지', exact: true })).toHaveValue('saved'); await expect(page.getByRole('combobox', { name: '반품지', exact: true })).toHaveValue('saved');
+});
 test('서버 초안 저장은 실제 수정 API 여섯 단계를 호출하고 다른 기기에서는 서버 값을 읽는다', async ({ page }) => {
   const { product, sent } = await setup(page); await page.getByLabel('상품명', { exact: true }).fill('저장한 서버 상품');
   await page.evaluate(() => { const s = JSON.parse(localStorage.getItem('stockdrop:v1:live')!); Object.assign(s.drafts['test-seller'], { price: 15000, shipping: 3500, optionDims: [], stock: { '[]': 8 }, wizardStep: 3, wizardOrder: 2 }); localStorage.setItem('stockdrop:v1:live', JSON.stringify(s)); }); await page.reload(); await expect(page.getByRole('group', { name: /판매 등록 3\/5단계/ })).toBeVisible();
