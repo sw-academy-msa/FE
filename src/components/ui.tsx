@@ -235,7 +235,8 @@ function CenterDialog({ title, onDismiss, dismissOnBackdrop = false, children }:
   </AxDialog>;
 }
 
-export const LEAVE_MESSAGE = '지금 나가면 입력한 내용이 저장되지 않아요.';
+/** 확인창 기본 문구. 나가기를 고르면 그 화면의 입력(임시 저장 포함)은 남지 않는다(지우는 화면은 useLeaveGuard의 onLeave로 지운다) */
+export const LEAVE_MESSAGE = '지금 나가면 작성 중인 내용이 사라져요.';
 /** 주소 검색처럼 입력을 맡겨 두고 다녀오는 화면(돌아오면 입력이 이어진다) */
 const LEAVE_OK = ['/address-search'];
 type LeaveGuard = { dirty: boolean; bypass: boolean; message?: string; allow?: (pathname: string) => boolean; onLeave?: () => void };

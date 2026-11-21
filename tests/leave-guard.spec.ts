@@ -39,7 +39,7 @@ test('판매 등록: 입력 후 뒤로 가기는 기본 안내 확인창(나가�
   await page.getByRole('link', { name: '상품 등록' }).click(); await expect(page).toHaveURL(/#\/seller\/new$/);
   await page.getByLabel('상품명').fill('리넨 셔츠');
   await page.goBack();
-  await expect(confirmDialog(page)).toBeVisible(); await expect(confirmDialog(page)).toContainText('지금 나가면 입력한 내용이 저장되지 않아요.');
+  await expect(confirmDialog(page)).toBeVisible(); await expect(confirmDialog(page)).toContainText('지금 나가면 작성 중인 내용이 사라져요.');
   await confirmDialog(page).getByRole('button', { name: '계속 작성' }).click();
   await expect(page).toHaveURL(/#\/seller\/new$/); await expect(page.getByLabel('상품명')).toHaveValue('리넨 셔츠');
   await page.getByRole('button', { name: '이전 화면' }).click();
