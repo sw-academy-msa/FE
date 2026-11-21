@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 const mem = new Map<string, string>();
 vi.stubGlobal('localStorage', { getItem: (k: string) => mem.get(k) ?? null, setItem: (k: string, v: string) => void mem.set(k, v), removeItem: (k: string) => void mem.delete(k) });
 vi.stubGlobal('window', { addEventListener: () => {}, removeEventListener: () => {}, localStorage });
-const { AI_MESSAGES, aiStateOf, editBlocker } = await import('./wizard');
+const { AI_MESSAGES, aiStateOf, editBlocker, savedWizardStep, WIZARD_ORDER } = await import('./wizard');
 
 describe('판매 정보 수정 가능 여부(서버 status 기준)', () => {
   const now = Date.parse('2026-11-12T00:00:00Z'), future = Date.parse('2026-11-12T01:30:00Z'), past = Date.parse('2026-11-11T00:00:00Z');
@@ -28,5 +28,17 @@ describe('AI 결과(outcome) → 초안 상태', () => {
     expect(aiStateOf('t', { outcome: 'NOT_APPLICABLE', code: '', category: '', questions: [] }, 1)).toMatchObject({ status: 'uncertain', reason: AI_MESSAGES.NOT_APPLICABLE });
     expect(aiStateOf('t', { outcome: 'UNCLEAR', code: '', category: '', questions: [] }, 1)).toMatchObject({ status: 'uncertain', reason: AI_MESSAGES.UNCLEAR });
     expect(aiStateOf('t', { outcome: 'RECOMMENDED', code: 'X', category: '', questions: [] }, 1)).toMatchObject({ status: 'uncertain', reason: AI_MESSAGES.NO_CATEGORY });
+  });
+});
+
+describe('판매 등록 단계 이어 쓰기(단계 순서 바뀜)', () => {
+  it('지금 순서로 저장한 단계는 그대로 연다', () => {
+    for (const n of [1, 2, 3, 4, 5]) expect(savedWizardStep({ wizardStep: n, wizardOrder: WIZARD_ORDER })).toBe(n);
+  });
+  it('예전 순서(1 기본, 2 카테고리, 3 가격, 4 일정, 5 확인)로 저장한 단계는 같은 화면이 있는 단계로 바꾼다', () => {
+    expect([1, 2, 3, 4, 5].map(n => savedWizardStep({ wizardStep: n }))).toEqual([1, 4, 2, 3, 5]);
+  });
+  it('없거나 이상한 값은 1단계', () => {
+    expect(savedWizardStep({})).toBe(1); expect(savedWizardStep({ wizardStep: 9, wizardOrder: WIZARD_ORDER })).toBe(1); expect(savedWizardStep({ wizardStep: 2.5 })).toBe(1);
   });
 });
