@@ -1,5 +1,6 @@
 {
-  "router": "HashRouter",
+  "router": "createHashRouter",
+  "note": "src/App.tsx의 <Route>와 같게 유지한다(주소는 #/경로)",
   "routes": [
     {
       "path": "/external/:id",
@@ -22,12 +23,16 @@
       "component": "SignupPage"
     },
     {
-      "path": "/signup/done",
-      "component": "SignupDonePage"
+      "path": "/signup/verify",
+      "component": "SignupVerifyPage"
     },
     {
-      "path": "/categories",
-      "component": "CategorySelectionPage"
+      "path": "/signup/info",
+      "component": "SignupInfoPage"
+    },
+    {
+      "path": "/signup/done",
+      "component": "SignupDonePage"
     },
     {
       "path": "/notifications/settings",
@@ -36,6 +41,10 @@
     {
       "path": "/reset-password",
       "component": "ResetPasswordPage"
+    },
+    {
+      "path": "/reset-password/new",
+      "component": "ResetPasswordNewPage"
     },
     {
       "path": "/legal",
@@ -58,12 +67,20 @@
       "component": "CheckoutPage"
     },
     {
+      "path": "/payments/toss/:result",
+      "component": "TossReturnPage"
+    },
+    {
       "path": "/orders",
       "component": "OrdersPage"
     },
     {
       "path": "/orders/:id",
       "component": "OrderDetailPage"
+    },
+    {
+      "path": "/orders/:id/inquiry",
+      "component": "OrderInquiryPage"
     },
     {
       "path": "/schedule/calendar",
@@ -75,7 +92,15 @@
     },
     {
       "path": "/my",
-      "component": "MyPage"
+      "component": "SellerMyPage | MyPage"
+    },
+    {
+      "path": "/seller/my",
+      "component": "Navigate"
+    },
+    {
+      "path": "/my/interests",
+      "component": "InterestsPage"
     },
     {
       "path": "/apply",
@@ -90,6 +115,18 @@
       "component": "AddressManagePage"
     },
     {
+      "path": "/addresses/new",
+      "component": "AddressFormPage"
+    },
+    {
+      "path": "/addresses/:id/edit",
+      "component": "AddressFormPage"
+    },
+    {
+      "path": "/address-search",
+      "component": "AddressSearchPage"
+    },
+    {
       "path": "/faq",
       "component": "FaqPage"
     },
@@ -98,24 +135,48 @@
       "component": "InquiryListPage"
     },
     {
+      "path": "/inquiries/compose",
+      "component": "OpsInquiryComposePage"
+    },
+    {
       "path": "/inquiries/:id",
       "component": "InquiryDetailPage"
     },
     {
       "path": "/seller",
-      "component": "SellerDashboard"
+      "component": "Navigate"
     },
     {
       "path": "/seller/products",
       "component": "SellerProductsPage"
     },
     {
+      "path": "/seller/sales",
+      "component": "SellerSalesPage"
+    },
+    {
       "path": "/seller/new",
       "component": "WizardPage"
     },
     {
+      "path": "/seller/new/ai",
+      "component": "AiAnalysisPage"
+    },
+    {
+      "path": "/seller/new/ai/analyzing",
+      "component": "AiAnalyzingPage"
+    },
+    {
+      "path": "/seller/new/ai/failed",
+      "component": "AiFailedPage"
+    },
+    {
       "path": "/seller/product/:id",
       "component": "SellerProductPage"
+    },
+    {
+      "path": "/seller/product/:id/faqs",
+      "component": "SellerFaqPage"
     },
     {
       "path": "/seller/published/:id",
@@ -126,6 +187,10 @@
       "component": "SellerInquiriesPage"
     },
     {
+      "path": "/seller/inquiries/:id",
+      "component": "SellerInquiryDetailPage"
+    },
+    {
       "path": "/seller/orders",
       "component": "SellerOrdersPage"
     },
@@ -134,12 +199,16 @@
       "component": "SellerOrderPage"
     },
     {
-      "path": "/seller/my",
-      "component": "SellerMyPage"
-    },
-    {
       "path": "/seller/settings/:section",
       "component": "SellerSettingsPage"
+    },
+    {
+      "path": "/seller/review",
+      "component": "SellerReviewPage"
+    },
+    {
+      "path": "/seller/support",
+      "component": "SellerSupportPage"
     },
     {
       "path": "/seller/terms",
@@ -147,7 +216,31 @@
     },
     {
       "path": "/admin",
+      "component": "AdminMyPage"
+    },
+    {
+      "path": "/admin/applications",
       "component": "AdminListPage"
+    },
+    {
+      "path": "/admin/sellers",
+      "component": "AdminSellersPage"
+    },
+    {
+      "path": "/admin/inquiries",
+      "component": "AdminInquiriesPage"
+    },
+    {
+      "path": "/admin/products",
+      "component": "AdminProductListPage"
+    },
+    {
+      "path": "/admin/products/:id",
+      "component": "AdminProductDetailPage"
+    },
+    {
+      "path": "/admin/revisions/:productId/:revisionId",
+      "component": "AdminRevisionDetailPage"
     },
     {
       "path": "/admin/:id",
