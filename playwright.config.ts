@@ -4,7 +4,7 @@ export default defineConfig({ testDir: './tests', timeout: 60000, expect: { time
   use: { baseURL, headless: true, viewport: { width: 390, height: 844 }, trace: 'retain-on-failure', screenshot: 'only-on-failure' },
   projects: [
     { name: 'chromium', use: { browserName: 'chromium', channel: 'chrome' } },
-    { name: 'webkit-mobile', testMatch: /(mobile-viewport|leave-guard)\.spec\.ts/, use: { browserName: 'webkit' } },
+    { name: 'webkit-mobile', testMatch: /(mobile-viewport|leave-guard|wizard-steps)\.spec\.ts/, use: { browserName: 'webkit' } },
   ],
   webServer: { command: 'npm run dev', url: baseURL, reuseExistingServer: true, env: { VITE_USE_MOCK: 'true', VITE_MOCK_AUTH: 'true' } },
 });

@@ -13,7 +13,8 @@ test.describe('아이폰 17 Safari 크기', () => {
       const rect = el.getBoundingClientRect(); if (!rect.width || !rect.height) return false;
       let parent = el.parentElement;
       while (parent && parent !== document.body) {
-        if (['auto', 'scroll'].includes(getComputedStyle(parent).overflowX)) return false;
+        // 가로 스크롤 영역과 넘침을 잘라 내는 상자 안쪽(예: 진행 막대 채움이 transform으로 밀려난 부분)은 화면 밖으로 보이지 않는다
+        if (['auto', 'scroll', 'hidden', 'clip'].includes(getComputedStyle(parent).overflowX)) return false;
         parent = parent.parentElement;
       }
       return rect.left < -1 || rect.right > document.documentElement.clientWidth + 1;
