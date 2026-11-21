@@ -67,7 +67,7 @@ export function ApplicationPage() {
   const [reapply, setReapply] = useState(false); // 실제 모드: 반려·보완 기한 만료 뒤 새로 신청하기
   // 작성 중: 신청서 화면에서 처음 연 값(이 기기에 남아 있던 입력 포함)과 입력이나 첨부 서류가 다를 때. 입력과 서류는 이 기기에 계속 저장된다
   const [start] = useState(() => JSON.stringify({ form, doc }));
-  useLeaveGuard(!user.seller && (!previous || reapply) && JSON.stringify({ form, doc }) !== start, { message: '적은 내용은 이 기기에 저장돼서 다시 들어오면 이어서 쓸 수 있어요.' });
+  useLeaveGuard(!user.seller && (!previous || reapply) && (JSON.stringify({ form, doc }) !== start || !!localStorage.getItem(`application-draft:${user.id}`) || !!doc), { message: '임시 저장하면 이 기기에서 신청서와 첨부 서류를 이어서 쓸 수 있어요.', onSave: () => { localStorage.setItem(`application-draft:${user.id}`, JSON.stringify(form)); if (doc) localStorage.setItem(`application-doc:${user.id}`, JSON.stringify(doc)); }, onDelete: () => { localStorage.removeItem(`application-draft:${user.id}`); localStorage.removeItem(`application-doc:${user.id}`); keptDoc.delete(user.id); } });
   // 실제 모드 보완 요청·반려·기한 만료: 서버 보완 항목 기준 화면(pages/sellerCorrection.tsx). 판매자(재심사 중 보완 요청)는 보완 요청일 때만
   if (!USE_MOCK && previous && !reapply && (previous.apiStatus === 'CHANGES_REQUESTED' || !user.seller && ['REJECTED', 'EXPIRED'].includes(previous.apiStatus ?? ''))) return <><Header title="입점 심사"/><LiveStatus state={live}/><CorrectionScreen app={previous} onReapply={() => setReapply(true)} onSubmitted={() => { mutate(state => { const a = state.applications.find(x => x.userId === user.id); if (a) { a.status = 'pending'; a.apiStatus = 'PENDING'; a.submittedAt = Date.now(); } }); toast('보완 내용을 제출했어요. 다시 심사해 드릴게요.'); live.reload(); }}/></>;
   if (user.seller) {

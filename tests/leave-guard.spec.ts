@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { actor, signInDemo } from './session';
 
 /** 작성 중 나가기 확인창(useLeaveGuard): 입력한 내용이 있을 때 뒤로 가기, 헤더 뒤로와 닫기, 하단 탭과 링크 이동을 막고 묻는다 */
-const confirmDialog = (page: Page) => page.getByRole('dialog', { name: '작성을 그만할까요?' });
+const confirmDialog = (page: Page) => page.getByRole('dialog', { name: /작성을 그만할까요|작성 중인 내용을 임시 저장할까요/ });
 test.beforeEach(async ({ page }) => { await signInDemo(page); });
 /** 주소창으로 연 뒤 새로고침해 라우터가 이 기록을 자기 것으로 표시하게 한다(앱 안에서 들어온 것과 같게. 해시만 바꾼 기록은 라우터가 막을 수 없다) */
 async function open(page: Page, url: string) { await page.goto(url); await page.reload(); await page.locator('main').waitFor(); }
@@ -39,12 +39,12 @@ test('판매 등록: 입력 후 뒤로 가기는 기본 안내 확인창(나가�
   await page.getByRole('link', { name: '상품 등록' }).click(); await expect(page).toHaveURL(/#\/seller\/new$/);
   await page.getByLabel('상품명').fill('리넨 셔츠');
   await page.goBack();
-  await expect(confirmDialog(page)).toBeVisible(); await expect(confirmDialog(page)).toContainText('지금 나가면 작성 중인 내용이 사라져요.');
+  await expect(confirmDialog(page)).toBeVisible(); await expect(confirmDialog(page)).toContainText('임시 저장한 상품은 판매 상품 관리에서 이어서 등록할 수 있어요.');
   await confirmDialog(page).getByRole('button', { name: '계속 작성' }).click();
   await expect(page).toHaveURL(/#\/seller\/new$/); await expect(page.getByLabel('상품명')).toHaveValue('리넨 셔츠');
   await page.getByRole('button', { name: '이전 화면' }).click();
   await expect(confirmDialog(page)).toBeVisible();
-  await confirmDialog(page).getByRole('button', { name: '나가기' }).click();
+  await confirmDialog(page).getByRole('button', { name: '삭제하고 나가기' }).click();
   await expect(page).toHaveURL(/#\/seller\/products$/);
 });
 

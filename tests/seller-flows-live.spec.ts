@@ -28,6 +28,22 @@ const PDF = Buffer.from('%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n');
 const app = (o: object = {}) => ({ applicationId: 'ap1', accountId: 'real-user', attemptNumber: 1, sellerDisplayName: '스토어', contactName: '홍길동', contactEmail: 'user@example.com', contactPhone: '01012345678', bankName: '신한은행', maskedBankAccount: '***789', dispatchAddress: { postalCode: '04066', roadAddress: '서울 도로 1', detailAddress: null }, returnAddress: { postalCode: '04066', roadAddress: '서울 도로 1', detailAddress: null }, status: 'PENDING', submittedAt: '2026-01-01T00:00:00Z', reviewedAt: '2026-01-02T00:00:00Z', reviewedBy: null, rejectionReason: null, certificateReviewed: true, certificateRecheck: false, previousApplicationId: null, ...o });
 const correction = (items: { field: string; reason: string }[], state = 'OPEN') => ({ id: 'c1', applicationId: 'ap1', deadline: '2099-01-08T14:59:59Z', state, items, submittedApplicationId: null });
 
+test('판매자 정정은 세 버튼으로 저장과 삭제를 선택하고 계좌와 첨부는 보관하지 않는다', async ({ page }) => {
+  await mockApi(page, 'BUYER', path => {
+    if (path.endsWith('/seller-applications/ap1/correction-request')) return correction([{ field: 'STORE_NAME', reason: '이름 확인' }, { field: 'BANK_ACCOUNT', reason: '계좌 확인' }, { field: 'CERTIFICATE', reason: '서류 확인' }]);
+    if (path.endsWith('/seller-applications/me')) return app({ status: 'CHANGES_REQUESTED' });
+  });
+  await signIn(page, '/apply'); await page.getByRole('button', { name: '사유 확인하기' }).click();
+  await page.getByLabel('판매자 표시 이름', { exact: true }).fill('보관할 상점'); await page.getByLabel('정산 계좌번호', { exact: true }).fill('11012345678');
+  await page.getByLabel('사업자등록증 PDF 첨부').setInputFiles({ name: 'test.pdf', mimeType: 'application/pdf', buffer: PDF });
+  await page.getByRole('button', { name: '이전 화면', exact: true }).click(); const sheet = page.getByRole('dialog', { name: '작성 중인 내용을 임시 저장할까요?' });
+  await expect(sheet.getByRole('button')).toHaveCount(3); await expect(sheet).toContainText('계좌번호와 첨부 서류는 저장되지 않아요.'); await sheet.getByRole('button', { name: '임시 저장하고 나가기' }).click(); await expect(sheet).toHaveCount(0);
+  expect(await page.evaluate(() => JSON.parse(sessionStorage.getItem('stockdrop:correction-draft:ap1')!))).toMatchObject({ displayName: '보관할 상점', account: '' });
+  await page.goto('/#/apply?fix=1'); await page.reload(); await expect(page.getByLabel('판매자 표시 이름', { exact: true })).toHaveValue('보관할 상점'); await expect(page.getByLabel('정산 계좌번호', { exact: true })).toHaveValue('');
+  await page.getByRole('button', { name: '이전 화면', exact: true }).click(); await sheet.getByRole('button', { name: '삭제하고 나가기' }).click(); await expect(sheet).toHaveCount(0);
+  expect(await page.evaluate(() => sessionStorage.getItem('stockdrop:correction-draft:ap1'))).toBeNull();
+});
+
 test('운영자는 입점 신청에 항목별 보완 요청을 보내고 보낸 요청을 볼 수 있다', async ({ page }) => {
   let status = 'PENDING'; const posted: unknown[] = [];
   await mockApi(page, 'ADMIN', async (path, route) => {

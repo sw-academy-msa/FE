@@ -15,7 +15,7 @@ import { categoryTree } from '../categoryTree';
 import { INSPECTION_CHECKS, INSPECTION_PHOTOS, analysisInputOf, analysisStale, aiResultPatch } from '../domain';
 import { kstTime } from './checkoutExpired';
 import { IMAGE_EXPIRED, QUICK_SCHEDULE, USE_MOCK } from '../config';
-import { AiDelayedError } from '../api/sellerProducts';
+import { AiDelayedError, saveProductDraft, deleteProductDraft } from '../api/sellerProducts';
 import { parseServerTime } from '../api';
 import { getProductImageUrl, FIELD_LABELS, REVISION_FIELDS, StageError, sourceUrlProblem, MOCK_REGISTRATION_METADATA, PRODUCT_STATE_MESSAGE, SHIPPING_NOTICE_MAX, ATTRIBUTE_VALUE_MAX, attributeName, composeShippingNotice, warnCriteria, analysisProblems, analyzeDraft, criteriaFor, listAddressBook, listingProblems, createProductDraft, deleteProductImage, errorMessage, fieldErrors, isApiError, getRegistrationMetadata, getSellerProductWithImages, mergeProducts, reorderProductImages, submitListing, submitRevisionFromDraft, uploadProductImage, useApi, useLive } from '../api';
 
@@ -31,13 +31,13 @@ function fromProduct(p: Product): Draft {
   if (!basic && !optionDims.length && p.options.length) optionDims = [{ name: '옵션', values: p.options.map(o => parts(o.name).join(' / ')) }];
   const stock: Record<string, number> = {};
   for (const o of p.options) stock[comboKey(basic ? [] : optionDims.length === 1 ? [parts(o.name).join(' / ')] : parts(o.name))] = o.stock;
-  return { ...blankDraft(), editingId: p.id, editingVersion: p.version, name: p.name, brand: p.brand, description: p.description, images: [...p.images], imageIds: p.imageIds && [...p.imageIds], imageSizes: p.imageSizes && [...p.imageSizes], category: p.category, originalUrl: p.originalUrl, extras: structuredClone(p.extras), reason: p.reason, dimensions: structuredClone(p.dimensions), noOptions: basic, options: p.options.map(o => ({ ...o, name: basic ? o.name : parts(o.name).join(' / ') })), price: p.price, shipping: p.shipping, shippingNotice: p.shippingNotice ?? '', dispatchDays: p.dispatchDays, maxPerAccount: p.maxPerAccount, startsAt: p.startsAt ? localDateTime(p.startsAt) : blankDraft().startsAt, faqs: structuredClone(p.faqs), optionDims, stock, reference: p.reference ?? lookupReference(p.originalUrl) };
+  return { ...blankDraft(), draftAddresses: p.draftAddresses, editingId: p.id, editingVersion: p.version, name: p.name, brand: p.brand, description: p.description, images: [...p.images], imageIds: p.imageIds && [...p.imageIds], imageSizes: p.imageSizes && [...p.imageSizes], category: p.category, originalUrl: p.originalUrl, extras: structuredClone(p.extras), reason: p.reason, dimensions: structuredClone(p.dimensions), noOptions: basic, options: p.options.map(o => ({ ...o, name: basic ? o.name : parts(o.name).join(' / ') })), price: p.price, shipping: p.shipping, shippingNotice: p.shippingNotice ?? '', dispatchDays: p.dispatchDays, maxPerAccount: p.maxPerAccount, startsAt: p.startsAt ? localDateTime(p.startsAt) : blankDraft().startsAt, faqs: structuredClone(p.faqs), optionDims, stock, reference: p.reference ?? lookupReference(p.originalUrl) };
 }
 function freshDraft(now: number): Draft { const start = new Date(now + 3_600_000); start.setMinutes(0, 0, 0); return { ...blankDraft(now), startsAt: localDateTime(start.getTime()), optionDims: [], stock: {} }; }
 /** 초안 변경 — options·dimensions를 항상 옵션 단계와 수량에서 다시 계산. 예전 구조(색상 x 사이즈) 초안은 처음 고칠 때 같은 이름과 수량의 새 구조로 바꾼다 */
 function patchDraft(userId: string, value: Partial<Draft>) {
   mutate(state => {
-    const d = state.drafts[userId] ?? freshDraft(nowOf(state));
+    const d = state.drafts[userId]; if (!d) return; // 삭제 후 늦게 끝난 업로드나 분석으로 초안을 다시 만들지 않는다
     if (!d.optionDims) { const m = optionModel(d); d.optionDims = m.dims; d.stock = m.stock; delete d.axes; delete d.sizeName; delete d.colors; delete d.sizes; }
     Object.assign(d, value);
     d.options = listingOptions(d); d.dimensions = listingDimensions(d); d.noOptions = !d.optionDims?.length;
@@ -123,7 +123,7 @@ function useDraft() {
     if (!user.seller) return;
     mutate(state => {
       const existing = state.drafts[user.id];
-      if (editId) { if (USE_MOCK && existing?.editingId !== editId) { const p = state.products.find(p => p.id === editId && p.sellerId === user.id); if (p && nowOf(state) < p.startsAt) state.drafts[user.id] = fromProduct(p); } }
+      if (editId) { if (USE_MOCK && existing?.editingId !== editId) { const p = state.products.find(p => p.id === editId && p.sellerId === user.id); if (p && canEdit(p, nowOf(state))) state.drafts[user.id] = existing?.serverId === editId ? { ...existing, editingId: editId } : fromProduct(p); } }
       else if (!existing || existing.editingId) state.drafts[user.id] = freshDraft(nowOf(state));
       else if (!existing.axes && !existing.optionDims) state.drafts[user.id] = { ...existing, optionDims: [], stock: {} };
     });
@@ -182,7 +182,10 @@ export function WizardPage() {
     if (!p) return;
     mergeProducts(st, [p]);
     const m = st.products.find(x => x.id === p.id)!;
-    if (canEdit(m, nowOf(st))) st.drafts[user.id] = fromProduct(m);
+    if (canEdit(m, nowOf(st))) {
+      const local = st.drafts[user.id], matches = local?.editingId === m.id || local?.serverId === m.id;
+      st.drafts[user.id] = m.reviewStatus === 'DRAFT' && matches ? { ...fromProduct(m), ...local, editingId: m.id, editingVersion: m.version, images: m.images, imageIds: m.imageIds, imageSizes: m.imageSizes } : fromProduct(m);
+    }
   }, [editId]);
   const [error, setError] = useState(''), [uploading, setUploading] = useState(false), [progress, setProgress] = useState(''), [photoError, setPhotoError] = useState(''), [retryFiles, setRetryFiles] = useState<File[]>([]), [fieldErr, setFieldErr] = useState<Record<string, string>>({}), [busy, setBusy] = useState(false), [photo, setPhoto] = useState<number | null>(null), [optErr, setOptErr] = useState(''), [dropDim, setDropDim] = useState<number | 'all' | null>(null);
   const picking = params.get('pick') === 'category', meta = useRegistrationMeta();
@@ -211,10 +214,43 @@ export function WizardPage() {
   const [opened, setOpened] = useState<{ key: string; signature: string } | null>(null);
   useEffect(() => { if (ready && opened?.key !== draftKey) setOpened({ key: draftKey, signature }); }, [ready, draftKey]);
   // 확인창의 나가기를 고르면 이 기기의 초안을 지워 다시 열면 빈 화면(수정은 서버 원본)부터 시작한다(단계 이동, 새로고침, 앱 종료는 초안을 남겨 이어 쓴다).
-  // 서버에는 초안 상품을 지우는 API가 없어 서버 초안(DRAFT)과 진행 중인 분석은 그대로 두고, 늦게 온 분석 결과는 지운 초안에 반영되지 않는다(서명이 달라 무시)
+  // DRAFT는 서버 저장 또는 삭제를 먼저 마치고 이동한다. 삭제 뒤 늦게 온 분석 결과는 사라진 초안에 반영하지 않는다.
   // 새 등록은 이어 쓰던 초안이라도 내용이 있으면 작성 중이다(나가기를 고르면 초안을 지우므로 묻는다). 수정은 연 뒤 바뀐 것만 본다
   const hasContent = !!d && !!(d.images.length || d.name.trim() || d.description.trim() || d.reason.trim() || d.category || d.originalUrl.trim() || d.price || d.optionDims?.length || Object.values(d.stock ?? {}).some(n => n > 0) || d.extras.some(e => e.value.trim()) || d.faqs.length || d.carrier || d.returnFee);
-  const leave = useLeaveGuard(opened?.key === draftKey && (signature !== opened.signature || (!editId && hasContent)), { allow: p => p.startsWith('/seller/new'), onLeave: () => mutate(st => { delete st.drafts[user.id]; }) });
+  const draftProduct = s.products.find(p => p.id === (editId ?? d?.serverId));
+  const isDraft = !editId || draftProduct?.reviewStatus === 'DRAFT';
+  useEffect(() => {
+    if (!isDraft || !ready || !d?.draftAddresses || !book.data) return;
+    const next: Partial<Draft> = {};
+    for (const [key, address, list] of [['dispatchAddressId', d.draftAddresses.dispatch, book.data[0]], ['returnAddressId', d.draftAddresses.return, book.data[1]]] as const) {
+      if (!address || list.some(a => a.id === d[key])) continue;
+      const found = list.find(a => a.address.postalCode === address.postalCode && a.address.roadAddress === address.roadAddress && (a.address.detailAddress ?? '') === (address.detailAddress ?? ''));
+      if (found) next[key] = found.id;
+    }
+    if (Object.keys(next).length) patchDraft(user.id, next);
+  }, [ready, isDraft, book.data, d?.editingId, d?.serverId]);
+  async function saveAndLeave() {
+    if (uploading) throw new Error('사진 업로드가 끝난 뒤 다시 선택해 주세요.');
+    const snapshot = structuredClone(getState().drafts[user.id]);
+    if (!snapshot) return;
+    if (USE_MOCK) {
+      const id = snapshot.editingId ?? snapshot.serverId ?? `draft-${crypto.randomUUID()}`, startsAt = new Date(snapshot.startsAt).getTime();
+      const p: Product = { ...snapshot, id, sellerId: user.id, startsAt, endsAt: startsAt + 10_800_000, published: false, reviewStatus: 'DRAFT', options: listingOptions(snapshot), dimensions: listingDimensions(snapshot) };
+      mutate(st => { st.products = [p, ...st.products.filter(x => x.id !== id)]; st.drafts[user.id] = { ...snapshot, serverId: id, editingId: id }; });
+    } else {
+      const id = await ensureServerDraft(user.id), result = await saveProductDraft(snapshot, id);
+      mutate(st => { mergeProducts(st, [{ ...result.product, images: snapshot.images }]); st.drafts[user.id] = { ...snapshot, serverId: id, editingId: id, editingVersion: result.product.version }; });
+      if (result.localOnly.length) toast(`${result.localOnly.join(', ')}는 아직 미완성이어서 이 기기에 보관했어요.`);
+    }
+  }
+  async function deleteAndLeave() {
+    if (uploading) throw new Error('사진 업로드가 끝난 뒤 다시 선택해 주세요.');
+    await creating.get(user.id);
+    const current = getState().drafts[user.id], id = current?.editingId ?? current?.serverId;
+    if (id && !USE_MOCK) await deleteProductDraft(id);
+    mutate(st => { if (id) st.products = st.products.filter(p => p.id !== id); delete st.drafts[user.id]; });
+  }
+  const leave = useLeaveGuard(isDraft ? ready && hasContent : opened?.key === draftKey && signature !== opened.signature, { allow: p => p.startsWith('/seller/new'), ...(isDraft ? { onSave: saveAndLeave, onDelete: deleteAndLeave, message: '임시 저장한 상품은 판매 상품 관리에서 이어서 등록할 수 있어요. 미완성 입력과 마지막 단계는 이 기기에 보관해요.' } : { onLeave: () => mutate(st => { delete st.drafts[user.id]; }) }) });
   // 단계: 주소(?step=)에 남겨 휴대폰 뒤로 가기가 이전 단계로 간다. 단계 사이 이동은 같은 화면이라 나가기 확인창을 띄우지 않는다
   const location = useLocation();
   const stepParam = Number(params.get('step')), step = Number.isInteger(stepParam) && stepParam >= 1 && stepParam <= STEPS ? stepParam : 1;

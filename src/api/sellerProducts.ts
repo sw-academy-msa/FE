@@ -28,7 +28,7 @@ export function sellerProductFromApi(d: SellerProductDto): Product {
     published: d.status === 'APPROVED', options: (d.options ?? []).map(o => ({ id: o.id, name: o.label, stock: o.initialQuantity })),
     dimensions: (d.optionDimensions ?? []).map(x => ({ name: x.name, values: (x.values ?? []).join(', ') })), extras: (d.attributes ?? []).map(a => ({ key: a.name, value: a.value })), reason: d.disposalReason ?? '',
     faqs: (d.faqs ?? []).map(f => ({ id: f.id, question: f.question, answer: f.answer, confirmed: true, ...(f.suggestionId ? { suggestionId: f.suggestionId } : {}) })),
-    shippingNotice: d.shippingNotice ?? '', rejectionReason: d.status === 'REJECTED' ? (d.reviewReason ?? '') : undefined, version: d.version, reviewStatus: d.status,
+    shippingNotice: d.shippingNotice ?? '', draftAddresses: { dispatch: d.dispatchAddress, return: d.returnAddress }, rejectionReason: d.status === 'REJECTED' ? (d.reviewReason ?? '') : undefined, version: d.version, reviewStatus: d.status,
     listQuantity: { total: (d.options ?? []).reduce((n, o) => n + o.initialQuantity, 0), sold: (d.options ?? []).reduce((n, o) => n + o.confirmedQuantity, 0) },
   };
 }
@@ -57,6 +57,15 @@ export async function listSellerProducts(sellerId: string, q: SellerProductQuery
 }
 /** POST /v1/seller/products — 등록 초안 생성(201, 본문 없음) */
 export const createProductDraft = async () => sellerProductFromApi(await api.post<SellerProductDto>(P, undefined, { service: purchase }));
+/** 본인 DRAFT 삭제. 반복 요청도 성공하며 다른 상태는 서버가 거절한다. */
+export async function deleteProductDraft(id: string): Promise<null> {
+  try { return await api.delete<null>(at(id), { service: purchase }); }
+  catch (e) {
+    if (e instanceof ApiError && e.code === 'PRODUCT_DRAFT_DELETE_PROTECTED') throw new ApiError('심사 이력이 있는 상품이라 삭제할 수 없어요.', e.status, e.code);
+    if (e instanceof ApiError && e.code === 'PRODUCT_DRAFT_DELETE_NOT_ALLOWED') throw new ApiError('작성 중인 상품만 삭제할 수 있어요. 상품 상태를 다시 확인해 주세요.', e.status, e.code);
+    throw e;
+  }
+}
 /** GET /v1/seller/products/registration-metadata — 카테고리 이름 목록과 AI 점검 기준 */
 export async function getRegistrationMetadata(signal?: AbortSignal) {
   const meta = await api.get<RegistrationMetadataDto>(`${P}/registration-metadata`, { service: purchase, signal });
@@ -286,6 +295,26 @@ export async function withFaqRetry<T>(run: () => Promise<T>, retry: boolean, wai
  * 등록 화면 제출(실제 모드): 최신 version을 읽고 → 기본 정보 → 상세 → 옵션 → 가격·배송 → 일정 → (FAQ) → 심사 제출.
  * 단계마다 응답의 새 version을 다음 요청에 넘긴다. 이미지는 올릴 때 이미 서버에 연결되어 있다.
  */
+/** 미완성 초안 저장. 검증에 걸린 단계만 기기에 보관하고 권한, 충돌, 네트워크 오류는 호출자에게 전달한다. */
+export async function saveProductDraft(d: Draft, id: string): Promise<{ product: Product; localOnly: string[] }> {
+  let p = await getSellerProduct(id);
+  if (p.reviewStatus !== 'DRAFT') throw new Error('작성 중인 상품만 임시 저장할 수 있어요.');
+  const localOnly: string[] = [];
+  async function save(label: string, run: (version: number) => Promise<Product>) {
+    try { p = await run(p.version ?? 0); }
+    catch (e) { if (e instanceof ApiError && [400, 422].includes(e.status)) localOnly.push(label); else throw e; }
+  }
+  await save('기본 정보', v => saveBasicInfo(id, v, basicInfoOf(d)));
+  await save('상세 정보', v => saveDetails(id, v, detailsOf(d)));
+  const options = optionPayload(d);
+  if (options.variants.length) await save('옵션과 수량', v => saveOptions(id, v, options));
+  else localOnly.push('미완성 옵션과 수량');
+  await save('가격과 배송', v => savePricingShipping(id, v, { price: d.price, shippingFee: d.shipping, dispatchBusinessDays: d.dispatchDays, perAccountLimit: d.maxPerAccount, shippingNotice: d.shippingNotice?.trim() || undefined, dispatchAddressId: d.dispatchAddressId, returnAddressId: d.returnAddressId }));
+  if (Number.isFinite(new Date(d.startsAt).getTime())) await save('판매 일정', v => saveSchedule(id, v, startIso(d)));
+  else localOnly.push('미완성 판매 일정');
+  await save('FAQ', v => saveRegistrationFaqs(id, v, faqsToSave(d)));
+  return { product: p, localOnly };
+}
 export async function submitListing(d: Draft, id: string): Promise<Product> {
   let p = await withStage('상품 조회 실패', () => getSellerProduct(id));
   const v = () => p.version ?? 0;
