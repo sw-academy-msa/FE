@@ -1,9 +1,9 @@
-import { createContext, isValidElement, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createContext, isValidElement, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Button as AxButton } from '@astryxdesign/core/Button';
 import { BottomSheet as AxBottomSheet } from '@astryxdesign/core/BottomSheet';
 import { Dialog as AxDialog } from '@astryxdesign/core/Dialog';
 import type { ButtonHTMLAttributes, CSSProperties, MouseEvent, ReactNode } from 'react';
-import { Link, NavLink, useHref, useLocation, useNavigate } from 'react-router-dom';
+import { Link, NavLink, useBlocker, useHref, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Bell, Timer, X, Home, CalendarDays, Package, UserRound, ChevronRight, Info, Copy } from 'lucide-react';
 import type { Product, Order } from '../domain';
 import { money, saleState, stockTotal } from '../domain';
@@ -235,10 +235,46 @@ function CenterDialog({ title, onDismiss, dismissOnBackdrop = false, children }:
   </AxDialog>;
 }
 
-/** 작성 중 나가기 확인 대화상자. Esc는 계속 작성 */
-export function ConfirmLeave({ onLeave, onStay }: { onLeave: () => void; onStay: () => void }) {
+export const LEAVE_MESSAGE = '지금 나가면 입력한 내용이 저장되지 않아요.';
+/** 주소 검색처럼 입력을 맡겨 두고 다녀오는 화면(돌아오면 입력이 이어진다) */
+const LEAVE_OK = ['/address-search'];
+type LeaveGuard = { dirty: boolean; bypass: boolean; message?: string; allow?: (pathname: string) => boolean };
+/** 지금 화면에 걸린 작성 중 표시. react-router는 막는 함수(useBlocker)를 하나만 지원해서, 화면들은 여기에 등록하고 LeaveGuardHost 하나가 막는다 */
+const leaveGuards = new Set<LeaveGuard>();
+const stopping = (next: string, current: string) => { if (next === current || LEAVE_OK.includes(next)) return undefined; return [...leaveGuards].reverse().find(g => g.dirty && !g.bypass && !g.allow?.(next)); };
+/**
+ * 작성 중 나가기 확인. dirty(처음 값과 달라짐)인 동안 화면을 떠나려 하면 ConfirmLeave를 띄운다(App의 LeaveGuardHost가 띄운다).
+ * - 막는 이동: 헤더 뒤로와 닫기, 휴대폰과 브라우저 뒤로 가기(popstate), 하단 탭과 화면 안 링크, navigate(): react-router useBlocker
+ * - 같은 주소 안의 이동(시트가 쌓은 기록을 뒤로 가기로 닫기, ?pick= 같은 검색값)과 주소 검색 다녀오기, allow(다음 주소)가 true인 이동은 막지 않는다
+ * - 새로고침과 탭 닫기: 브라우저 기본 경고(beforeunload)
+ * - 저장이나 제출이 끝난 뒤 이동하기 직전에 allowLeave()를 부르면 막지 않는다
+ * 계속 작성이면 주소와 입력이 그대로 남는다
+ */
+export function useLeaveGuard(dirty: boolean, { message, allow }: { message?: string; allow?: (pathname: string) => boolean } = {}) {
+  const [guard] = useState<LeaveGuard>(() => ({ dirty, bypass: false }));
+  guard.dirty = dirty; guard.message = message; guard.allow = allow;
+  useEffect(() => { leaveGuards.add(guard); return () => { leaveGuards.delete(guard); }; }, [guard]);
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => { if (guard.bypass) return; e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', warn); return () => window.removeEventListener('beforeunload', warn);
+  }, [dirty, guard]);
+  const allowLeave = useCallback(() => { guard.bypass = true; }, [guard]);
+  return { allowLeave };
+}
+/** 앱에 하나: 등록된 작성 중 화면이 있으면 이동을 멈추고 ConfirmLeave를 띄운다. 나가기면 원래 하려던 이동을 그대로 하고, 계속 작성이면 머문다 */
+export function LeaveGuardHost() {
+  const [message, setMessage] = useState<string>();
+  const blocker = useBlocker(useCallback(({ currentLocation, nextLocation }: { currentLocation: { pathname: string }; nextLocation: { pathname: string } }) => {
+    const g = stopping(nextLocation.pathname, currentLocation.pathname); if (g) setMessage(g.message); return !!g;
+  }, []));
+  return blocker.state === 'blocked' ? <ConfirmLeave message={message} onLeave={() => blocker.proceed()} onStay={() => blocker.reset()}/> : null;
+}
+
+/** 작성 중 나가기 확인 대화상자. Esc는 계속 작성. message: 화면마다 사실에 맞는 안내(기본은 저장되지 않음) */
+export function ConfirmLeave({ onLeave, onStay, message = LEAVE_MESSAGE }: { onLeave: () => void; onStay: () => void; message?: string }) {
   return <CenterDialog title="작성을 그만할까요?" onDismiss={onStay}>
-    <p className="muted text-body leading-relaxed">지금 나가면 입력한 내용이 저장되지 않아요.</p>
+    <p className="muted text-body leading-relaxed">{message}</p>
     <div className="flex gap-2">
       <Button outline className="flex-1" onClick={onLeave}>나가기</Button>
       <Button className="flex-1" onClick={onStay}>계속 작성</Button>

@@ -10,7 +10,7 @@ import type { DocumentFile } from '../domain';
 import { reviewSummary } from '../sellerFlows';
 import { errorMessage, fetchReviewStatus, requestCertificateReview, useApi } from '../api';
 import { PdfField } from '../components/PdfField';
-import { Button, ErrorBox, Header, LiveStatus, Note, useToast } from '../components/ui';
+import { Button, ErrorBox, Header, LiveStatus, Note, useLeaveGuard, useToast } from '../components/ui';
 import { getPdf } from '../files';
 import { dateTime } from '../hooks';
 import { USE_MOCK } from '../config';
@@ -33,6 +33,8 @@ export function SellerReviewPage() {
   const toast = useToast();
   const r = useApi(signal => (USE_MOCK ? Promise.resolve(null) : fetchReviewStatus(signal)), []);
   const [doc, setDoc] = useState<DocumentFile>(), [confirm, setConfirm] = useState(false), [error, setError] = useState(''), [busy, setBusy] = useState(false);
+  // 작성 중: 재심사 서류를 붙였을 때(신청하면 비워진다)
+  useLeaveGuard(!!doc);
   if (USE_MOCK) return <div className="space-y-4"><Header title="사업자등록증 재심사"/><Note>실제 서버에 연결된 화면에서만 재심사를 신청할 수 있어요.</Note></div>;
   if (!r.data) return <div className="space-y-4"><Header title="사업자등록증 재심사"/><LiveStatus state={r}/></div>;
   const status = r.data, s = reviewSummary(status), a = status.application;
