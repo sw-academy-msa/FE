@@ -31,7 +31,7 @@ test('홈 검색은 한글 조합 중 URL을 바꾸지 않고 완료한 검색�
 test('판매 등록 상품명과 판매 URL은 조합이 완료된 값만 초안에 저장한다', async ({ page }) => {
   await actor(page, 'seller'); await page.goto('/#/seller/new');
   for (const [label, key, partial, completed] of [['상품명', 'name', '패', '패딩 123'], ['타 플랫폼 판매 URL', 'originalUrl', 'https://예', 'https://example.com/패딩123']]) {
-    await page.goto(`/#/seller/new?step=${label === '상품명' ? 1 : 3}`); // 상품명은 1단계, 판매 URL은 3단계
+    await page.goto(`/#/seller/new?step=${label === '상품명' ? 1 : 2}`); // 상품명은 1단계, 판매 URL은 2단계
     const input = page.getByRole('textbox', { name: label, exact: true });
     await input.fill(''); await input.focus(); await compose(input, partial, true);
     expect(await page.evaluate(key => JSON.parse(localStorage.getItem('stockdrop:v1')!).drafts.seller[key], key)).toBe('');
@@ -80,7 +80,7 @@ test('한글 조합 완료와 후속 input이 연속 발생해도 글자가 중�
   }
   await actor(page, 'seller'); await page.goto('/#/seller/new');
   for (const [label, text] of [['상품명', '패딩 한 벌 123'], ['타 플랫폼 판매 URL', 'https://예시.kr/패딩123']]) {
-    await page.goto(`/#/seller/new?step=${label === '상품명' ? 1 : 3}`);
+    await page.goto(`/#/seller/new?step=${label === '상품명' ? 1 : 2}`);
     const input = page.getByRole('textbox', { name: label, exact: true });
     await input.fill(''); await input.focus(); await compose(input, text.slice(0, -1), true);
     await finish(input, text); await finish(input, text);

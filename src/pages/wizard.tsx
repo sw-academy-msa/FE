@@ -154,14 +154,22 @@ function EditText({ value, label, onSave, className = '' }: { value: string; lab
 const dateLabel = (v: string) => { const t = new Date(v); return Number.isFinite(t.getTime()) ? `${t.getMonth() + 1}월 ${t.getDate()}일 (${WEEK[t.getDay()]})` : '날짜 선택'; };
 const hhmm = (h: number, m: number) => `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 const SALE_MS = 3 * 3_600_000;
-/* 판매 등록 단계. AI 분석은 사진, 상품명, 짧은 설명, 처분 사유가 있어야 하고 결과가 카테고리와 상품 정보 칸을 정하므로 1단계에 분석까지, 2단계에 카테고리를 둔다 */
-const STEP_TITLES = ['사진과 기본 정보', '카테고리와 상품 정보', '가격과 수량', '일정과 배송', '확인과 심사 요청'] as const;
+/* 판매 등록 단계. AI 분석은 서버에서 비동기로 돈다: 1단계 다음에서 분석을 요청해 두고, 가격과 일정을 입력하는 동안 끝나면 4단계에서 카테고리와 AI 결과를 확인한다 */
+const STEP_TITLES = ['사진과 기본 정보', '가격과 수량', '일정과 배송', '카테고리와 AI 확인', '결과 확인'] as const;
+/** 단계 순서 판(초안 wizardOrder). 1판(#129): 1 기본, 2 카테고리, 3 가격, 4 일정, 5 확인 */
+export const WIZARD_ORDER = 2;
+const ORDER1_TO_2: Record<number, number> = { 1: 1, 2: 4, 3: 2, 4: 3, 5: 5 };
+/** 초안에 기억된 단계를 지금 순서의 단계로(예전 순서로 저장된 초안은 같은 화면이 있는 단계로 바꾼다) */
+export function savedWizardStep(d: { wizardStep?: number; wizardOrder?: number }): number {
+  const n = d.wizardStep ?? 1; if (!Number.isInteger(n) || n < 1 || n > 5) return 1;
+  return d.wizardOrder === WIZARD_ORDER ? n : ORDER1_TO_2[n];
+}
 const STEPS = STEP_TITLES.length;
 /** 검사 칸 → 그 칸이 있는 단계. 목록에 없는 칸은 마지막(확인) 단계 */
-const FIELD_STEP: Record<string, number> = { images: 1, name: 1, description: 1, disposalReason: 1, state: 1, brandOrStore: 1, category: 2, attributes: 2, sourceUrl: 3, price: 3, options: 3, maxPerAccount: 3, startsAt: 4, dispatchDays: 4, shipping: 4, shippingNotice: 4, addresses: 4, aiQuestions: 5, inspection: 5 };
+const FIELD_STEP: Record<string, number> = { images: 1, name: 1, description: 1, disposalReason: 1, state: 1, brandOrStore: 1, sourceUrl: 2, price: 2, options: 2, maxPerAccount: 2, startsAt: 3, dispatchDays: 3, shipping: 3, shippingNotice: 3, addresses: 3, category: 4, attributes: 4, aiQuestions: 4, inspection: 5 };
 const stepOf = (field: string) => FIELD_STEP[field] ?? STEPS;
 /** 등록 화면의 n단계 주소(AI 분석 화면에서 돌아올 때) */
-/** AI 분석 화면에서 등록 2단계로 돌아갈 때: 1단계에서 분석을 시작했으면 분석 화면 자리를 2단계로 바꾸고(뒤로 가면 1단계), 2단계에서 열었으면 기록을 되돌린다 */
+/** 예전 AI 분석 화면(주소로 바로 연 경우)에서 등록 4단계(카테고리와 AI 확인)로 돌아갈 때 쓰는 기록 표시 */
 const WIZARD_STATE = { wizardStep: true };
 const stepUrl = (suffix: string, n: number, extra = '') => `/seller/new${suffix}${suffix ? '&' : '?'}step=${n}${extra}`;
 const TIME_SLOTS = Array.from({ length: 48 }, (_, i) => hhmm(Math.floor(i / 2), i % 2 * 30));
@@ -191,14 +199,14 @@ export function WizardPage() {
   // 칸 아래 오류는 그 칸을 고치면 바로 지운다(아래 render에서 recheck를 채운다)
   const recheck = useRef<(() => void) | null>(null);
   // 단계 위치(wizardStep)만 바뀐 것은 입력이 바뀐 것이 아니라 오류를 다시 보지 않는다(서버가 준 칸 오류를 단계를 옮기며 지우지 않게)
-  const draftCore = d ? JSON.stringify({ ...d, wizardStep: undefined }) : '';
+  const draftCore = d ? JSON.stringify({ ...d, wizardStep: undefined, wizardOrder: undefined }) : '';
   useEffect(() => { recheck.current?.(); }, [draftCore]);
   // 출고지·반품지: 실제 모드는 판매자 주소록, mock은 판매자 설정의 주소
   const book = useApi(async signal => (USE_MOCK ? null : Promise.all([listAddressBook('DISPATCH', signal), listAddressBook('RETURN', signal)])), []);
   // 작성 중: 이 화면을 연 뒤 초안(상품 정보, 사진 수, 옵션, 판매 조건, FAQ 등)이 처음과 달라졌을 때. 처음 값은 초안이 준비된 때(수정은 서버 원본을 받은 뒤) 잡는다.
   // 등록 흐름 안의 이동(AI 분석, 카테고리 고르기)은 막지 않는다. 새 등록 초안은 이 기기에 저장돼 다시 열면 이어지고, 수정은 다시 열면 원본을 새로 받는다
   const ready = !!d && !!(d.optionDims || d.axes) && (!editId || d.editingId === editId) && (!editId || USE_MOCK || (!live.loading && !live.error));
-  const signature = d ? JSON.stringify({ ...d, ai: undefined, images: d.images.length, imageSizes: undefined, step: undefined, wizardStep: undefined }) : '';
+  const signature = d ? JSON.stringify({ ...d, ai: undefined, images: d.images.length, imageSizes: undefined, step: undefined, wizardStep: undefined, wizardOrder: undefined }) : '';
   const draftKey = editId ?? 'new';
   const [opened, setOpened] = useState<{ key: string; signature: string } | null>(null);
   useEffect(() => { if (ready && opened?.key !== draftKey) setOpened({ key: draftKey, signature }); }, [ready, draftKey]);
@@ -217,10 +225,10 @@ export function WizardPage() {
   useEffect(() => {
     if (!ready || !d) return;
     if (!resumed.current) {
-      resumed.current = true; const saved = d.wizardStep ?? 1;
+      resumed.current = true; const saved = savedWizardStep(d);
       if (!params.get('step') && saved > 1 && saved <= STEPS) { const next = new URLSearchParams(params); next.set('step', String(saved)); setParams(next, { replace: true }); return; }
     }
-    if (d.wizardStep !== step) patchDraft(user.id, { wizardStep: step });
+    if (d.wizardStep !== step || d.wizardOrder !== WIZARD_ORDER) patchDraft(user.id, { wizardStep: step, wizardOrder: WIZARD_ORDER });
   }, [ready, step]);
   // 단계가 바뀌면 맨 위에서 시작한다. 오류 칸으로 옮겨 온 경우는 그 칸으로 스크롤한다
   useEffect(() => {
@@ -298,11 +306,8 @@ export function WizardPage() {
     setPhoto(null);
   }
   function openCategory() {
-    // 2단계에서 연 분석 화면은 돌아갈 때 기록을 되돌린다(fromStep)
-    if (d.ai.status === 'analyzing') navigate(`/seller/new/ai/analyzing${suffix}`, { state: { fromStep: true } });
-    else if (d.ai.status === 'failed' || d.ai.status === 'delayed') navigate(`/seller/new/ai/failed${suffix}`, { state: { fromStep: true } });
-    else if (d.ai.result) navigate(`/seller/new/ai${suffix}`, { state: { fromStep: true } });
-    else setPickerOpen(true);
+    // AI 결과는 4단계에 바로 보이므로 카테고리 칸은 언제나 카테고리 고르기(위에 AI 추천)를 연다. 분석 중이어도 직접 골라 진행할 수 있다
+    setPickerOpen(true);
   }
   /** 제출 전 검사(서버 규칙과 같다). 칸 이름 → 안내 문구 */
   function submitProblems() {
@@ -334,7 +339,7 @@ export function WizardPage() {
   function runAnalysis() {
     const f = analysisProblems(d, editing?.reviewStatus);
     if (Object.keys(f).length) { showProblems(f); return; }
-    setFieldErr({}); startAnalysis(user.id); navigate(`/seller/new/ai/analyzing${suffix}`);
+    setFieldErr({}); startAnalysis(user.id); // 기다리지 않는다: 이 화면(4단계)에서 진행 상태를 보이고 끝나면 바로 반영된다
   }
   /** n단계로 간다(기록을 쌓아 뒤로 가기가 이 단계로 돌아온다) */
   function goStep(n: number, replace = false) { const next = new URLSearchParams(params); next.set('step', String(n)); next.delete('pick'); setParams(next, { replace, state: { wizardStep: true } }); }
@@ -342,7 +347,10 @@ export function WizardPage() {
   function nextStep() {
     const p = Object.fromEntries(Object.entries(submitProblems()).filter(([k]) => stepOf(k) === step));
     if (Object.keys(p).length) { setError('빠진 정보를 확인해 주세요.'); showProblems(p); return; }
-    setError(''); setFieldErr({}); goStep(step + 1);
+    setError(''); setFieldErr({});
+    // 1단계 다음: 새 등록이면 AI 분석을 요청만 해 두고 기다리지 않는다(아직 분석 전이거나, 분석 뒤에 사진이나 기본 정보가 바뀐 경우). 실패는 4단계에서 다시 분석하거나 직접 고른다
+    if (step === 1 && !editId && !revision && !Object.keys(analysisProblems(d, editing?.reviewStatus)).length && (d.ai.status === 'before' || analysisStale(d))) startAnalysis(user.id);
+    goStep(step + 1);
   }
   /** 헤더 뒤로: 이전 단계(이 화면에서 넘어왔으면 기록을 되돌리고, 이어 쓰기로 바로 열었으면 이전 단계로 바꾼다). 1단계는 화면을 나간다 */
   const prevStep = step > 1 ? () => { if ((location.state as { wizardStep?: boolean } | null)?.wizardStep) navigate(-1); else goStep(step - 1, true); } : undefined;
@@ -402,9 +410,9 @@ export function WizardPage() {
   // 확인 단계 요약: 각 줄의 수정은 그 단계로 간다
   const summary: [number, string, string][] = [
     [1, '상품 사진', `${d.images.length}장`], [1, '상품명', d.name.trim() || '입력 전'],
-    [2, '카테고리', d.category || '선택 전'],
-    [3, '한정 판매가', d.price ? money(d.price) : '입력 전'], [3, '총 한정 수량', `${total}개`], ...(!revision ? [[3, '1인 구매 한도', `${d.maxPerAccount}개`]] as [number, string, string][] : []),
-    [4, '판매 일정', startOk ? `${dateLabel(d.startsAt)} ${hhmm(start.getHours(), start.getMinutes())} 시작` : '선택 전'], [4, '배송비', d.shipping ? money(d.shipping) : '무료'], ...(!revision ? [[4, '출고 기한', `${d.dispatchDays}영업일`]] as [number, string, string][] : []),
+    [2, '한정 판매가', d.price ? money(d.price) : '입력 전'], [2, '총 한정 수량', `${total}개`], ...(!revision ? [[2, '1인 구매 한도', `${d.maxPerAccount}개`]] as [number, string, string][] : []),
+    [3, '판매 일정', startOk ? `${dateLabel(d.startsAt)} ${hhmm(start.getHours(), start.getMinutes())} 시작` : '선택 전'], [3, '배송비', d.shipping ? money(d.shipping) : '무료'], ...(!revision ? [[3, '출고 기한', `${d.dispatchDays}영업일`]] as [number, string, string][] : []),
+    [4, '카테고리', d.category || '선택 전'], ...(!revision && questions.length ? [[4, 'AI 질문 답', `${questions.filter(q => aiFaq(q)?.answer?.trim() && aiFaq(q)?.confirmed !== false).length}/${questions.length}개 확인`]] as [number, string, string][] : []),
   ];
   const last = step === STEPS;
 
@@ -414,6 +422,7 @@ export function WizardPage() {
       <div className="flex items-center justify-between gap-3"><p className="text-body font-bold">{STEP_TITLES[step - 1]}</p><p className="shrink-0 text-label text-meta">{step}/{STEPS}</p></div>
       <ProgressBar value={step} max={STEPS} label={`${step}/${STEPS}단계 ${STEP_TITLES[step - 1]}`} isLabelHidden/>
     </div>
+    {(step === 2 || step === 3) && !revision && (d.ai.status === 'analyzing' || (d.ai.status === 'recommended' && d.ai.notice && !d.ai.noticeSeen)) && <p role="status" className="-mt-3 flex items-center gap-1.5 text-label text-meta"><Sparkles size={13} className="shrink-0"/>{d.ai.status === 'analyzing' ? 'AI 분석 중이에요. 결과는 4단계에서 확인해요' : 'AI 분석이 끝났어요. 4단계에서 확인해요'}</p>}
     {(step === 1 || last) && <>
       {editing && <div className="-mt-4 space-y-3">
         {editing.startsAt > 0 && <p className="flex items-center gap-2 text-label text-meta"><span className="rounded-badge bg-soft px-1.5 py-0.5 text-footnote font-bold text-aux">{rejected ? '반려됨' : '판매 예정'}</span>{`${new Date(editing.startsAt).getMonth() + 1}.${new Date(editing.startsAt).getDate()} (${WEEK[new Date(editing.startsAt).getDay()]}) ${hhmm(new Date(editing.startsAt).getHours(), new Date(editing.startsAt).getMinutes())} 오픈`}{editing.notifySubscribers !== undefined && ` · 알림 신청 ${editing.notifySubscribers}명`}</p>}
@@ -449,48 +458,15 @@ export function WizardPage() {
     {!revision && <>
       <section data-field="disposalReason"><Label hint="· 필수 · 한두 줄이면 돼요">처분 사유</Label><input aria-label="처분 사유" className="field-line" value={d.reason} maxLength={500} onChange={e => patch({ reason: e.target.value })} placeholder="예: 시즌 종료 후 남은 미판매 새 상품"/><FieldError name="disposalReason"/></section>
 
-      <section data-field="state" className="space-y-2">
-        <Button outline={!!Object.keys(analysisProblems(d, editing?.reviewStatus)).length} className="flex w-full items-center justify-center gap-1.5 text-callout!" disabled={d.ai.status === 'analyzing' || uploading} onClick={runAnalysis}><Sparkles size={15}/>{d.ai.status === 'analyzing' ? 'AI가 분석하고 있어요' : d.ai.result || d.ai.status === 'uncertain' ? 'AI 분석 다시 하기' : 'AI로 카테고리 분석하기'}</Button>
-        <p className="text-label text-meta">사진·상품명·짧은 설명·처분 사유를 입력하면 AI가 카테고리를 추천해요. 분석은 선택이라 건너뛰고 카테고리를 직접 골라도 돼요</p>
-        <ul className="space-y-1 rounded-element bg-soft p-3 text-label leading-[1.6] text-aux"><li>· 상품 전체가 보이는 사진과 라벨(소재·사이즈 표기) 사진을 올려 주세요</li><li>· 흠집, 사용감, 포장 상태가 잘 보이게 찍고 처분 사유를 구체적으로 적으면 AI가 구매자 질문과 예상 답변을 더 정확히 만들어요</li><li>· 분석 뒤에 상품명·설명·브랜드·사진 등을 바꾸면 질문을 다시 받아야 해요. 입력을 마친 뒤 분석하면 한 번에 끝나요</li></ul>
-        <FieldError name="state"/>
+      <section className="space-y-2" aria-label="AI 분석 안내">
+        <p className="flex items-start gap-1.5 text-label text-meta"><Sparkles size={14} className="mt-0.5 shrink-0"/>{editId ? '카테고리와 AI 분석은 4단계에서 확인해요' : '다음을 누르면 AI가 사진과 정보로 카테고리와 구매자 질문을 분석해요. 기다리지 않고 다음 단계를 입력하는 동안 끝나고, 결과는 4단계에서 확인해요'}</p>
+        <ul className="space-y-1 rounded-element bg-soft p-3 text-label leading-[1.6] text-aux"><li>· 상품 전체가 보이는 사진과 라벨(소재·사이즈 표기) 사진을 올려 주세요</li><li>· 흠집, 사용감, 포장 상태가 잘 보이게 찍고 처분 사유를 구체적으로 적으면 AI가 구매자 질문과 예상 답변을 더 정확히 만들어요</li><li>· 분석 뒤에 상품명·설명·브랜드·사진 등을 바꾸면 질문을 다시 받아야 해요</li></ul>
       </section>
 
     </>}
     </>}
 
     {step === 2 && <>
-    {!revision ? <>
-      {stale && <section role="status" className="space-y-2 rounded-element bg-red-soft p-4"><p className="text-body font-bold text-red">정보가 바뀌어 AI 질문을 다시 받아야 해요</p><p className="text-label text-red">분석한 뒤에 상품명·설명·브랜드·카테고리·처분 사유·사진 중 하나가 바뀌었어요. 다시 분석하면 입력이 같을 땐 기존 결과, 다르면 새 분석을 받아요.</p><Button outline className="w-full" disabled={d.ai.status === 'analyzing' || uploading} onClick={runAnalysis}>다시 분석</Button></section>}
-
-      {d.ai.status === 'recommended' && d.ai.result && d.ai.notice && !d.ai.noticeSeen && <div role="status" aria-label="AI 분석 반영 안내" className="space-y-2 rounded-element bg-soft p-4">
-        <p className="flex items-center gap-1.5 text-body font-bold"><Sparkles size={14}/>{d.ai.notice === 'applied' ? 'AI 분석 결과를 반영했어요' : '직접 고른 카테고리는 그대로 두었어요'}</p>
-        <p className="text-label leading-relaxed text-aux">{d.ai.notice === 'applied' ? `카테고리 ${d.ai.result.category}` : `AI 추천 카테고리는 ${d.ai.result.category}예요`}{d.ai.result.questions.length ? ` · 구매자가 물어볼 만한 질문 ${d.ai.result.questions.length}개는 마지막 확인 단계의 AI 질문에서 답할 수 있어요` : ''}</p>
-        <div className="flex gap-3 text-label font-bold">{d.ai.notice === 'kept' && <button type="button" className="underline" onClick={() => patch({ category: d.ai.result!.category, aiCategory: d.ai.result!.category, ai: { ...d.ai, notice: 'applied', noticeSeen: true } })}>AI 추천으로 바꾸기</button>}<button type="button" className="text-aux underline" onClick={() => patch({ ai: { ...d.ai, noticeSeen: true } })}>닫기</button></div>
-      </div>}
-      <section data-field="category"><Label hint="· AI 추천 또는 직접 선택">카테고리</Label>
-        {!d.category && d.ai.status === 'uncertain' && d.ai.reason && <p role="status" className="pb-1 text-label text-aux">{d.ai.reason}</p>}
-        <button type="button" onClick={openCategory} className="flex h-12 w-full items-center gap-2 border-b border-line text-left">
-          <Sparkles size={16} className="shrink-0"/>
-          <span className={`min-w-0 flex-1 truncate text-headline ${d.category ? '' : 'text-placeholder'}`}>{d.category || (d.ai.status === 'analyzing' ? '사진을 분석하고 있어요' : '카테고리를 선택해 주세요')}</span>
-          {(d.category || d.ai.result || d.ai.status === 'analyzing' || d.ai.status === 'failed' || d.ai.status === 'delayed') && <span className="flex shrink-0 items-center text-body text-aux">분석 결과<ChevronRight size={16}/></span>}
-        </button>
-        <FieldError name="category"/>
-      </section>
-
-      {/* 카테고리별 점검 기준(registration-metadata categoryCriteria) → 입력칸. 값은 2단계 attributes(항목명+값)로 저장. AI 질문은 칸과 묶지 않고 아래 독립 목록 */}
-      {criteria && <section className="space-y-4" data-field="attributes">
-        <div><Label hint="· 심사 때 확인해요">카테고리별 상품 정보</Label><p className="mt-1 text-label text-meta">카테고리마다 확인하는 항목이 달라요</p></div>
-        {criteria.checks.map(c => { const name = attributeName(c.code); return <div key={c.code}>
-          <p className="text-body">{name}</p>
-          <input aria-label={name} className="field-line" value={d.extras.find(e => e.key === name)?.value ?? ''} maxLength={ATTRIBUTE_VALUE_MAX} onChange={e => setExtra(name, e.target.value)}/>
-        </div>; })}
-      </section>}
-
-    </> : <section data-field="category"><Label hint="· 승인 후 변경 불가">카테고리</Label><p className="flex h-12 items-center border-b border-line text-headline text-meta">{d.category || '선택 안 함'}</p></section>}
-    </>}
-
-    {step === 3 && <>
     {!revision && <>
       <section className="space-y-3" data-field="sourceUrl">
         <div><Label hint="· 필수">타 플랫폼 판매 URL</Label><p className="mt-1 text-label text-meta">쿠팡·알리 등에서 판매 중인 같은 상품의 링크</p></div>
@@ -534,7 +510,7 @@ export function WizardPage() {
     </> : <p className="text-label text-meta">옵션과 한정 수량, 1인 구매 한도는 승인 후 바꿀 수 없어요</p>}
     </>}
 
-    {step === 4 && <>
+    {step === 3 && <>
       <section className="space-y-3" data-field="startsAt"><Label hint="· 필수">판매 일정</Label>
         <div className="flex gap-4">
           <label className="relative flex h-12 min-w-0 flex-[1.6] items-center justify-between border-b border-line"><span className="text-headline">{startOk ? dateLabel(d.startsAt) : '날짜 선택'}</span><Calendar size={18} className="text-aux"/><input aria-label="판매 날짜" type="date" className="absolute inset-0 opacity-0" min={localDateTime(now).slice(0, 10)} max={localDateTime(now + 7 * 86_400_000).slice(0, 10)} value={startOk ? localDateTime(start.getTime()).slice(0, 10) : ''} onChange={e => setDate(e.target.value)}/></label>
@@ -587,10 +563,54 @@ export function WizardPage() {
 
     </>}
 
-    {last && <>
-    <section className="space-y-1" aria-label="입력한 내용 확인"><Label>입력한 내용</Label>
-      {summary.map(([n, label, value]) => <div key={label} className="flex min-h-11 items-center gap-3 border-b border-line"><span className="w-24 shrink-0 text-label text-aux">{label}</span><span className="min-w-0 flex-1 truncate text-body">{value}</span><button type="button" aria-label={`${label} 수정`} onClick={() => goStep(n)} className="h-11 min-w-11 shrink-0 px-1 text-right text-label text-aux underline">수정</button></div>)}
-    </section>
+    {step === 4 && <>
+    {!revision ? <>
+      {/* AI 분석 상태: 1단계 다음에서 요청한 분석이 여기서 끝나면(화면을 떠났어도) 카테고리와 상품 정보, 질문이 바로 채워진다 */}
+      <section className="space-y-2" data-field="state" aria-label="AI 분석 상태">
+        {d.ai.status === 'analyzing' ? <div role="status" className="space-y-3 rounded-element bg-soft p-4">
+          <p className="flex items-center gap-1.5 text-body font-bold"><Sparkles size={14}/>AI가 사진을 분석하고 있어요</p>
+          <ProgressBar isIndeterminate label="AI 분석 진행" isLabelHidden/>
+          <p className="text-label leading-relaxed text-aux">{d.ai.retry ? `잠시 후 다시 분석해요${d.ai.retry.nextAttemptAt ? ` (다음 시도 ${kstTime(parseServerTime(d.ai.retry.nextAttemptAt)).slice(0, 5)})` : ''}. ` : ''}끝나면 추천 카테고리와 구매자 질문이 여기에 바로 채워져요. 기다리지 않고 카테고리를 직접 골라도 돼요</p>
+        </div>
+        : d.ai.status === 'failed' || d.ai.status === 'delayed' ? <div role="alert" className="space-y-2 rounded-element bg-red-soft p-4">
+          <p className="text-body font-bold text-red">{d.ai.status === 'delayed' ? 'AI 분석이 지연되고 있어요' : 'AI가 사진을 분석하지 못했어요'}</p>
+          <p className="text-label leading-relaxed text-red">{d.ai.status === 'delayed' ? '서버는 계속 분석하고 있어요. 다시 확인해도 비용은 들지 않아요.' : d.ai.reason || '사진이 흐리거나 상품이 잘 보이지 않으면 분석이 어려워요.'}</p>
+          {d.ai.fields && Object.entries(d.ai.fields).map(([k, v]) => <p key={k} className="text-label text-red">{FIELD_LABELS[k] ?? k} · {v}</p>)}
+          <div className="flex gap-2 pt-1"><Button outline className="flex-1 text-body!" disabled={uploading} onClick={() => (d.ai.fields ? showProblems(d.ai.fields) : runAnalysis())}>{d.ai.fields ? '정보 고치기' : d.ai.status === 'delayed' ? '다시 확인' : '다시 분석'}</Button><Button outline className="flex-1 text-body!" onClick={() => setPickerOpen(true)}>직접 선택</Button></div>
+        </div>
+        : d.ai.status === 'before' && !stale ? <div className="space-y-2">
+          <Button outline className="flex w-full items-center justify-center gap-1.5 text-callout!" disabled={uploading} onClick={runAnalysis}><Sparkles size={15}/>AI로 카테고리 분석하기</Button>
+          <p className="text-label text-meta">AI가 카테고리와 구매자 질문을 추천해요. 분석은 선택이라 카테고리를 직접 골라도 돼요</p>
+        </div> : null}
+        <FieldError name="state"/>
+      </section>
+      {stale && <section role="status" className="space-y-2 rounded-element bg-red-soft p-4"><p className="text-body font-bold text-red">정보가 바뀌어 AI 질문을 다시 받아야 해요</p><p className="text-label text-red">분석한 뒤에 상품명·설명·브랜드·카테고리·처분 사유·사진 중 하나가 바뀌었어요. 다시 분석하면 입력이 같을 땐 기존 결과, 다르면 새 분석을 받아요.</p><Button outline className="w-full" disabled={d.ai.status === 'analyzing' || uploading} onClick={runAnalysis}>다시 분석</Button></section>}
+
+      {d.ai.status === 'recommended' && d.ai.result && d.ai.notice && !d.ai.noticeSeen && <div role="status" aria-label="AI 분석 반영 안내" className="space-y-2 rounded-element bg-soft p-4">
+        <p className="flex items-center gap-1.5 text-body font-bold"><Sparkles size={14}/>{d.ai.notice === 'applied' ? 'AI 분석 결과를 반영했어요' : '직접 고른 카테고리는 그대로 두었어요'}</p>
+        <p className="text-label leading-relaxed text-aux">{d.ai.notice === 'applied' ? `카테고리 ${d.ai.result.category}` : `AI 추천 카테고리는 ${d.ai.result.category}예요`}{d.ai.result.questions.length ? ` · 구매자가 물어볼 만한 질문 ${d.ai.result.questions.length}개를 아래 AI 질문에 보여 드려요` : ''}</p>
+        <div className="flex gap-3 text-label font-bold">{d.ai.notice === 'kept' && <button type="button" className="underline" onClick={() => patch({ category: d.ai.result!.category, aiCategory: d.ai.result!.category, ai: { ...d.ai, notice: 'applied', noticeSeen: true } })}>AI 추천으로 바꾸기</button>}<button type="button" className="text-aux underline" onClick={() => patch({ ai: { ...d.ai, noticeSeen: true } })}>닫기</button></div>
+      </div>}
+      <section data-field="category"><Label hint="· AI 추천 또는 직접 선택">카테고리</Label>
+        {!d.category && d.ai.status === 'uncertain' && d.ai.reason && <p role="status" className="pb-1 text-label text-aux">{d.ai.reason}</p>}
+        <button type="button" onClick={openCategory} className="flex h-12 w-full items-center gap-2 border-b border-line text-left">
+          <Sparkles size={16} className="shrink-0"/>
+          <span className={`min-w-0 flex-1 truncate text-headline ${d.category ? '' : 'text-placeholder'}`}>{d.category || (d.ai.status === 'analyzing' ? '사진을 분석하고 있어요' : '카테고리를 선택해 주세요')}</span>
+          {d.category && <span className="flex shrink-0 items-center text-body text-aux">변경<ChevronRight size={16}/></span>}
+        </button>
+        <FieldError name="category"/>
+      </section>
+
+      {/* 카테고리별 점검 기준(registration-metadata categoryCriteria) → 입력칸. 값은 2단계 attributes(항목명+값)로 저장. AI 질문은 칸과 묶지 않고 아래 독립 목록 */}
+      {criteria && <section className="space-y-4" data-field="attributes">
+        <div><Label hint="· 심사 때 확인해요">카테고리별 상품 정보</Label><p className="mt-1 text-label text-meta">카테고리마다 확인하는 항목이 달라요</p></div>
+        {criteria.checks.map(c => { const name = attributeName(c.code); return <div key={c.code}>
+          <p className="text-body">{name}</p>
+          <input aria-label={name} className="field-line" value={d.extras.find(e => e.key === name)?.value ?? ''} maxLength={ATTRIBUTE_VALUE_MAX} onChange={e => setExtra(name, e.target.value)}/>
+        </div>; })}
+      </section>}
+
+    </> : <section data-field="category"><Label hint="· 승인 후 변경 불가">카테고리</Label><p className="flex h-12 items-center border-b border-line text-headline text-meta">{d.category || '선택 안 함'}</p></section>}
     {!revision && <>
       {questions.length > 0 && <section className="space-y-4" data-field="aiQuestions">
         <div><Label hint="· 선택">AI 질문</Label><p className="mt-1 text-label text-meta">구매자가 물어볼 만한 질문이에요. 답하면 상품 FAQ로 구매자에게 공개돼요. 답하지 않아도 판매 심사를 요청할 수 있어요</p></div>
@@ -605,6 +625,12 @@ export function WizardPage() {
       </section>}
 
     </>}
+    </>}
+
+    {last && <>
+    <section className="space-y-1" aria-label="입력한 내용 확인"><Label>입력한 내용</Label>
+      {summary.map(([n, label, value]) => <div key={label} className="flex min-h-11 items-center gap-3 border-b border-line"><span className="w-24 shrink-0 text-label text-aux">{label}</span><span className="min-w-0 flex-1 truncate text-body">{value}</span><button type="button" aria-label={`${label} 수정`} onClick={() => goStep(n)} className="h-11 min-w-11 shrink-0 px-1 text-right text-label text-aux underline">수정</button></div>)}
+    </section>
       {!editId && <section data-field="inspection" className="space-y-3">
         <div><Label hint="· 판매 심사에 포함">물품 검수</Label><p className="mt-1 text-label text-aux">심사 때 운영팀이 사진으로 실제 상품 상태를 확인해요</p></div>
         <div className="space-y-3 rounded-element bg-soft p-4">
@@ -668,17 +694,17 @@ export function AiAnalysisPage() {
   if (!user.seller) return <Unavailable message="승인된 판매자만 상품을 등록할 수 있습니다."/>;
   if (!d) return null;
   if (d.ai.status === 'analyzing') return <Navigate to={`/seller/new/ai/analyzing${suffix}`} replace/>;
-  if (d.ai.status === 'uncertain') return <Navigate to={stepUrl(suffix, 2)} replace state={WIZARD_STATE}/>;
+  if (d.ai.status === 'uncertain') return <Navigate to={stepUrl(suffix, 4)} replace state={WIZARD_STATE}/>;
   if (d.ai.status === 'failed' || !d.ai.result) return <Navigate to={`/seller/new/ai/failed${suffix}`} replace/>;
   const r = d.ai.result, chosen = r.category;
   const fromStep = !!(location.state as { fromStep?: boolean } | null)?.fromStep;
-  const back = () => (fromStep ? navigate(-1) : navigate(stepUrl(suffix, 2), { replace: true, state: WIZARD_STATE }));
+  const back = () => (fromStep ? navigate(-1) : navigate(stepUrl(suffix, 4), { replace: true, state: WIZARD_STATE }));
   return <AiFrame footer={<div className="flex gap-2"><Button outline className="w-32 text-subhead!" onClick={() => { startAnalysis(user.id); navigate(`/seller/new/ai/analyzing${suffix}`, { replace: true }); }}>다시 분석</Button>{d.category === chosen ? <Button className="flex-1 text-subhead!" onClick={back}>등록 화면으로</Button> : <Button className="flex-1 text-subhead!" onClick={() => { patch({ category: chosen, aiCategory: chosen }); back(); }}>이 카테고리로 적용</Button>}</div>}>
     <div className="space-y-2"><div className="relative"><ProductImage src={d.images[0]} alt="분석한 대표 사진" className="h-[240px] w-full"/><span className="absolute left-3 top-3 flex items-center gap-1 rounded-inner bg-black/70 px-2 py-1 text-footnote font-bold text-white"><Sparkles size={12}/>AI 분석 완료</span></div><p className="text-label text-meta">등록한 사진 {r.photos}장을 분석했어요</p></div>
     <div className="space-y-1"><p className="text-label font-bold text-meta">AI 추천 카테고리</p><p className="text-heading font-bold">{r.category}</p></div>
     <section><h2 className="mb-1 text-callout font-bold">카테고리 선택</h2><LiveStatus state={meta}/>
       <div className="flex h-12 items-center gap-3 border-b border-line"><span className="grid h-5 w-5 place-items-center rounded-full border-[1.5px] border-ink"><span className="h-2.5 w-2.5 rounded-full bg-ink"/></span><span className="flex-1 text-callout">{r.category}</span><span className="text-footnote font-bold text-positive">AI 추천</span></div>
-      <button type="button" onClick={() => navigate(stepUrl(suffix, 2, '&pick=category'), { replace: true, state: WIZARD_STATE })} className="mt-3 flex items-center text-body text-aux">다른 카테고리 직접 선택<ChevronRight size={15}/></button>
+      <button type="button" onClick={() => navigate(stepUrl(suffix, 4, '&pick=category'), { replace: true, state: WIZARD_STATE })} className="mt-3 flex items-center text-body text-aux">다른 카테고리 직접 선택<ChevronRight size={15}/></button>
     </section>
     {r.questions.length > 0 && <><div className="-mx-4 h-2 bg-divider"/><section className="space-y-3"><h2 className="text-headline font-bold">구매자가 물어볼 만한 질문</h2><p className="text-label text-aux">등록 화면의 AI 질문에서 예상 답변을 확인하거나 고치면 상품 FAQ로 구매자에게 공개돼요</p>{r.questions.map((q, i) => <div key={i} className="space-y-1 rounded-element border border-line p-3.5"><p className="text-callout font-bold">{q.question}</p>{q.reason && <p className="text-label text-aux">{q.reason}</p>}{q.suggestedAnswer && <p className="text-label"><span className="font-bold">AI 예상 답변</span> {q.suggestedAnswer}</p>}</div>)}</section></>}
     <div className="flex gap-2 rounded-element bg-soft p-4"><Info size={15} className="mt-0.5 shrink-0 text-aux"/><p className="text-label leading-[1.5] text-aux">AI 분석 결과는 판매 심사에서 한 번 더 확인해요.<br/>카테고리가 다르면 목록에서 바꿔 주세요.</p></div>
@@ -688,10 +714,10 @@ export function AiAnalysisPage() {
 export function AiAnalyzingPage() {
   const { user, d, suffix } = useDraft(); const navigate = useNavigate();
   // 성공(추천)·판단 불가는 결과가 이미 반영된 등록 화면으로, 실패·지연은 안내 화면으로
-  useEffect(() => { if (d && d.ai.status !== 'analyzing') navigate(d.ai.status === 'failed' || d.ai.status === 'delayed' ? `/seller/new/ai/failed${suffix}` : stepUrl(suffix, 2), { replace: true, state: WIZARD_STATE }); }, [d?.ai.status]);
+  useEffect(() => { if (d && d.ai.status !== 'analyzing') navigate(d.ai.status === 'failed' || d.ai.status === 'delayed' ? `/seller/new/ai/failed${suffix}` : stepUrl(suffix, 4), { replace: true, state: WIZARD_STATE }); }, [d?.ai.status]);
   if (!user.seller) return <Unavailable message="승인된 판매자만 상품을 등록할 수 있습니다."/>;
   if (!d) return null;
-  return <AiFrame footer={<Button outline className="w-full text-subhead!" onClick={() => navigate(stepUrl(suffix, 2), { replace: true, state: WIZARD_STATE })}>기다리지 않고 등록 계속하기</Button>}>
+  return <AiFrame footer={<Button outline className="w-full text-subhead!" onClick={() => navigate(stepUrl(suffix, 4), { replace: true, state: WIZARD_STATE })}>기다리지 않고 등록 계속하기</Button>}>
     <Thumbs images={d.images}/>
     <span className="grid h-11 w-11 place-items-center rounded-full bg-soft"><Sparkles size={18}/></span>
     <div className="space-y-3"><h1 className="text-heading-lg font-bold leading-[1.45] tracking-[-.7px]">등록한 사진 {d.images.length}장을<br/>분석하고 있어요</h1>{d.ai.retry ? <p role="status" className="text-body text-aux">잠시 후 다시 분석해요{d.ai.retry.nextAttemptAt ? ` (다음 시도 ${kstTime(parseServerTime(d.ai.retry.nextAttemptAt)).slice(0, 5)})` : ''} · {d.ai.retry.attempts}번째 시도 중</p> : <p className="text-body text-aux">보통 10초 안에 끝나요.</p>}</div>
@@ -706,7 +732,7 @@ export function AiFailedPage() {
   if (!user.seller) return <Unavailable message="승인된 판매자만 상품을 등록할 수 있습니다."/>;
   if (!d) return null;
   const delayed = d.ai.status === 'delayed'; // 3분이 지나도 끝나지 않음 — 실패가 아니다(서버는 계속 분석한다)
-  return <AiFrame footer={<div className="flex gap-2"><Button outline className="w-32 text-subhead!" onClick={() => navigate(stepUrl(suffix, 2, '&pick=category'), { replace: true, state: WIZARD_STATE })}>직접 입력하기</Button><Button className="flex-1 text-subhead!" onClick={() => { startAnalysis(user.id); navigate(`/seller/new/ai/analyzing${suffix}`, { replace: true }); }}>{delayed ? '다시 확인' : '다시 분석'}</Button></div>}>
+  return <AiFrame footer={<div className="flex gap-2"><Button outline className="w-32 text-subhead!" onClick={() => navigate(stepUrl(suffix, 4, '&pick=category'), { replace: true, state: WIZARD_STATE })}>직접 입력하기</Button><Button className="flex-1 text-subhead!" onClick={() => { startAnalysis(user.id); navigate(`/seller/new/ai/analyzing${suffix}`, { replace: true }); }}>{delayed ? '다시 확인' : '다시 분석'}</Button></div>}>
     <Thumbs images={d.images}/>
     <span className="grid h-11 w-11 place-items-center rounded-full bg-red-soft"><AlertCircle size={18} className="text-action"/></span>
     {d.ai.fields && <div role="alert" className="space-y-2 rounded-element bg-red-soft p-4"><p className="text-body font-bold text-red">분석 요청 전에 확인할 정보가 있어요</p>{Object.entries(d.ai.fields).map(([k, v]) => <p key={k} className="text-label text-red">{FIELD_LABELS[k] ?? k} · {v}</p>)}<Button outline className="w-full" onClick={() => navigate(`/seller/new${suffix}`, { replace: true })}>입력 정보 확인하기</Button></div>}
