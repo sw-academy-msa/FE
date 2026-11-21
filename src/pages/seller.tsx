@@ -9,7 +9,7 @@ import type { Order, Product, SellerSettings } from '../domain';
 import { atomic, mutate, useStore } from '../store';
 import { endSession } from '../auth';
 import { addBusinessDays, dateTime, kstDay, kstShort, kstSlot, openDay, useClock } from '../hooks';
-import { Badge, Button, clockLeft, CopyButton, copyText, Toggle, Empty, ErrorBox, Field, Header, InfoRow, LiveStatus, MenuRow, Modal, Note, ORDER_LABELS, ProductImage, ProductSummary, Unavailable, useToast } from '../components/ui';
+import { Badge, Button, clockLeft, CopyButton, copyText, Toggle, Empty, ErrorBox, Field, Header, InfoRow, LiveStatus, MenuRow, Modal, Note, ORDER_LABELS, ProductImage, ProductSummary, Unavailable, useLeaveGuard, useToast } from '../components/ui';
 import { PdfField } from '../components/PdfField';
 import { AddressBookFormPage, AddressBookPage } from './sellerAddresses';
 import { SalesRestrictionBanner } from './sellerReview';
@@ -391,6 +391,8 @@ function SellerInquiryImage({ orderId, imageId }: { orderId: string; imageId: st
 export function SellerInquiryDetailPage() {
   // 입력창은 새로 보낼 답변만 담는다: 이미 보낸 답변(q.answer)으로 채우지 않아 나갔다 들어와도 보낸 내용이 입력창에 남지 않는다. 보낸 답변은 위 대화에 한 번만 보인다
   const { id } = useParams(); const s = useStore(), user = activeUser(s), toast = useToast(); const q = s.inquiries.find(i => i.id === id && i.sellerId === user.id); const [answer, setAnswer] = useState(''), [publicAnswer, setPublic] = useState(q?.public ?? false), [error, setError] = useState(''), [busy, setBusy] = useState(false), sending = useRef(false); // sending: 같은 답변을 두 번 보내지 않게(빠른 두 번 누르기)
+  // 작성 중: 보낼 답변을 적었을 때(보내면 입력이 비워진다)
+  useLeaveGuard(!!answer.trim());
   // 실제 모드: 주문 문의는 메시지 전체를 상세에서, 스토어에 없으면 문의함을 받아 찾는다(주문 문의면 이어서 상세도 받는다: 문의함 카드는 마지막 메시지만 있어 보낸 답변이 질문처럼 보인다)
   const live = useLive(async signal => {
     if (!user.seller || !id) return null;
@@ -613,12 +615,17 @@ export function SellerSettingsPage() {
 
   // 실제 모드: 서버의 판매자 정보를 폼에 채운다(mock은 store 값 그대로)
   const me = useApi(async signal => (USE_MOCK ? null : fetchSellerMe(original, signal)), []);
-  useEffect(() => { if (me.data) { setForm(me.data.settings); setPhone(me.data.contactPhone); setEmail(me.data.contactEmail); } }, [me.data]);
+  // 작성 중 판단의 처음 값: 처음 화면 값, 서버 값을 받으면 그 값, 저장하면 저장한 값
+  const core = JSON.stringify({ form, phone, email });
+  const [baseCore, setBaseCore] = useState(core), [baseIntro, setBaseIntro] = useState('');
+  useEffect(() => { if (me.data) { setForm(me.data.settings); setPhone(me.data.contactPhone); setEmail(me.data.contactEmail); setBaseCore(JSON.stringify({ form: me.data.settings, phone: me.data.contactPhone, email: me.data.contactEmail })); } }, [me.data]);
 
   // 스토어 소개·로고(계정 설정 화면)
   const store = useApi(async signal => (USE_MOCK || section !== 'account' ? null : fetchSellerStore(signal)), [section]);
   const [intro, setIntro] = useState(''), [logoUrl, setLogoUrl] = useState(''), [logoTick, setLogoTick] = useState(0);
-  useEffect(() => { if (store.data) setIntro(store.data.introduction ?? ''); }, [store.data]);
+  useEffect(() => { if (store.data) { setIntro(store.data.introduction ?? ''); setBaseIntro(store.data.introduction ?? ''); } }, [store.data]);
+  // 작성 중: 판매자 정보, 연락처, 이메일, 계좌, 주소, 스토어 소개 중 하나라도 처음 값과 다를 때
+  useLeaveGuard(core !== baseCore || intro !== baseIntro);
   useEffect(() => {
     if (!store.data?.hasLogo) { setLogoUrl(''); return; }
     let url = '', alive = true;
@@ -658,6 +665,7 @@ export function SellerSettingsPage() {
         else if (section === 'account') { await updateSellerContact({ sellerDisplayName: form.displayName, contactName: user.name, contactEmail: email, contactPhone: phone }); if (store.data) await updateSellerStore(intro); }
       }
       mutate(state => { state.sellerSettings[user.id] = form; const member = state.users.find(u => u.id === user.id)!; member.phone = phone; member.email = email; });
+      setBaseCore(core); setBaseIntro(intro);
       toast('변경 내용을 저장했습니다.');
     } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
   };
@@ -1011,6 +1019,8 @@ export function TermsPage() {
 function WithdrawForm() {
   const toast = useToast(), navigate = useNavigate();
   const [reason, setReason] = useState('사용 빈도가 낮아요'), [password, setPassword] = useState(''), [agree, setAgree] = useState(false), [error, setError] = useState(''), [busy, setBusy] = useState(false);
+  // 작성 중: 탈퇴 사유를 바꿨거나 비밀번호, 동의를 입력했을 때
+  const leave = useLeaveGuard(reason !== '사용 빈도가 낮아요' || !!password || agree);
   const elig = useApi(signal => (USE_MOCK ? Promise.resolve(null) : fetchWithdrawalEligibility(signal)), []);
   const e = elig.data;
   const canWithdraw = !!e && e.verified && e.canWithdraw; // verified=false면 탈퇴 가능으로 해석하지 않는다
@@ -1022,7 +1032,7 @@ function WithdrawForm() {
     if (!agree) { setError('안내 사항 확인에 동의해 주세요.'); return; }
     if (!password) { setError('비밀번호를 입력해 주세요.'); return; }
     setBusy(true); setError('');
-    try { await withdrawAccount(password, reason); api.setAccessToken(null); mutate(endSession); toast('탈퇴가 완료되었습니다.'); navigate('/', { replace: true }); }
+    try { await withdrawAccount(password, reason); api.setAccessToken(null); mutate(endSession); toast('탈퇴가 완료되었습니다.'); leave.allowLeave(); navigate('/', { replace: true }); }
     catch (x) { setError(errorMessage(x)); } finally { setBusy(false); }
   };
   return (

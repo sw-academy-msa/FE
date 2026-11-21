@@ -6,7 +6,7 @@ import { activeUser, approveApplication, INSPECTION_PREFIX, money, nowOf, saleSt
 import type { Address, Application, DocumentFile } from '../domain';
 import { atomic, mutate, useStore } from '../store';
 import { dateTime, kstShort, kstSlot } from '../hooks';
-import { Badge, Button, Chip, ConfirmLeave, Empty, ErrorBox, Field, Header, InfoRow, LiveStatus, MenuRow, Modal, Note, ProductImage, Unavailable, useToast } from '../components/ui';
+import { Badge, Button, Chip, Empty, ErrorBox, Field, Header, InfoRow, LiveStatus, MenuRow, Modal, Note, ProductImage, Unavailable, useLeaveGuard, useToast } from '../components/ui';
 import { PdfField } from '../components/PdfField';
 import { deleteAddress, listAddresses, setDefaultAddress, takeAddressPick, toAddress } from './address';
 import type { SavedAddress as ApiAddr } from './address';
@@ -64,6 +64,9 @@ export function ApplicationPage() {
   const live = useLive(async signal => { const app = await fetchMyApplication(user.id, signal); if (app?.status === 'approved' && !user.seller) restoreSession().catch(() => {}); return app; }, mergeApplication, [user.id]);
   const [fixDoc, setFixDoc] = useState<DocumentFile>();
   const [reapply, setReapply] = useState(false); // 실제 모드: 반려·보완 기한 만료 뒤 새로 신청하기
+  // 작성 중: 신청서 화면에서 처음 연 값(이 기기에 남아 있던 입력 포함)과 입력이나 첨부 서류가 다를 때. 입력과 서류는 이 기기에 계속 저장된다
+  const [start] = useState(() => JSON.stringify({ form, doc }));
+  useLeaveGuard(!user.seller && (!previous || reapply) && JSON.stringify({ form, doc }) !== start, { message: '적은 내용은 이 기기에 저장돼서 다시 들어오면 이어서 쓸 수 있어요.' });
   // 실제 모드 보완 요청·반려·기한 만료: 서버 보완 항목 기준 화면(pages/sellerCorrection.tsx). 판매자(재심사 중 보완 요청)는 보완 요청일 때만
   if (!USE_MOCK && previous && !reapply && (previous.apiStatus === 'CHANGES_REQUESTED' || !user.seller && ['REJECTED', 'EXPIRED'].includes(previous.apiStatus ?? ''))) return <><Header title="입점 심사"/><LiveStatus state={live}/><CorrectionScreen app={previous} onReapply={() => setReapply(true)} onSubmitted={() => { mutate(state => { const a = state.applications.find(x => x.userId === user.id); if (a) { a.status = 'pending'; a.apiStatus = 'PENDING'; a.submittedAt = Date.now(); } }); toast('보완 내용을 제출했어요. 다시 심사해 드릴게요.'); live.reload(); }}/></>;
   if (user.seller) {
@@ -287,6 +290,8 @@ export function AdminSellersPage() {
 export function AdminInquiriesPage() {
   const s = useStore(), user = activeUser(s), toast = useToast(); const [open, setOpen] = useState(''), [answer, setAnswer] = useState(''), [busy, setBusy] = useState(false);
   const live = useLive(sig => (USE_MOCK || !user.admin ? Promise.resolve([]) : listAdminSupportInquiries(sig)), mergeInquiries, [user.admin]);
+  // 작성 중: 답변을 적었을 때(보내면 입력이 비워진다)
+  useLeaveGuard(!!answer.trim());
   if (!user.admin) return <Unavailable message="운영자만 사용할 수 있습니다."/>;
   const items = s.inquiries.filter(q => q.sellerId === 'stockdrop').sort((a, b) => Number(!!a.answer) - Number(!!b.answer) || b.createdAt - a.createdAt);
   return <div>
@@ -585,6 +590,8 @@ export function AdminProductDetailPage() {
   const seller = p ? sellerOf(s, p.sellerId) : undefined;
   useLive(sig => user.admin ? listAdminApplications({ status: 'APPROVED' }, sig) : Promise.resolve([]), mergeAdminApplications, [user.admin]); // 판매자 이름(승인된 입점 신청)
   const live = useLive(sig => user.admin && id ? getAdminProductReviewWithImages(id, sig) : Promise.resolve(null), (st, x) => { if (x) mergeProducts(st, [x]); }, [id, user.admin]);
+  // 작성 중: 반려 화면에서 사유를 고르거나 적었을 때
+  const leave = useLeaveGuard(reject && (Object.values(checkedReasons).some(Boolean) || Object.values(reasonTexts).some(v => v.trim())));
   if (!user.admin) return <Unavailable message="운영자만 사용할 수 있습니다."/>;
   if (!p) return live.loading || live.error ? <LiveStatus state={live}/> : <Empty title="상품을 찾을 수 없어요"><Button to="/admin/products">심사 목록으로</Button></Empty>;
   const openLabel = `오픈 ${kstShort(p.startsAt)}`;
@@ -600,7 +607,7 @@ export function AdminProductDetailPage() {
       try {
         if (!USE_MOCK) { const r = await decideProductReview(p.id, p.version ?? 0, false, reasons); mutate(state => mergeProducts(state, [r])); }
         else mutate(state => { const item = state.products.find(x => x.id === p.id); if (item) item.rejectionReason = reasons; });
-        setReject(false); toast('반려 처리했습니다.'); navigate('/admin/products');
+        setReject(false); toast('반려 처리했습니다.'); leave.allowLeave(); navigate('/admin/products');
       } catch (e) { setError(errorMessage(e)); } finally { setBusy(false); }
     };
     return (
@@ -1067,6 +1074,8 @@ export function InquiryDetailPage() {
   const [params] = useSearchParams();
   const productId = params.get('productId'), relatedOrderId = params.get('orderId');
   const [replyText, setReplyText] = useState(''), [replyBusy, setReplyBusy] = useState(false);
+  // 작성 중: 추가 문의를 적었을 때(보내면 입력이 비워진다)
+  useLeaveGuard(!!replyText.trim());
   const toast = useToast();
   const q = s.inquiries.find(i => i.id === id && i.userId === s.activeUserId);
   // 상세 API는 주문 id가 필요하다: store에 없으면(직접 진입) 문의함에서 찾아 orderId를 얻는다
@@ -1159,14 +1168,16 @@ export function OpsInquiryComposePage() {
   const navigate = useNavigate(); const s = useStore(); const toast = useToast();
   const [kind, setKind] = useState('계정');
   const [title, setTitle] = useState(''), [content, setContent] = useState(''), [orderId, setOrderId] = useState('');
-  const [busy, setBusy] = useState(false), [error, setError] = useState(''), [leaving, setLeaving] = useState(false);
+  const [busy, setBusy] = useState(false), [error, setError] = useState('');
   const kinds = ['계정', '결제', '앱 오류', '입점·판매', '기타'];
-  const dirty = !!title.trim() || !!content.trim();
+  // 처음 값(유형 계정, 빈 제목과 내용, 주문 미선택)과 다르면 작성 중
+  const dirty = !!title.trim() || !!content.trim() || kind !== '계정' || !!orderId;
+  const leave = useLeaveGuard(dirty);
   // 관련 주문: 주문 목록을 거치지 않고 바로 들어와도 고를 수 있게 본인 주문을 불러온다(일시 실패는 한 번 자동 재시도)
   const orders = useLive(sig => retryProjection(() => listOrders({}, sig), sig), mergeOrderList, [s.activeUserId]);
   const userOrders = s.orders.filter(o => o.userId === s.activeUserId).slice(0, 10);
-  return <form className="space-y-5" onSubmit={async e => { e.preventDefault(); if (!title.trim() || !content.trim()) { setError('제목과 내용을 입력해 주세요.'); return; } setBusy(true); setError(''); try { let newId = uid('q-'); if (!USE_MOCK) { const q = await createSupportInquiry({ kind, title, content, orderId }, s.activeUserId); newId = q.id; mutate(st => mergeInquiries(st, [q])); } else await atomic(state => { state.inquiries.unshift({ id: newId, userId: state.activeUserId, sellerId: 'stockdrop', productId: '', productName: title.trim(), kind, question: content.trim(), orderId: orderId || undefined, public: false, createdAt: nowOf(state) }); }); toast('문의가 접수되었습니다. 평일 10:00–18:00 내에 답변드릴게요.'); navigate(`/inquiries/${newId}`, { replace: true }); } catch (e) { setError((e as Error).message); } finally { setBusy(false); } }}>
-    <Header title="1:1 문의하기" action={<button type="button" onClick={() => { if (dirty) setLeaving(true); else navigate(-1); }} className="muted text-footnote">닫기</button>}/>
+  return <form className="space-y-5" onSubmit={async e => { e.preventDefault(); if (!title.trim() || !content.trim()) { setError('제목과 내용을 입력해 주세요.'); return; } setBusy(true); setError(''); try { let newId = uid('q-'); if (!USE_MOCK) { const q = await createSupportInquiry({ kind, title, content, orderId }, s.activeUserId); newId = q.id; mutate(st => mergeInquiries(st, [q])); } else await atomic(state => { state.inquiries.unshift({ id: newId, userId: state.activeUserId, sellerId: 'stockdrop', productId: '', productName: title.trim(), kind, question: content.trim(), orderId: orderId || undefined, public: false, createdAt: nowOf(state) }); }); toast('문의가 접수되었습니다. 평일 10:00–18:00 내에 답변드릴게요.'); leave.allowLeave(); navigate(`/inquiries/${newId}`, { replace: true }); } catch (e) { setError((e as Error).message); } finally { setBusy(false); } }}>
+    <Header title="1:1 문의하기" action={<button type="button" onClick={() => navigate(-1)} className="muted text-footnote">닫기</button>}/>
     <section className="space-y-3"><p className="label">문의 유형 <span className="muted text-caption">· 필수</span></p><div className="flex flex-wrap gap-2">{kinds.map(k => <Chip key={k} selected={kind === k} onClick={() => setKind(k)}>{k}</Chip>)}</div></section>
     <Field label="제목" required><input aria-label="제목" className="field" value={title} onChange={e => setTitle(e.target.value)} placeholder="제목을 입력해 주세요" required/></Field>
     <Field label="문의 내용" required><textarea aria-label="문의 내용" className="field field-box" value={content} onChange={e => setContent(e.target.value.slice(0, 1000))} placeholder="문의 내용을 자세히 적어주세요." rows={5} required/><p className="muted mt-1 text-right text-caption">{content.length} / 1000</p></Field>
@@ -1174,6 +1185,5 @@ export function OpsInquiryComposePage() {
     <Note>취소·반품·하자·오배송은 해당 주문의 판매자에게 문의해 주세요. 1:1 문의 운영시간 평일 10:00–18:00 · 주말·공휴일 휴무</Note>
     <ErrorBox message={error}/>
     <Button type="submit" className="w-full" disabled={busy || !title.trim() || !content.trim()}>{busy ? '접수 중…' : '문의 보내기'}</Button>
-    {leaving && <ConfirmLeave onLeave={() => navigate(-1)} onStay={() => setLeaving(false)}/>}
   </form>;
 }

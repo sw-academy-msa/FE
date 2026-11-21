@@ -1,5 +1,5 @@
 import { createRoot } from 'react-dom/client';
-import { HashRouter } from 'react-router-dom';
+import { createHashRouter, RouterProvider } from 'react-router-dom';
 import { Theme } from '@astryxdesign/core/theme';
 import { stockdropTheme } from './theme/stockdrop';
 import { App } from './App';
@@ -11,4 +11,6 @@ const releaseViewportGuards = installMobileViewportGuards();
 if (import.meta.hot) import.meta.hot.dispose(releaseViewportGuards);
 initAnalytics();
 function Tracked() { usePageView(); return <App/>; }
-createRoot(document.getElementById('root')!).render(<Theme theme={stockdropTheme} mode="light"><HashRouter><Tracked/></HashRouter><Splash/></Theme>);
+// 데이터 라우터(createHashRouter): 작성 중 나가기 확인(useBlocker)에 필요하다. 화면 경로는 App의 <Routes>가 그대로 정한다
+const router = createHashRouter([{ path: '*', element: <Tracked/> }]);
+createRoot(document.getElementById('root')!).render(<Theme theme={stockdropTheme} mode="light"><RouterProvider router={router}/><Splash/></Theme>);

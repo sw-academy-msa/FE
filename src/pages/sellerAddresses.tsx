@@ -4,7 +4,7 @@
  */
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Button, ErrorBox, Field, Header, LiveStatus, Modal } from '../components/ui';
+import { Button, ErrorBox, Field, Header, LiveStatus, Modal, useLeaveGuard } from '../components/ui';
 import { createAddressBook, deleteAddressBook, errorMessage, fieldErrors, isApiError, listAddressBook, setDefaultAddressBook, updateAddressBook, useApi } from '../api';
 import type { AddressBookBody, AddressType, SellerAddressBookDto } from '../api';
 import { takeAddressPick } from './address';
@@ -76,15 +76,19 @@ export function AddressBookFormPage({ fallback }: { fallback: AddressType }) {
   const here = `/seller/settings/ship-edit?type=${type}${id ? `&id=${encodeURIComponent(id)}` : ''}`;
   const [form, setForm] = useState<Form>(blank), [ready, setReady] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({}), [error, setError] = useState(''), [busy, setBusy] = useState(false);
+  // 작성 중 판단의 처음 값: 추가는 빈 값, 수정은 서버 값. 주소 검색을 다녀왔으면(보관한 입력이 있으면) 이미 작성 중이다
+  const [original, setOriginal] = useState<string | null>(null);
+  const leave = useLeaveGuard(ready && original !== null && JSON.stringify(form) !== original);
   // 수정: 기존 값, 추가: 빈 값. 주소 검색에서 돌아왔으면 보관한 입력 + 고른 주소
   const current = useApi(async signal => (id ? (await listAddressBook(type, signal)).find(a => a.id === id) ?? null : null), [type, id]);
   const dispatch = useApi(async signal => (type === 'RETURN' ? listAddressBook('DISPATCH', signal) : []), [type]);
   useEffect(() => {
     if (ready || current.loading) return;
     let base: Form = current.data ? { label: current.data.label, contactName: current.data.contactName, contactPhone: current.data.contactPhone, address: { ...current.data.address, detailAddress: current.data.address.detailAddress ?? '' }, makeDefault: current.data.defaultAddress } : blank;
-    try { const saved = JSON.parse(sessionStorage.getItem(FORM_KEY) || 'null'); if (saved?.here === here) base = saved.form; sessionStorage.removeItem(FORM_KEY); } catch { /* 보관 값 없음 */ }
+    let start = JSON.stringify(base);
+    try { const saved = JSON.parse(sessionStorage.getItem(FORM_KEY) || 'null'); if (saved?.here === here) { base = saved.form; start = ''; } sessionStorage.removeItem(FORM_KEY); } catch { /* 보관 값 없음 */ }
     const pick = takeAddressPick(); if (pick) base = { ...base, address: { ...base.address, postalCode: pick.postalCode, roadAddress: pick.roadAddress } };
-    setForm(base); setReady(true);
+    setForm(base); setOriginal(start); setReady(true);
   }, [current.loading, current.data, ready, here]);
   const set = (v: Partial<Form>) => setForm(f => ({ ...f, ...v }));
   const setAddr = (v: Partial<Form['address']>) => setForm(f => ({ ...f, address: { ...f.address, ...v } }));
@@ -100,7 +104,7 @@ export function AddressBookFormPage({ fallback }: { fallback: AddressType }) {
     try {
       const saved = id ? await updateAddressBook(type, id, body) : await createAddressBook(type, body);
       if (form.makeDefault && !saved.defaultAddress) await setDefaultAddressBook(type, saved.id);
-      navigate(`/seller/settings/addresses?tab=${type}`, { replace: true });
+      leave.allowLeave(); navigate(`/seller/settings/addresses?tab=${type}`, { replace: true });
     } catch (err) { setErrors(fieldErrors(err)); setError(errorMessage(err)); } finally { setBusy(false); }
   }
 

@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Bell, Check, Eye, EyeOff, PackageCheck, Package, Tag, ShieldCheck } from 'lucide-react';
 import { CodeInput } from '../components/CodeInput';
-import { Button, ErrorBox, Field, Header, Modal, Note, useToast } from '../components/ui';
+import { Button, ErrorBox, Field, Header, Modal, Note, useLeaveGuard, useToast } from '../components/ui';
 import { getState, mutate, useStore } from '../store';
 import { initialAuth } from '../domain';
 import { enrollAnalytics, syncAnalyticsIdentity, withdrawAnalytics } from '../analytics';
@@ -74,6 +74,8 @@ export function LegalPage() { const [params] = useSearchParams(); const kind = p
 export function SignupPage() {
   const s = useStore(), next = useNext(), navigate = useNavigate();
   const [email, setEmail] = useState(''), [name, setName] = useState(''), [busy, setBusy] = useState(false), [error, setError] = useState(''), [exists, setExists] = useState(false), [fields, setFields] = useState<Record<string, string>>({});
+  // 작성 중: 이메일이나 이름을 적었을 때. 인증번호 화면으로 넘어가는 것은 막지 않는다
+  useLeaveGuard(!!email.trim() || !!name.trim(), { allow: p => p === '/signup/verify' });
   if (signedIn(s)) return <Navigate to={next} replace/>;
   const handleSend = async () => {
     if (!validEmail(email) || !name.trim() || busy) return;
@@ -105,6 +107,8 @@ export function SignupVerifyPage() {
   const email = params.get('email') || '', name = params.get('name') || '', next = safeNext(params.get('next'));
   const [code, setCode] = useState(''), [busy, setBusy] = useState(false), [codeError, setCodeError] = useState(''), [error, setError] = useState(''), [now, setNow] = useState(Date.now());
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
+  // 작성 중: 인증번호를 적었을 때. 가입 정보 입력으로 넘어가는 것은 막지 않는다
+  useLeaveGuard(!!code, { allow: p => p === '/signup/info' });
   const c = s.auth?.challenges[`signup:${normalizeEmail(email)}`];
   const remain = Math.max(0, Math.ceil(((c?.expiresAt ?? now) - now) / 1000));
   const cooldown = c ? Math.max(0, Math.ceil((c.sentAt + 60000 - now) / 1000)) : 0;
@@ -148,12 +152,14 @@ export function SignupInfoPage() {
   const [nameValue, setNameValue] = useState(nameParam);
   const [password, setPassword] = useState(''), [confirmation, setConfirmation] = useState(''), [phone, setPhone] = useState(''), [checks, setChecks] = useState({ age: false, terms: false, privacy: false, marketing: false }), [legal, setLegal] = useState(''), [error, setError] = useState(''), [busy, setBusy] = useState(false), [fields, setFields] = useState<Record<string, string>>({});
   const authNow = useAuthNow(), c = s.auth?.challenges[`signup:${normalizeEmail(email)}`], verified = !!c?.verified && c.expiresAt > authNow;
+  // 작성 중: 이름을 바꿨거나 비밀번호, 확인, 휴대폰 번호, 동의 중 하나라도 입력했을 때
+  const leave = useLeaveGuard(nameValue !== nameParam || !!password || !!confirmation || !!phone || Object.values(checks).some(Boolean));
   if (signedIn(s) && !busy) return <Navigate to={next} replace/>;
   if (!email || !nameParam) return <Navigate to={`/signup?next=${encodeURIComponent(next)}`} replace/>;
   return (
     <AuthShell title="가입 정보 입력" onBack={() => navigate(`/signup?next=${encodeURIComponent(next)}`)}>
       <p className="mb-6 text-body text-muted">구매와 판매에 사용할 하나의 계정을 만들어요.</p>
-      <form className="space-y-6" onSubmit={async e => { e.preventDefault(); if (busy) return; setError(''); if (password !== confirmation) return setError('비밀번호가 일치하지 않습니다.'); setBusy(true); setFields({}); try { await signup({ email, password, name: nameValue.trim(), phone, ...checks }); navigate(`/signup/done?next=${encodeURIComponent(next)}`, { replace: true }); } catch (e) { if (e instanceof SignupLoginError) { toast('가입은 완료됐어요. 로그인해 주세요.'); navigate(loginHref(`/notifications/settings?next=${encodeURIComponent(next)}`), { replace: true }); return; } const f = fieldErrors(e); setFields(f); setError(Object.keys(f).length && !f.email && !f.verificationToken ? '' : (e as Error).message); } finally { setBusy(false); } }}>
+      <form className="space-y-6" onSubmit={async e => { e.preventDefault(); if (busy) return; setError(''); if (password !== confirmation) return setError('비밀번호가 일치하지 않습니다.'); setBusy(true); setFields({}); try { await signup({ email, password, name: nameValue.trim(), phone, ...checks }); leave.allowLeave(); navigate(`/signup/done?next=${encodeURIComponent(next)}`, { replace: true }); } catch (e) { if (e instanceof SignupLoginError) { toast('가입은 완료됐어요. 로그인해 주세요.'); navigate(loginHref(`/notifications/settings?next=${encodeURIComponent(next)}`), { replace: true }); return; } const f = fieldErrors(e); setFields(f); setError(Object.keys(f).length && !f.email && !f.verificationToken ? '' : (e as Error).message); } finally { setBusy(false); } }}>
         <div className="flex items-center justify-between border-b border-line pb-4">
           <div className="flex items-center gap-2 min-w-0"><span className="min-w-0 break-all text-label">{normalizeEmail(email)}</span><span className="shrink-0 rounded-full bg-green-soft px-2 py-0.5 text-caption font-semibold text-green">인증 완료</span></div>
           <button type="button" onClick={() => navigate(`/signup?next=${encodeURIComponent(next)}`)} className="muted shrink-0 p-2 text-footnote underline">이메일 변경</button>
@@ -182,6 +188,8 @@ export function ResetPasswordPage() {
   const next = useNext(), navigate = useNavigate();
   const [email, setEmail] = useState(''), [error, setError] = useState('');
   const authNow = useAuthNow(), s = useStore(), c = s.auth?.challenges[`reset:${normalizeEmail(email)}`], verified = !!c?.verified && c.expiresAt > authNow;
+  // 작성 중: 이메일을 적었을 때. 새 비밀번호 화면으로 넘어가는 것은 막지 않는다
+  useLeaveGuard(!!email.trim(), { allow: p => p === '/reset-password/new' });
   return (
     <AuthShell title="비밀번호 재설정" onBack={() => navigate(`/login?next=${encodeURIComponent(next)}`)}>
       <h1 className="text-heading font-bold">가입한 이메일을 확인해요.</h1>
@@ -203,6 +211,8 @@ export function ResetPasswordNewPage() {
   const email = params.get('email') || '', next = safeNext(params.get('next'));
   const [password, setPassword] = useState(''), [confirmation, setConfirmation] = useState(''), [error, setError] = useState(''), [busy, setBusy] = useState(false), [done, setDone] = useState(false);
   const authNow = useAuthNow(), s = useStore(), c = s.auth?.challenges[`reset:${normalizeEmail(email)}`], verified = !!c?.verified && c.expiresAt > authNow;
+  // 작성 중: 바꾸기 전에 새 비밀번호나 확인을 적었을 때(바꾼 뒤에는 막지 않는다)
+  useLeaveGuard(!done && (!!password || !!confirmation));
   if (!email) return <Navigate to="/reset-password" replace/>;
   if (!verified) return <Navigate to={`/reset-password?next=${encodeURIComponent(next)}`} replace/>;
   return (

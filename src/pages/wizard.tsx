@@ -8,7 +8,7 @@ import type { AiQuestion, Draft, OptionDim, Product } from '../domain';
 import type { RegistrationMetadataDto } from '../api/types';
 import { atomic, getState, mutate, useStore } from '../store';
 import { imageData } from '../files';
-import { Button, Empty, ErrorBox, Header, LiveStatus, Modal, Note, ProductImage, Unavailable, useToast } from '../components/ui';
+import { Button, Empty, ErrorBox, Header, LiveStatus, Modal, Note, ProductImage, Unavailable, useLeaveGuard, useToast } from '../components/ui';
 import { useClock } from '../hooks';
 import { categoryTree } from '../categoryTree';
 import { INSPECTION_CHECKS, INSPECTION_PHOTOS, analysisInputOf, analysisStale, aiResultPatch } from '../domain';
@@ -182,6 +182,14 @@ export function WizardPage() {
   useEffect(() => { recheck.current?.(); }, [d]);
   // 출고지·반품지: 실제 모드는 판매자 주소록, mock은 판매자 설정의 주소
   const book = useApi(async signal => (USE_MOCK ? null : Promise.all([listAddressBook('DISPATCH', signal), listAddressBook('RETURN', signal)])), []);
+  // 작성 중: 이 화면을 연 뒤 초안(상품 정보, 사진 수, 옵션, 판매 조건, FAQ 등)이 처음과 달라졌을 때. 처음 값은 초안이 준비된 때(수정은 서버 원본을 받은 뒤) 잡는다.
+  // 등록 흐름 안의 이동(AI 분석, 카테고리 고르기)은 막지 않는다. 새 등록 초안은 이 기기에 저장돼 다시 열면 이어지고, 수정은 다시 열면 원본을 새로 받는다
+  const ready = !!d && !!(d.optionDims || d.axes) && (!editId || d.editingId === editId) && (!editId || USE_MOCK || (!live.loading && !live.error));
+  const signature = d ? JSON.stringify({ ...d, ai: undefined, images: d.images.length, imageSizes: undefined, step: undefined }) : '';
+  const draftKey = editId ?? 'new';
+  const [opened, setOpened] = useState<{ key: string; signature: string } | null>(null);
+  useEffect(() => { if (ready && opened?.key !== draftKey) setOpened({ key: draftKey, signature }); }, [ready, draftKey]);
+  const leave = useLeaveGuard(opened?.key === draftKey && signature !== opened.signature, { allow: p => p.startsWith('/seller/new'), message: editId ? undefined : '작성한 내용은 이 기기에 임시 저장돼서 다시 판매 등록을 열면 이어서 쓸 수 있어요.' });
   if (!user.seller) return <Unavailable message="승인된 판매자만 상품을 등록할 수 있습니다."/>;
   // 실제 모드: 소유권은 서버가 확인한다(상품 sellerId가 계정 id와 다를 수 있어 비교하지 않는다)
   const editing = editId ? s.products.find(p => p.id === editId && (!USE_MOCK || p.sellerId === user.id)) : undefined;
@@ -293,16 +301,16 @@ export function WizardPage() {
     if (Object.keys(problems).length) { showProblems(problems); setError('빠진 정보를 확인해 주세요.'); return; }
     setBusy(true);
     try {
-      if (USE_MOCK) { const product = await atomic(state => publishDraft(state, state.activeUserId, state.drafts[state.activeUserId], nowOf(state))); navigate(`/seller/published/${product.id}`, { replace: true }); return; }
+      if (USE_MOCK) { const product = await atomic(state => publishDraft(state, state.activeUserId, state.drafts[state.activeUserId], nowOf(state))); leave.allowLeave(); navigate(`/seller/published/${product.id}`, { replace: true }); return; }
       // 실제 모드: 단계별 저장(버전 이어받기) 후 심사 제출. 승인 상품은 수정 심사 제출
       const id = await ensureServerDraft(user.id);
       // 주소록에서 지워진 주소 id는 보내지 않는다(생략하면 서버가 기본 주소를 쓴다)
       const valid = (v: string | undefined, list?: { id: string }[]) => (v && list?.some(a => a.id === v) ? v : undefined);
       const keep = criteria && new Set(criteria.checks.map(c => attributeName(c.code))); // 다른 카테고리 때 입력한 항목은 보내지 않는다
       const dd = { ...d, extras: keep ? d.extras.filter(e => keep.has(e.key)) : d.extras, dispatchAddressId: valid(d.dispatchAddressId, book.data?.[0]), returnAddressId: valid(d.returnAddressId, book.data?.[1]) };
-      if (editing?.reviewStatus === 'APPROVED') { await submitRevisionFromDraft(dd, id); mutate(st => { delete st.drafts[user.id]; }); toast('수정 내용을 심사 요청했어요.'); navigate('/seller/products', { replace: true }); return; }
+      if (editing?.reviewStatus === 'APPROVED') { await submitRevisionFromDraft(dd, id); mutate(st => { delete st.drafts[user.id]; }); toast('수정 내용을 심사 요청했어요.'); leave.allowLeave(); navigate('/seller/products', { replace: true }); return; }
       const product = await submitListing(dd, id);
-      mutate(st => { mergeProducts(st, [product]); delete st.drafts[user.id]; }); navigate(`/seller/published/${product.id}`, { replace: true });
+      mutate(st => { mergeProducts(st, [product]); delete st.drafts[user.id]; }); leave.allowLeave(); navigate(`/seller/published/${product.id}`, { replace: true });
     }
     catch (e) {
       const f = e instanceof StageError ? e.fields : fieldErrors(e);
