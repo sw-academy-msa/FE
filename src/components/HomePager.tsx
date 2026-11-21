@@ -32,9 +32,9 @@ export function HomePager<T extends { id: string }>({ items, page, onPage, rende
       {pages.map((list, i) => <section key={i} aria-roledescription="페이지" aria-label={`상품 ${count}페이지 중 ${i + 1}페이지`} data-current={i === cur ? 'true' : undefined} inert={i !== cur} className="grid w-full shrink-0 snap-start grid-cols-2 gap-x-3 gap-y-6">{list.map(render)}</section>)}
     </div>
     {count > 1 && <nav aria-label="상품 페이지" className="flex items-center justify-center gap-1">
-      <button type="button" aria-label="이전 페이지" disabled={cur === 0} onClick={() => go(cur - 1)} className="grid h-8 w-8 place-items-center text-[var(--aux)] disabled:opacity-30"><ChevronLeft size={18}/></button>
-      {pageDots(cur, count).map(d => <button key={d.page} type="button" aria-label={`${d.page + 1}페이지`} aria-current={d.page === cur ? 'page' : undefined} onClick={() => go(d.page)} className="grid h-8 w-6 place-items-center"><span className={`block rounded-full ${d.small ? 'h-1.5 w-1.5' : 'h-2 w-2'} ${d.page === cur ? 'bg-[var(--ink)]' : 'bg-[var(--line)]'}`}/></button>)}
-      <button type="button" aria-label="다음 페이지" disabled={cur === count - 1} onClick={() => go(cur + 1)} className="grid h-8 w-8 place-items-center text-[var(--aux)] disabled:opacity-30"><ChevronRight size={18}/></button>
+      <button type="button" aria-label="이전 페이지" disabled={cur === 0} onClick={() => go(cur - 1)} className="grid h-8 w-8 place-items-center text-aux disabled:opacity-30"><ChevronLeft size={18}/></button>
+      {pageDots(cur, count).map(d => <button key={d.page} type="button" aria-label={`${d.page + 1}페이지`} aria-current={d.page === cur ? 'page' : undefined} onClick={() => go(d.page)} className="grid h-8 w-6 place-items-center"><span className={`block rounded-full ${d.small ? 'h-1.5 w-1.5' : 'h-2 w-2'} ${d.page === cur ? 'bg-ink' : 'bg-line'}`}/></button>)}
+      <button type="button" aria-label="다음 페이지" disabled={cur === count - 1} onClick={() => go(cur + 1)} className="grid h-8 w-8 place-items-center text-aux disabled:opacity-30"><ChevronRight size={18}/></button>
       <span role="status" className="sr-only">{`${count}페이지 중 ${cur + 1}페이지`}</span>
     </nav>}
   </div>;
