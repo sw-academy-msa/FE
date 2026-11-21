@@ -24,6 +24,8 @@ test('판매 시작 전에도 상세, 배송 안내, 수량과 모든 사진을 
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
 });
 test('FAQ 질문은 아래 모달로 열리고 Esc, 바깥, 뒤로와 닫기 버튼으로 닫힌다', async ({ page }) => {
+  // 시트는 닫힐 때 아래로 내려가는 움직임(약 240ms)이 끝난 뒤 사라진다. 다시 열기 전에 다 내려갔는지 기다린다
+  const gone = () => expect(page.locator('dialog[open]')).toHaveCount(0);
   const trigger = page.getByRole('button', { name: '세탁 방법은 무엇인가요?', exact: true });
   await trigger.click();
   const sheet = page.getByRole('dialog', { name: '세탁 방법은 무엇인가요?', exact: true });
@@ -31,16 +33,17 @@ test('FAQ 질문은 아래 모달로 열리고 Esc, 바깥, 뒤로와 닫기 버
   await sheet.click({ position: { x: 5, y: 5 } }); await expect(sheet).toBeVisible();
   await expect(sheet.getByText(answer, { exact: true })).toBeVisible();
   expect(await sheet.evaluate(el => el.scrollHeight > el.clientHeight)).toBe(true);
-  await page.keyboard.press('Escape'); await expect(sheet).not.toBeVisible(); await expect(trigger).toBeFocused();
-  await trigger.click(); await page.mouse.click(2, 2); await expect(sheet).not.toBeVisible();
-  await trigger.click(); await page.goBack(); await expect(sheet).not.toBeVisible(); await expect(page).toHaveURL(/product\/presale/);
-  await trigger.click(); await sheet.getByRole('button', { name: '닫기', exact: true }).click(); await expect(sheet).not.toBeVisible();
+  await page.keyboard.press('Escape'); await expect(sheet).not.toBeVisible(); await gone(); await expect(trigger).toBeFocused();
+  await trigger.click(); await expect(sheet).toBeVisible(); await page.mouse.click(2, 2); await expect(sheet).not.toBeVisible(); await gone();
+  await trigger.click(); await expect(sheet).toBeVisible(); await page.goBack(); await expect(sheet).not.toBeVisible(); await gone(); await expect(page).toHaveURL(/product\/presale/);
+  await trigger.click(); await sheet.getByRole('button', { name: '닫기', exact: true }).click(); await expect(sheet).not.toBeVisible(); await gone();
   await page.getByRole('button', { name: '직접 작성한 질문', exact: true }).click(); await expect(page.getByRole('dialog').getByText('직접 작성한 답변')).toBeVisible();
 });
 test('standalone에서도 FAQ 안전 영역과 402px 너비를 유지한다', async ({ page }) => {
   await page.addInitScript(() => Object.defineProperty(navigator, 'standalone', { value: true })); await page.reload();
   await page.getByRole('button', { name: '세탁 방법은 무엇인가요?', exact: true }).click();
   const sheet = page.getByRole('dialog'); await expect(sheet).toBeVisible();
-  expect(await sheet.evaluate(el => parseFloat(getComputedStyle(el).paddingBottom))).toBeGreaterThanOrEqual(20);
+  // Astryx 바텀 시트는 안전 영역 여백을 dialog 안의 시트 판(.astryx-bottom-sheet)에 둔다
+  expect(await sheet.locator('.astryx-bottom-sheet').evaluate(el => parseFloat(getComputedStyle(el).paddingBottom))).toBeGreaterThanOrEqual(20);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
 });
