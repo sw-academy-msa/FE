@@ -158,6 +158,8 @@ main > div.flex:has(> header + div > img) > div:last-child :is(.btn, .ax-btn).fl
 @keyframes sd-pop-in { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: scale(1); } }
 .sd-fade { animation: sd-fade-in var(--duration-fast, 200ms) ease-out both; }
 .sd-pop { animation: sd-pop-in var(--duration-fast, 200ms) var(--ease-standard, cubic-bezier(.32, .72, 0, 1)) both; }
+/* 판매 등록 단계 바꿈: 화면 들어올 때와 같은 짧은 페이드 */
+.step-in { animation: page-in 220ms cubic-bezier(.22, 1, .36, 1) backwards; }
 @keyframes sheet-in {
   from { opacity: 0; transform: translateY(24px); }
   to { opacity: 1; transform: translateY(0); }
