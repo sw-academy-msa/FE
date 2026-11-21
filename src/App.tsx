@@ -1,7 +1,7 @@
 import { Component, useEffect, useState } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
 import { Navigate, Route, Routes, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { BottomNav, Button, Note, ProductImage, ToastProvider } from './components/ui';
+import { BottomNav, Button, LeaveGuardHost, Note, ProductImage, ToastProvider } from './components/ui';
 import { mutate, sweep, useStore } from './store';
 import { HomePage, SchedulePage, ProductPage, CheckoutPage, OrdersPage, OrderDetailPage, CalendarPage, NotificationsPage, OrderInquiryPage } from './pages/buyer';
 import { MyPage, ApplicationPage, AdminMyPage, AdminSellersPage, AdminInquiriesPage, AdminListPage, AdminDetailPage, AdminProductListPage, AdminProductDetailPage, SupportPage, AddressManagePage, FaqPage, InquiryListPage, InquiryDetailPage, OpsInquiryComposePage } from './pages/account';
@@ -52,4 +52,4 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: boolean 
   componentDidCatch(error: Error, info: ErrorInfo) { console.error('STOCKDROP rendering error', error, info.componentStack); }
   render() { if (this.state.error) return <div className="mx-auto max-w-[390px] space-y-4 bg-surface p-6"><h1 className="text-title-lg font-bold">화면을 불러오지 못했어요.</h1><p className="muted text-label">페이지를 다시 열어 주세요.</p><Button className="w-full" onClick={() => location.reload()}>다시 열기</Button></div>; return this.props.children; }
 }
-export function App() { return <ErrorBoundary><ToastProvider><AppContent/></ToastProvider></ErrorBoundary>; }
+export function App() { return <ErrorBoundary><ToastProvider><AppContent/><LeaveGuardHost/></ToastProvider></ErrorBoundary>; }

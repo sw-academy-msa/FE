@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, CalendarDays, Timer, Camera, ChevronDown, Info, Search, Bell, ExternalLink, Clock3, Plus, Minus, Truck, CheckCircle2, ChevronRight, PackageCheck, Calendar } from 'lucide-react';
-import { clockLeft, useFromTab, LiveStatus, Badge, BottomSheet, Button, Chip, CopyButton, DeliveryProgress, Empty, ErrorBox, Field, Header, InfoRow, Modal, Note, ORDER_LABELS, ProductCard, ProductImage, ProductSummary, useToast } from '../components/ui';
+import { clockLeft, useFromTab, LiveStatus, Badge, BottomSheet, Button, Chip, CopyButton, DeliveryProgress, Empty, ErrorBox, Field, Header, InfoRow, Modal, Note, ORDER_LABELS, ProductCard, ProductImage, ProductSummary, useLeaveGuard, useToast } from '../components/ui';
 import { CATEGORIES, categoryGroup, activeUser, purchaseBlock, PURCHASE_BLOCK_TEXT, available, stockLeft, stockTotal, beginPayment, DomainError, formatPhone, money, nowOf, orderNo, reserve, resolvePayment, saleState, uid } from '../domain';
 import type { Address, Hold, Product, Order } from '../domain';
 import { atomic, getState, mutate, useStore } from '../store';
@@ -177,6 +177,8 @@ function ProductInquirySection({ product: p, blocked }: { product: Product; bloc
   const [question, setQuestion] = useState(''), [busy, setBusy] = useState(false), [error, setError] = useState('');
   const mine = useLive(signal => USE_MOCK || !live ? Promise.resolve([]) : listProductInquiries(p.id, s.activeUserId, signal), (st, items) => mergeInquiries(st, items), [p.id, s.activeUserId, live]);
   const items = s.inquiries.filter(i => i.productId === p.id && !i.orderId && i.userId === s.activeUserId && i.sellerId !== 'stockdrop').sort((a, b) => b.createdAt - a.createdAt);
+  // 작성 중: 상품 문의를 적었을 때(보내면 입력이 비워진다)
+  useLeaveGuard(!blocked && !!question.trim());
   if (blocked) return null; // 판매자 본인 상품과 운영자는 문의하지 않는다
   async function submit() {
     const text = question.trim(); if (!text || busy) return; setError(''); setBusy(true);
@@ -369,6 +371,9 @@ export function OrderInquiryPage() {
   const photo = useProductPhotos([order?.productId]); // 주문 응답에는 상품 사진이 없다
   const [kind, setKind] = useState(() => { const k = readInquiryDraft(id).kind; return k && INQUIRY_KINDS.includes(k) ? k : '하자·파손'; }), [question, setQuestion] = useState(() => readInquiryDraft(id).question ?? ''), [images, setImages] = useState<string[]>([]), [files, setFiles] = useState<File[]>([]), [error, setError] = useState(''), [busy, setBusy] = useState(false);
   useEffect(() => { try { if (question.trim()) sessionStorage.setItem(inquiryDraftKey(id), JSON.stringify({ kind, question })); else sessionStorage.removeItem(inquiryDraftKey(id)); } catch { /* 저장 차단: 화면 값만 유지 */ } }, [id, kind, question]);
+  // 작성 중: 처음 연 값(이 창에 남아 있던 글 포함)과 유형이나 내용이 다르거나 사진을 붙였을 때. 글은 이 창에 남고 사진은 남지 않는다
+  const [start] = useState({ kind, question });
+  const leave = useLeaveGuard(kind !== start.kind || question !== start.question || images.length > 0, { message: images.length ? '적은 내용은 다시 들어오면 이어서 쓸 수 있지만, 첨부한 사진은 사라져요.' : '적은 내용은 다시 들어오면 이어서 쓸 수 있어요.' });
   // 새로고침·알림 등으로 바로 들어오면 store에 주문이 없다: 주문을 불러와 주문 번호를 보여 준다(조회 모델 반영 지연·일시 실패는 자동 재시도)
   const known = !!order;
   const live = useLive(sig => known || !id ? Promise.resolve(null) : retryProjection(() => getOrder(id, getState().activeUserId, sig), sig).catch(e => { if (isApiError(e) && e.status === 404) return null; throw e; }), (st, d) => { if (d) mergeOrders(st, [d]); }, [id, user.id]);
@@ -386,12 +391,12 @@ export function OrderInquiryPage() {
           for (const f of files) uploaded.push(await uploadInquiryImage(order!.id, f));
           const q = await createOrderInquiry(order!.id, { category: kind, body: question.trim(), imageIds: uploaded }, user.id);
           mutate(st => mergeInquiries(st, [q]));
-          sent(); toast('문의가 판매자에게 전달되었습니다.'); navigate(`/inquiries/${q.id}`, { replace: true }); return;
+          sent(); toast('문의가 판매자에게 전달되었습니다.'); leave.allowLeave(); navigate(`/inquiries/${q.id}`, { replace: true }); return;
         } catch (e) { await Promise.all(uploaded.map(id => deleteInquiryImage(order!.id, id).catch(() => {}))); throw e; }
       }
       const inquiryId = uid('q-');
       mutate(st => { st.inquiries.unshift({ id: inquiryId, userId: st.activeUserId, sellerId: order!.sellerId, productId: order!.productId, orderId: order!.id, productName: `${order!.product.brand} · ${order!.product.name}`, quantity, kind, question: question.trim(), images, public: false, createdAt: nowOf(st) }); });
-      sent(); toast('문의가 판매자에게 전달되었습니다.'); navigate(`/inquiries/${inquiryId}`, { replace: true });
+      sent(); toast('문의가 판매자에게 전달되었습니다.'); leave.allowLeave(); navigate(`/inquiries/${inquiryId}`, { replace: true });
     } catch (e) { setError(errorMessage(e)); } finally { setBusy(false); }
   }
   const label = (text: string, hint: string) => <p className="mb-2.5 text-body font-bold">{text}<span className="ml-1.5 text-footnote font-normal text-meta">{hint}</span></p>;

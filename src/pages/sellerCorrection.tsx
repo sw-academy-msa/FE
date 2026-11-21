@@ -10,7 +10,7 @@ import type { CorrectionField } from '../api';
 import { FIELD_LABEL, errorMessage, resubmitApplication } from '../api';
 import { BankField } from '../components/BankField';
 import { PdfField } from '../components/PdfField';
-import { Button, ErrorBox, Field, Note } from '../components/ui';
+import { Button, ErrorBox, Field, Note, useLeaveGuard } from '../components/ui';
 import { getPdf } from '../files';
 import { CORRECTION_FIELDS, correctionPatch, correctionProblems } from '../sellerFlows';
 import type { CorrectionValues } from '../sellerFlows';
@@ -27,6 +27,9 @@ export function CorrectionForm({ app, codes, onSubmitted }: { app: Application; 
   const [doc, setDoc] = useState<DocumentFile>(), [problems, setProblems] = useState<Partial<Record<CorrectionField, string>>>({}), [error, setError] = useState(''), [busy, setBusy] = useState(false);
   const save = (next: CorrectionValues) => { setV(next); try { sessionStorage.setItem(draftKey(app.id), JSON.stringify({ ...next, account: '' })); } catch { /* 저장 차단: 화면 값만 유지 */ } };
   const set = (k: keyof CorrectionValues, value: string) => save({ ...v, [k]: value });
+  // 작성 중: 처음 연 값(이 창에 남아 있던 입력 포함)과 다르거나 서류를 붙였을 때. 계좌번호와 서류는 이 창에도 남지 않는다
+  const [start] = useState(() => JSON.stringify(v));
+  const leave = useLeaveGuard(JSON.stringify(v) !== start || !!doc, { message: '적은 내용은 다시 들어오면 이어서 쓸 수 있지만, 계좌번호와 첨부한 서류는 다시 넣어야 해요.' });
   useEffect(() => {
     const target = params.get('pick'); if (target !== 'dispatch' && target !== 'return') return;
     const picked = takeAddressPick();
@@ -43,7 +46,7 @@ export function CorrectionForm({ app, codes, onSubmitted }: { app: Application; 
     try {
       await resubmitApplication(app.id, correctionPatch(codes, v), has('CERTIFICATE') && doc ? await getPdf(doc.id) : undefined, doc?.name);
       try { sessionStorage.removeItem(draftKey(app.id)); } catch { /* 무시 */ }
-      onSubmitted();
+      leave.allowLeave(); onSubmitted();
     } catch (e) { setError(errorMessage(e)); } finally { setBusy(false); }
   }
   const card = (c: CorrectionField, body: ReactNode) => <section key={c} className="space-y-3 rounded-inner border border-red p-4" aria-label={`${FIELD_LABEL[c]} 보완`}>

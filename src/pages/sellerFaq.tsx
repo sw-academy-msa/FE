@@ -8,7 +8,7 @@ import type { Faq, Product } from '../domain';
 import { activeUser } from '../domain';
 import { mutate, useStore } from '../store';
 import { addProductFaq, deleteProductFaq, errorMessage, getProduct, getSellerProduct, isApiError, mergeProducts, updateProductFaq, useApi } from '../api';
-import { Button, ErrorBox, Header, LiveStatus, Note, Unavailable, useToast } from '../components/ui';
+import { Button, ErrorBox, Header, LiveStatus, Note, Unavailable, useLeaveGuard, useToast } from '../components/ui';
 import { USE_MOCK } from '../config';
 import { FAQ_ANSWER_MAX, FAQ_QUESTION_MAX, faqProblem, waitForPublicFaqs } from '../faqEdit';
 
@@ -22,6 +22,9 @@ export function SellerFaqPage() {
   const [removing, setRemoving] = useState<Faq | null>(null), [sync, setSync] = useState<Sync>('idle');
   const check = useRef<AbortController | null>(null);
   useEffect(() => { if (loaded.data) setProduct(loaded.data); }, [loaded.data]);
+  // 작성 중: FAQ를 추가하거나 고치는 중에 질문이나 답변이 원래 값(새 FAQ는 빈 값)과 다를 때. 저장하면 편집이 닫힌다
+  const editingFaq = editing ? product?.faqs.find(f => f.id === editing) : undefined;
+  useLeaveGuard(editing !== null && (question !== (editingFaq?.question ?? '') || answer !== (editingFaq?.answer ?? '')));
   useEffect(() => () => check.current?.abort(), []);
   if (USE_MOCK) return <div className="space-y-4"><Header title="FAQ 수정"/><Note>실제 서버에 연결된 화면에서만 FAQ를 수정할 수 있어요.</Note></div>;
   if (!user.seller) return <Unavailable/>;

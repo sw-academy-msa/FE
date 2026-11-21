@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ChevronDown, Info, LocateFixed, MapPin, Search, X } from 'lucide-react';
-import { ErrorBox, Header, Toggle, useToast } from '../components/ui';
+import { ErrorBox, Header, Toggle, useLeaveGuard, useToast } from '../components/ui';
 import { activeUser } from '../domain';
 import type { Address } from '../domain';
 import { mutate, useStore } from '../store';
@@ -32,19 +32,23 @@ export function AddressFormPage() {
   const [value, setValue] = useState<FormValue>(emptyForm); const [ready, setReady] = useState(false); const [jibun, setJibun] = useState(''); const [focusDetail, setFocusDetail] = useState(false); const detailRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState(''); const [loadError, setLoadError] = useState(''); const [busy, setBusy] = useState(false);
   const draftKey = `${DRAFT_KEY}:${location.pathname}`;
+  // 작성 중 판단의 처음 값: 새 배송지는 빈 값, 수정은 서버 값. 주소 검색을 다녀왔으면(보관한 입력이 있으면) 이미 작성 중이다
+  const [original, setOriginal] = useState<string | null>(null);
+  const leave = useLeaveGuard(ready && original !== null && JSON.stringify(value) !== original);
 
   useEffect(() => {
     let alive = true;
     (async () => {
-      let base: FormValue = emptyForm;
-      try { const draft = JSON.parse(sessionStorage.getItem(draftKey) || 'null'); if (draft) base = draft; } catch { /* 새로 시작 */ }
+      let base: FormValue = emptyForm, fromDraft = false;
+      try { const draft = JSON.parse(sessionStorage.getItem(draftKey) || 'null'); if (draft) { base = draft; fromDraft = true; } } catch { /* 새로 시작 */ }
       if (base === emptyForm && id) {
         try { const found = (await listAddresses()).find(a => a.addressId === id); if (found) { const { addressId: _i, defaultAddress, ...rest } = found; base = { ...rest, makeDefault: defaultAddress }; } }
         catch (e) { if (alive) { setLoadError(errorMessage(e)); setReady(true); } return; }
       }
+      const start = fromDraft ? '' : JSON.stringify(base);
       try { const pick = JSON.parse(sessionStorage.getItem(PICK_KEY) || 'null'); if (pick) { base = { ...base, postalCode: pick.postalCode, roadAddress: pick.roadAddress }; if (alive) { setJibun(pick.jibunAddress ?? ''); setFocusDetail(true); } sessionStorage.removeItem(PICK_KEY); } } catch { /* 선택 값 없음 */ }
       sessionStorage.removeItem(draftKey);
-      if (alive) { setValue(base); setReady(true); }
+      if (alive) { setValue(base); setOriginal(start); setReady(true); }
     })();
     return () => { alive = false; };
   }, [id]);
@@ -66,7 +70,7 @@ export function AddressFormPage() {
       const makeDefault = wantDefault || (isNew && !(await listAddresses()).length); // 첫 배송지는 기본 배송지
       const saved = await saveAddress(id ?? null, { ...body, label: body.label.trim() || '배송지' }, makeDefault);
       if (saved.defaultAddress || returnTo.startsWith('/checkout')) mutate(state => { state.addresses[user.id] = toAddress(saved); });
-      toast('배송지를 저장했어요.'); navigate(returnTo, { replace: true });
+      toast('배송지를 저장했어요.'); leave.allowLeave(); navigate(returnTo, { replace: true });
     } catch (e) { setError(errorMessage(e)); } finally { setBusy(false); }
   }
   const input = (key: keyof AddressBody, label: string, placeholder: string, extra: Record<string, unknown> = {}) => <input aria-label={label} className="field-line" value={value[key]} placeholder={placeholder} onChange={e => set({ [key]: e.target.value } as Partial<FormValue>)} {...extra}/>;
