@@ -156,6 +156,9 @@ export const stockdropTheme = defineTheme({
   tokens: { ...stockdropTokens, ...stockdropMotion },
   localTokens: stockdropLocalTokens,
   components: {
+    // 판매 등록 단계 진행 막대(Astryx ProgressBar): 얇은 4px 막대, 바탕은 선 색, 채움은 본문 색
+    'progress-bar-track': { base: { height: '4px', backgroundColor: 'var(--sd-color-line)' } },
+    'progress-bar-fill': { base: { backgroundColor: 'var(--sd-color-ink)' } },
     button: {
       base: { minHeight: stockdropButton.height, fontSize: stockdropButton.fontSize, fontWeight: '700', touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent', transitionProperty: 'transform, background-color, opacity', transitionDuration: stockdropPress.duration, transitionTimingFunction: 'ease-out' },
       ':active': { transform: `scale(${stockdropPress.scale})` },
