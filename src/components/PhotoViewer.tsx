@@ -16,10 +16,10 @@ export function PhotoViewer({ images, start = 0, onClose, panel }: { images: str
   const step = (d: number) => setZoom(z => Math.min(4, Math.max(1, +(z + d).toFixed(2))));
   return <div role="dialog" aria-modal="true" aria-label="사진 크게 보기" className="fixed inset-0 z-[100] mx-auto flex max-w-[390px] flex-col bg-black pt-[env(safe-area-inset-top)] text-white">
     <div className="flex items-center justify-between px-4 py-3">
-      <span className="text-[13px]" aria-live="polite">{i + 1} / {images.length}</span>
+      <span className="text-body" aria-live="polite">{i + 1} / {images.length}</span>
       <div className="flex items-center gap-3">
         <button aria-label="축소" disabled={zoom <= 1} onClick={() => step(-0.5)} className="disabled:opacity-30"><Minus size={20}/></button>
-        <span className="w-9 text-center text-[12px]">{Math.round(zoom * 100)}%</span>
+        <span className="w-9 text-center text-label">{Math.round(zoom * 100)}%</span>
         <button aria-label="확대" disabled={zoom >= 4} onClick={() => step(0.5)} className="disabled:opacity-30"><Plus size={20}/></button>
         <button aria-label="닫기" onClick={onClose}><X size={22}/></button>
       </div>
@@ -31,6 +31,6 @@ export function PhotoViewer({ images, start = 0, onClose, panel }: { images: str
         <button aria-label="다음 사진" onClick={() => go(1)} className="absolute right-2 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full bg-black/50"><ChevronRight size={22}/></button>
       </>}
     </div>
-    {panel && <div className="max-h-[42%] overflow-y-auto bg-white p-4 text-[var(--ink)]">{panel}</div>}
+    {panel && <div className="max-h-[42%] overflow-y-auto bg-white p-4 text-ink">{panel}</div>}
   </div>;
 }

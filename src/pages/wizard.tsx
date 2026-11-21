@@ -133,22 +133,22 @@ function useDraft() {
 }
 
 /* ── 공통 조각 ──────────────────────────────────────────────────────────────────── */
-const Label = ({ children, hint }: { children: ReactNode; hint?: string }) => <p className="text-[13px] font-bold">{children}{hint && <span className="ml-1.5 text-[11px] font-normal text-[var(--meta)]">{hint}</span>}</p>;
+const Label = ({ children, hint }: { children: ReactNode; hint?: string }) => <p className="text-body font-bold">{children}{hint && <span className="ml-1.5 text-footnote font-normal text-meta">{hint}</span>}</p>;
 function Stepper({ value, onChange, label }: { value: number; onChange: (n: number) => void; label: string }) {
-  return <div className="flex h-8 items-center rounded-[6px] border border-[var(--border)]"><button type="button" aria-label={`${label} 감소`} disabled={value <= 0} onClick={() => onChange(Math.max(0, value - 1))} className="grid h-8 w-9 place-items-center disabled:opacity-30"><Minus size={14}/></button><input aria-label={`${label} 수량`} inputMode="numeric" value={value} onChange={e => onChange(Math.max(0, Math.floor(Number(e.target.value.replace(/\D/g, '')) || 0)))} className="w-9 bg-transparent text-center text-[14px] font-bold outline-none"/><button type="button" aria-label={`${label} 증가`} onClick={() => onChange(value + 1)} className="grid h-8 w-9 place-items-center"><Plus size={14}/></button></div>;
+  return <div className="flex h-8 items-center rounded-element border border-border"><button type="button" aria-label={`${label} 감소`} disabled={value <= 0} onClick={() => onChange(Math.max(0, value - 1))} className="grid h-8 w-9 place-items-center disabled:opacity-30"><Minus size={14}/></button><input aria-label={`${label} 수량`} inputMode="numeric" value={value} onChange={e => onChange(Math.max(0, Math.floor(Number(e.target.value.replace(/\D/g, '')) || 0)))} className="w-9 bg-transparent text-center text-callout font-bold outline-none"/><button type="button" aria-label={`${label} 증가`} onClick={() => onChange(value + 1)} className="grid h-8 w-9 place-items-center"><Plus size={14}/></button></div>;
 }
 function InlineAdd({ label, onAdd, className = '', maxLength }: { label: string; onAdd: (v: string) => void; className?: string; maxLength?: number }) {
   const [open, setOpen] = useState(false), [value, setValue] = useState('');
-  if (!open) return <button type="button" onClick={() => setOpen(true)} className={`flex items-center gap-1 text-[13px] text-[var(--aux)] ${className}`}><Plus size={14}/>{label}</button>;
+  if (!open) return <button type="button" onClick={() => setOpen(true)} className={`flex items-center gap-1 text-body text-aux ${className}`}><Plus size={14}/>{label}</button>;
   const submit = () => { if (value.trim()) onAdd(value.trim()); setValue(''); setOpen(false); };
-  return <input autoFocus aria-label={label} maxLength={maxLength} value={value} onChange={e => setValue(e.target.value)} onBlur={submit} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); submit(); } if (e.key === 'Escape') setOpen(false); }} className={`h-9 rounded-[6px] border border-[var(--border)] px-3 text-[13px] outline-none ${className}`} placeholder={label}/>;
+  return <input autoFocus aria-label={label} maxLength={maxLength} value={value} onChange={e => setValue(e.target.value)} onBlur={submit} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); submit(); } if (e.key === 'Escape') setOpen(false); }} className={`h-9 rounded-element border border-border px-3 text-body outline-none ${className}`} placeholder={label}/>;
 }
 /** 눌러서 고치는 글자(옵션 이름과 값). onSave가 false면(규칙 위반) 입력을 닫지 않는다 */
 function EditText({ value, label, onSave, className = '' }: { value: string; label: string; onSave: (v: string) => boolean; className?: string }) {
   const [edit, setEdit] = useState<string | null>(null);
   if (edit === null) return <button type="button" aria-label={`${label} 고치기`} onClick={() => setEdit(value)} className={`text-left ${className}`}>{value}</button>;
   const done = () => { if (edit.trim() === value || onSave(edit)) setEdit(null); };
-  return <input autoFocus aria-label={`${label} 고치기`} maxLength={OPTION_TEXT_MAX} value={edit} onChange={e => setEdit(e.target.value)} onBlur={done} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); done(); } if (e.key === 'Escape') setEdit(null); }} className="h-8 w-32 min-w-0 rounded-[6px] border border-[var(--border)] px-2 text-[13px] outline-none"/>;
+  return <input autoFocus aria-label={`${label} 고치기`} maxLength={OPTION_TEXT_MAX} value={edit} onChange={e => setEdit(e.target.value)} onBlur={done} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); done(); } if (e.key === 'Escape') setEdit(null); }} className="h-8 w-32 min-w-0 rounded-element border border-border px-2 text-body outline-none"/>;
 }
 const dateLabel = (v: string) => { const t = new Date(v); return Number.isFinite(t.getTime()) ? `${t.getMonth() + 1}월 ${t.getDate()}일 (${WEEK[t.getDay()]})` : '날짜 선택'; };
 const hhmm = (h: number, m: number) => `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
@@ -321,7 +321,7 @@ export function WizardPage() {
       } else { showProblems(f); setError(errorMessage(e)); }
     } finally { setBusy(false); }
   }
-  const FieldError = ({ name }: { name: string }) => fieldErr[name] ? <p role="alert" className="mt-1.5 text-[12px] text-[var(--red)]">{fieldErr[name]}</p> : null;
+  const FieldError = ({ name }: { name: string }) => fieldErr[name] ? <p role="alert" className="mt-1.5 text-label text-red">{fieldErr[name]}</p> : null;
   // 옵션 단계: 판매자가 '직접 추가'로 이름을 정하고 값을 넣는다. 이름과 값은 눌러서 고치고 X로 지운다
   const optCheck = (v: string, others: string[], what: string) => { const p = optionNameProblem(v, others, what); setOptErr(p); return !p; };
   const dimsWith = (i: number, f: (x: OptionDim) => OptionDim) => dims.map((x, j) => (j === i ? f(x) : x));
@@ -335,119 +335,119 @@ export function WizardPage() {
   // 단계를 지우면 그 값과 조합 수량도 지운다. 값이 있으면 먼저 확인한다(값이 없는 단계는 수량에 영향이 없어 바로 지운다)
   const removeDims = (i: number | 'all') => { const gone = i === 'all' ? dims : [dims[i]]; setDropDim(null); setOptErr(''); patch({ optionDims: i === 'all' ? [] : dims.filter((_, j) => j !== i), ...(gone.some(x => x.values.length) ? { stock: {} } : {}) }); };
   const askRemove = (i: number | 'all') => { if ((i === 'all' ? dims : [dims[i]]).some(x => x.values.length)) setDropDim(i); else removeDims(i); };
-  const chip = (on: boolean, label: string, onClick: () => void) => <button type="button" aria-pressed={on} onClick={onClick} className={`inline-flex h-8 items-center gap-1 rounded-full px-3.5 text-[13px] ${on ? 'bg-[var(--ink)] font-bold text-white' : 'border border-[var(--border)] text-[var(--aux)]'}`}>{on && <Check size={13} strokeWidth={2.5}/>}{label}</button>;
-  const qtyRow = (label: string, key: string, last: boolean) => <div key={key} className={`flex min-h-[52px] items-center justify-between gap-3 py-2 ${last ? '' : 'border-b border-[var(--line)]'}`}><span className="min-w-0 break-all text-[15px]">{label}</span><Stepper label={label} value={stock[key] ?? 0} onChange={n => setStock(key, n)}/></div>;
+  const chip = (on: boolean, label: string, onClick: () => void) => <button type="button" aria-pressed={on} onClick={onClick} className={`inline-flex h-8 items-center gap-1 rounded-full px-3.5 text-body ${on ? 'bg-ink font-bold text-white' : 'border border-border text-aux'}`}>{on && <Check size={13} strokeWidth={2.5}/>}{label}</button>;
+  const qtyRow = (label: string, key: string, last: boolean) => <div key={key} className={`flex min-h-13 items-center justify-between gap-3 py-2 ${last ? '' : 'border-b border-line'}`}><span className="min-w-0 break-all text-subhead">{label}</span><Stepper label={label} value={stock[key] ?? 0} onChange={n => setStock(key, n)}/></div>;
 
   return <div className="space-y-6 pb-4">
     <Header title={editId ? '판매 정보 수정' : '한정 판매 등록'} bare/>
     {editing && <div className="-mt-4 space-y-3">
-      {editing.startsAt > 0 && <p className="flex items-center gap-2 text-[12px] text-[var(--meta)]"><span className="rounded-[3px] bg-[var(--soft)] px-1.5 py-0.5 text-[11px] font-bold text-[var(--aux)]">{rejected ? '반려됨' : '판매 예정'}</span>{`${new Date(editing.startsAt).getMonth() + 1}.${new Date(editing.startsAt).getDate()} (${WEEK[new Date(editing.startsAt).getDay()]}) ${hhmm(new Date(editing.startsAt).getHours(), new Date(editing.startsAt).getMinutes())} 오픈`}{editing.notifySubscribers !== undefined && ` · 알림 신청 ${editing.notifySubscribers}명`}</p>}
+      {editing.startsAt > 0 && <p className="flex items-center gap-2 text-label text-meta"><span className="rounded-badge bg-soft px-1.5 py-0.5 text-footnote font-bold text-aux">{rejected ? '반려됨' : '판매 예정'}</span>{`${new Date(editing.startsAt).getMonth() + 1}.${new Date(editing.startsAt).getDate()} (${WEEK[new Date(editing.startsAt).getDay()]}) ${hhmm(new Date(editing.startsAt).getHours(), new Date(editing.startsAt).getMinutes())} 오픈`}{editing.notifySubscribers !== undefined && ` · 알림 신청 ${editing.notifySubscribers}명`}</p>}
       {rejected ? <>
         <Note title="반려 사유">{editing.rejectionReason || '반려 사유가 등록되지 않았어요.'}</Note>
-        <div className="flex gap-2 rounded-[6px] bg-[var(--soft)] p-3.5"><Info size={15} className="mt-[2px] shrink-0 text-[var(--aux)]"/><p className="text-[12px] leading-[1.5] text-[var(--aux)]">고친 내용을 저장하면 작성 중 상태가 되고, 재심사를 요청하면 다시 심사해요.</p></div>
+        <div className="flex gap-2 rounded-element bg-soft p-3.5"><Info size={15} className="mt-0.5 shrink-0 text-aux"/><p className="text-label leading-[1.5] text-aux">고친 내용을 저장하면 작성 중 상태가 되고, 재심사를 요청하면 다시 심사해요.</p></div>
         {/* 반려 상품의 판매 시작이 지났으면 일정부터 미래 시각으로 바꿔야 재요청할 수 있다 */}
-        {startPassed && <div role="alert" className="space-y-2 rounded-[6px] border border-[var(--red)] p-3.5"><p className="text-[13px] font-bold text-[var(--red)]">판매 시작 시각이 지났어요</p><p className="text-[12px] text-[var(--aux)]">판매 일정을 지금보다 뒤로 바꾼 뒤 재심사를 요청해 주세요.</p><Button outline className="w-full text-[13px]!" onClick={() => showProblems({ startsAt: '판매 시작 시각이 지났어요. 지금보다 뒤로 바꿔 주세요.' })}>판매 일정 바꾸기</Button></div>}
-      </> : <div className="flex gap-2 rounded-[6px] bg-[var(--soft)] p-3.5"><Info size={15} className="mt-[2px] shrink-0 text-[var(--aux)]"/><p className="text-[12px] leading-[1.5] text-[var(--aux)]">수정하면 판매 심사를 다시 받아요.<br/>심사 중에도 기존 정보로 오픈 일정은 유지돼요.{revision && <><br/>승인 후에는 설명·판매가·배송비·판매 일정·출고지·반품지만 바꿀 수 있어요. 상품명·사진·옵션·수량은 바꿀 수 없어요.</>}</p></div>}
+        {startPassed && <div role="alert" className="space-y-2 rounded-element border border-red p-3.5"><p className="text-body font-bold text-red">판매 시작 시각이 지났어요</p><p className="text-label text-aux">판매 일정을 지금보다 뒤로 바꾼 뒤 재심사를 요청해 주세요.</p><Button outline className="w-full text-body!" onClick={() => showProblems({ startsAt: '판매 시작 시각이 지났어요. 지금보다 뒤로 바꿔 주세요.' })}>판매 일정 바꾸기</Button></div>}
+      </> : <div className="flex gap-2 rounded-element bg-soft p-3.5"><Info size={15} className="mt-0.5 shrink-0 text-aux"/><p className="text-label leading-[1.5] text-aux">수정하면 판매 심사를 다시 받아요.<br/>심사 중에도 기존 정보로 오픈 일정은 유지돼요.{revision && <><br/>승인 후에는 설명·판매가·배송비·판매 일정·출고지·반품지만 바꿀 수 있어요. 상품명·사진·옵션·수량은 바꿀 수 없어요.</>}</p></div>}
     </div>}
 
     {/* 상품 사진 */}
     <section className="space-y-2.5" data-field="images">
       <Label hint={revision ? '· 승인 후 변경 불가' : '· 필수 · 최대 10장'}>상품 사진</Label>
       <div className="flex gap-2 overflow-x-auto">
-        {!revision && d.images.length < 10 && <label className="flex h-20 w-20 shrink-0 cursor-pointer flex-col items-center justify-center gap-1 rounded-[6px] border border-[var(--border)]"><Plus size={20} strokeWidth={1.5}/><span className="text-[11px] text-[var(--meta)]">{uploading ? '처리 중' : `${d.images.length}/10`}</span><input aria-label="상품 사진 업로드" type="file" accept="image/jpeg,image/png,image/webp" multiple className="sr-only" disabled={uploading} onChange={e => { const picked = Array.from(e.target.files ?? []); e.target.value = ''; void upload(picked); }}/></label>}
-        {d.images.map((src, i) => <button type="button" key={src.slice(-24) + i} disabled={revision} onClick={() => setPhoto(i)} className="relative shrink-0"><ProductImage src={src} alt={`상품 사진 ${i + 1}`} className="h-20 w-20"/>{i === 0 && <span className="absolute bottom-1.5 left-1.5 rounded-[3px] bg-black/70 px-1.5 py-0.5 text-[10px] font-bold text-white">대표</span>}</button>)}
+        {!revision && d.images.length < 10 && <label className="flex h-20 w-20 shrink-0 cursor-pointer flex-col items-center justify-center gap-1 rounded-element border border-border"><Plus size={20} strokeWidth={1.5}/><span className="text-footnote text-meta">{uploading ? '처리 중' : `${d.images.length}/10`}</span><input aria-label="상품 사진 업로드" type="file" accept="image/jpeg,image/png,image/webp" multiple className="sr-only" disabled={uploading} onChange={e => { const picked = Array.from(e.target.files ?? []); e.target.value = ''; void upload(picked); }}/></label>}
+        {d.images.map((src, i) => <button type="button" key={src.slice(-24) + i} disabled={revision} onClick={() => setPhoto(i)} className="relative shrink-0"><ProductImage src={src} alt={`상품 사진 ${i + 1}`} className="h-20 w-20"/>{i === 0 && <span className="absolute bottom-1.5 left-1.5 rounded-badge bg-black/70 px-1.5 py-0.5 text-caption font-bold text-white">대표</span>}</button>)}
       </div>
-      {progress && <p role="status" className="text-[12px] text-[var(--aux)]">{progress}</p>}
-      <ErrorBox message={photoError}/>{!revision && retryFiles.length > 0 && !uploading && <button type="button" onClick={() => void upload(retryFiles)} className="h-9 rounded-[6px] border border-[var(--border)] px-3 text-[12px] font-bold">남은 사진 {retryFiles.length}장 다시 올리기</button>}
-      {!revision && <p className="text-[11px] text-[var(--meta)]">JPG·PNG·WEBP · 장당 10MB 이하 · 첫 번째 사진이 대표예요</p>}
+      {progress && <p role="status" className="text-label text-aux">{progress}</p>}
+      <ErrorBox message={photoError}/>{!revision && retryFiles.length > 0 && !uploading && <button type="button" onClick={() => void upload(retryFiles)} className="h-9 rounded-element border border-border px-3 text-label font-bold">남은 사진 {retryFiles.length}장 다시 올리기</button>}
+      {!revision && <p className="text-footnote text-meta">JPG·PNG·WEBP · 장당 10MB 이하 · 첫 번째 사진이 대표예요</p>}
       <FieldError name="images"/>
     </section>
 
     <section data-field="name"><Label hint={revision ? '· 승인 후 변경 불가' : '· 필수'}>상품명</Label><CompositionInput aria-label="상품명" className="field-line" readOnly={revision} value={d.name} maxLength={50} onValueChange={value => patch({ name: value })} placeholder="상품명을 입력해 주세요"/><FieldError name="name"/></section>
 
     {/* AI 분석·심사 제출에 필요한 값(단계 저장 땐 선택). 비워 두면 보내지 않는다 — 임의 문구로 채우지 않는다. Figma에 추가할 칸 */}
-    <section data-field="description"><Label hint="· 필수 · 한두 줄이면 돼요">짧은 설명</Label><textarea aria-label="짧은 설명" rows={2} className="field-line min-h-[64px] resize-y" value={d.description} maxLength={20000} onChange={e => patch({ description: e.target.value })} placeholder="예: 새 상품, 택 그대로, 박스 없음"/><FieldError name="description"/></section>
+    <section data-field="description"><Label hint="· 필수 · 한두 줄이면 돼요">짧은 설명</Label><textarea aria-label="짧은 설명" rows={2} className="field-line min-h-16 resize-y" value={d.description} maxLength={20000} onChange={e => patch({ description: e.target.value })} placeholder="예: 새 상품, 택 그대로, 박스 없음"/><FieldError name="description"/></section>
     {!revision && <>
     <section data-field="disposalReason"><Label hint="· 필수 · 한두 줄이면 돼요">처분 사유</Label><input aria-label="처분 사유" className="field-line" value={d.reason} maxLength={500} onChange={e => patch({ reason: e.target.value })} placeholder="예: 시즌 종료 후 남은 미판매 새 상품"/><FieldError name="disposalReason"/></section>
 
     <section data-field="state" className="space-y-2">
-      <Button outline={!!Object.keys(analysisProblems(d, editing?.reviewStatus)).length} className="flex w-full items-center justify-center gap-1.5 text-[14px]!" disabled={d.ai.status === 'analyzing' || uploading} onClick={runAnalysis}><Sparkles size={15}/>{d.ai.status === 'analyzing' ? 'AI가 분석하고 있어요' : d.ai.result || d.ai.status === 'uncertain' ? 'AI 분석 다시 하기' : 'AI로 카테고리 분석하기'}</Button>
-      <p className="text-[12px] text-[var(--meta)]">사진·상품명·짧은 설명·처분 사유를 입력하면 AI가 카테고리를 추천해요. 분석은 선택이라 건너뛰고 카테고리를 직접 골라도 돼요</p>
-      <ul className="space-y-1 rounded-[6px] bg-[var(--soft)] p-3 text-[12px] leading-[1.6] text-[var(--aux)]"><li>· 상품 전체가 보이는 사진과 라벨(소재·사이즈 표기) 사진을 올려 주세요</li><li>· 흠집, 사용감, 포장 상태가 잘 보이게 찍고 처분 사유를 구체적으로 적으면 AI가 구매자 질문과 예상 답변을 더 정확히 만들어요</li><li>· 분석 뒤에 상품명·설명·브랜드·사진 등을 바꾸면 질문을 다시 받아야 해요. 입력을 마친 뒤 분석하면 한 번에 끝나요</li></ul>
+      <Button outline={!!Object.keys(analysisProblems(d, editing?.reviewStatus)).length} className="flex w-full items-center justify-center gap-1.5 text-callout!" disabled={d.ai.status === 'analyzing' || uploading} onClick={runAnalysis}><Sparkles size={15}/>{d.ai.status === 'analyzing' ? 'AI가 분석하고 있어요' : d.ai.result || d.ai.status === 'uncertain' ? 'AI 분석 다시 하기' : 'AI로 카테고리 분석하기'}</Button>
+      <p className="text-label text-meta">사진·상품명·짧은 설명·처분 사유를 입력하면 AI가 카테고리를 추천해요. 분석은 선택이라 건너뛰고 카테고리를 직접 골라도 돼요</p>
+      <ul className="space-y-1 rounded-element bg-soft p-3 text-label leading-[1.6] text-aux"><li>· 상품 전체가 보이는 사진과 라벨(소재·사이즈 표기) 사진을 올려 주세요</li><li>· 흠집, 사용감, 포장 상태가 잘 보이게 찍고 처분 사유를 구체적으로 적으면 AI가 구매자 질문과 예상 답변을 더 정확히 만들어요</li><li>· 분석 뒤에 상품명·설명·브랜드·사진 등을 바꾸면 질문을 다시 받아야 해요. 입력을 마친 뒤 분석하면 한 번에 끝나요</li></ul>
       <FieldError name="state"/>
     </section>
 
-    {stale && <section role="status" className="space-y-2 rounded-[6px] bg-[var(--red-soft)] p-4"><p className="text-[13px] font-bold text-[var(--red)]">정보가 바뀌어 AI 질문을 다시 받아야 해요</p><p className="text-[12px] text-[var(--red)]">분석한 뒤에 상품명·설명·브랜드·카테고리·처분 사유·사진 중 하나가 바뀌었어요. 다시 분석하면 입력이 같을 땐 기존 결과, 다르면 새 분석을 받아요.</p><Button outline className="w-full" disabled={d.ai.status === 'analyzing' || uploading} onClick={runAnalysis}>다시 분석</Button></section>}
+    {stale && <section role="status" className="space-y-2 rounded-element bg-red-soft p-4"><p className="text-body font-bold text-red">정보가 바뀌어 AI 질문을 다시 받아야 해요</p><p className="text-label text-red">분석한 뒤에 상품명·설명·브랜드·카테고리·처분 사유·사진 중 하나가 바뀌었어요. 다시 분석하면 입력이 같을 땐 기존 결과, 다르면 새 분석을 받아요.</p><Button outline className="w-full" disabled={d.ai.status === 'analyzing' || uploading} onClick={runAnalysis}>다시 분석</Button></section>}
 
-    {d.ai.status === 'recommended' && d.ai.result && d.ai.notice && !d.ai.noticeSeen && <div role="status" aria-label="AI 분석 반영 안내" className="space-y-2 rounded-[6px] bg-[var(--soft)] p-4">
-      <p className="flex items-center gap-1.5 text-[13px] font-bold"><Sparkles size={14}/>{d.ai.notice === 'applied' ? 'AI 분석 결과를 반영했어요' : '직접 고른 카테고리는 그대로 두었어요'}</p>
-      <p className="text-[12px] leading-relaxed text-[var(--aux)]">{d.ai.notice === 'applied' ? `카테고리 ${d.ai.result.category}` : `AI 추천 카테고리는 ${d.ai.result.category}예요`}{d.ai.result.questions.length ? ` · 구매자가 물어볼 만한 질문 ${d.ai.result.questions.length}개를 아래 AI 질문에 보여 드려요` : ''}</p>
-      <div className="flex gap-3 text-[12px] font-bold">{d.ai.notice === 'kept' && <button type="button" className="underline" onClick={() => patch({ category: d.ai.result!.category, aiCategory: d.ai.result!.category, ai: { ...d.ai, notice: 'applied', noticeSeen: true } })}>AI 추천으로 바꾸기</button>}<button type="button" className="text-[var(--aux)] underline" onClick={() => patch({ ai: { ...d.ai, noticeSeen: true } })}>닫기</button></div>
+    {d.ai.status === 'recommended' && d.ai.result && d.ai.notice && !d.ai.noticeSeen && <div role="status" aria-label="AI 분석 반영 안내" className="space-y-2 rounded-element bg-soft p-4">
+      <p className="flex items-center gap-1.5 text-body font-bold"><Sparkles size={14}/>{d.ai.notice === 'applied' ? 'AI 분석 결과를 반영했어요' : '직접 고른 카테고리는 그대로 두었어요'}</p>
+      <p className="text-label leading-relaxed text-aux">{d.ai.notice === 'applied' ? `카테고리 ${d.ai.result.category}` : `AI 추천 카테고리는 ${d.ai.result.category}예요`}{d.ai.result.questions.length ? ` · 구매자가 물어볼 만한 질문 ${d.ai.result.questions.length}개를 아래 AI 질문에 보여 드려요` : ''}</p>
+      <div className="flex gap-3 text-label font-bold">{d.ai.notice === 'kept' && <button type="button" className="underline" onClick={() => patch({ category: d.ai.result!.category, aiCategory: d.ai.result!.category, ai: { ...d.ai, notice: 'applied', noticeSeen: true } })}>AI 추천으로 바꾸기</button>}<button type="button" className="text-aux underline" onClick={() => patch({ ai: { ...d.ai, noticeSeen: true } })}>닫기</button></div>
     </div>}
     <section data-field="category"><Label hint="· AI 추천 또는 직접 선택">카테고리</Label>
-      {!d.category && d.ai.status === 'uncertain' && d.ai.reason && <p role="status" className="pb-1 text-[12px] text-[var(--aux)]">{d.ai.reason}</p>}
-      <button type="button" onClick={openCategory} className="flex h-12 w-full items-center gap-2 border-b border-[var(--line)] text-left">
+      {!d.category && d.ai.status === 'uncertain' && d.ai.reason && <p role="status" className="pb-1 text-label text-aux">{d.ai.reason}</p>}
+      <button type="button" onClick={openCategory} className="flex h-12 w-full items-center gap-2 border-b border-line text-left">
         <Sparkles size={16} className="shrink-0"/>
-        <span className={`min-w-0 flex-1 truncate text-[16px] ${d.category ? '' : 'text-[var(--placeholder)]'}`}>{d.category || (d.ai.status === 'analyzing' ? '사진을 분석하고 있어요' : '카테고리를 선택해 주세요')}</span>
-        {(d.category || d.ai.result || d.ai.status === 'analyzing' || d.ai.status === 'failed' || d.ai.status === 'delayed') && <span className="flex shrink-0 items-center text-[13px] text-[var(--aux)]">분석 결과<ChevronRight size={16}/></span>}
+        <span className={`min-w-0 flex-1 truncate text-headline ${d.category ? '' : 'text-placeholder'}`}>{d.category || (d.ai.status === 'analyzing' ? '사진을 분석하고 있어요' : '카테고리를 선택해 주세요')}</span>
+        {(d.category || d.ai.result || d.ai.status === 'analyzing' || d.ai.status === 'failed' || d.ai.status === 'delayed') && <span className="flex shrink-0 items-center text-body text-aux">분석 결과<ChevronRight size={16}/></span>}
       </button>
       <FieldError name="category"/>
     </section>
 
     {/* 카테고리별 점검 기준(registration-metadata categoryCriteria) → 입력칸. 값은 2단계 attributes(항목명+값)로 저장. AI 질문은 칸과 묶지 않고 아래 독립 목록 */}
     {criteria && <section className="space-y-4" data-field="attributes">
-      <div><Label hint="· 심사 때 확인해요">카테고리별 상품 정보</Label><p className="mt-1 text-[12px] text-[var(--meta)]">카테고리마다 확인하는 항목이 달라요</p></div>
+      <div><Label hint="· 심사 때 확인해요">카테고리별 상품 정보</Label><p className="mt-1 text-label text-meta">카테고리마다 확인하는 항목이 달라요</p></div>
       {criteria.checks.map(c => { const name = attributeName(c.code); return <div key={c.code}>
-        <p className="text-[13px]">{name}</p>
+        <p className="text-body">{name}</p>
         <input aria-label={name} className="field-line" value={d.extras.find(e => e.key === name)?.value ?? ''} maxLength={ATTRIBUTE_VALUE_MAX} onChange={e => setExtra(name, e.target.value)}/>
       </div>; })}
     </section>}
 
     {questions.length > 0 && <section className="space-y-4" data-field="aiQuestions">
-      <div><Label hint="· 선택">AI 질문</Label><p className="mt-1 text-[12px] text-[var(--meta)]">구매자가 물어볼 만한 질문이에요. 답하면 상품 FAQ로 구매자에게 공개돼요. 답하지 않아도 판매 심사를 요청할 수 있어요</p></div>
+      <div><Label hint="· 선택">AI 질문</Label><p className="mt-1 text-label text-meta">구매자가 물어볼 만한 질문이에요. 답하면 상품 FAQ로 구매자에게 공개돼요. 답하지 않아도 판매 심사를 요청할 수 있어요</p></div>
       {questions.map((q, i) => { const f = aiFaq(q), answer = f?.answer ?? '', draft = f?.confirmed === false; return <div key={q.suggestionId ?? i} className="space-y-1.5">
-        <p className="flex items-start gap-1 text-[13px] font-bold"><Sparkles size={13} className="mt-[3px] shrink-0"/>{q.question}</p>
-        {q.reason && <p className="text-[12px] text-[var(--meta)]">{q.reason}</p>}
-        {draft && <span className="inline-flex h-[18px] items-center rounded-[4px] bg-[var(--soft)] px-2 text-[10px] font-bold text-[var(--aux)]">AI 예상 답변 · 확인 전</span>}
-        <textarea aria-label={`AI 질문 답: ${q.question}`} className="field-line min-h-[72px] py-2" maxLength={4000} placeholder={q.suggestedAnswer ? undefined : '사진과 설명만으로는 알 수 없어 비워 두었어요. 직접 답해 주세요'} value={answer} onChange={e => setAiAnswer(q, e.target.value)}/>
-        {answer.trim() && <label className="flex items-center gap-2 text-[12px]"><input type="checkbox" checked={!draft} onChange={e => setAiAnswer(q, answer, e.target.checked)}/>이 답을 확인했어요</label>}
-        <p className="text-[11px] text-[var(--meta)]">{draft ? '확인하기 전에는 저장하지 않아요. 내용을 확인하거나 고친 뒤 체크해 주세요' : '이 답은 상품 FAQ로 구매자에게도 공개돼요'}</p>
+        <p className="flex items-start gap-1 text-body font-bold"><Sparkles size={13} className="mt-[3px] shrink-0"/>{q.question}</p>
+        {q.reason && <p className="text-label text-meta">{q.reason}</p>}
+        {draft && <span className="inline-flex h-4.5 items-center rounded-inner bg-soft px-2 text-caption font-bold text-aux">AI 예상 답변 · 확인 전</span>}
+        <textarea aria-label={`AI 질문 답: ${q.question}`} className="field-line min-h-18 py-2" maxLength={4000} placeholder={q.suggestedAnswer ? undefined : '사진과 설명만으로는 알 수 없어 비워 두었어요. 직접 답해 주세요'} value={answer} onChange={e => setAiAnswer(q, e.target.value)}/>
+        {answer.trim() && <label className="flex items-center gap-2 text-label"><input type="checkbox" checked={!draft} onChange={e => setAiAnswer(q, answer, e.target.checked)}/>이 답을 확인했어요</label>}
+        <p className="text-footnote text-meta">{draft ? '확인하기 전에는 저장하지 않아요. 내용을 확인하거나 고친 뒤 체크해 주세요' : '이 답은 상품 FAQ로 구매자에게도 공개돼요'}</p>
       </div>; })}
     </section>}
 
     <section className="space-y-3" data-field="sourceUrl">
-      <div><Label hint="· 필수">타 플랫폼 판매 URL</Label><p className="mt-1 text-[12px] text-[var(--meta)]">쿠팡·알리 등에서 판매 중인 같은 상품의 링크</p></div>
-      <label className="flex h-12 items-center gap-2 border-b border-[var(--line)]"><Link2 size={17} className="shrink-0 text-[var(--aux)]"/><CompositionInput aria-label="타 플랫폼 판매 URL" className="min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-[var(--placeholder)]" value={d.originalUrl} placeholder="https://" onValueChange={value => patch({ originalUrl: value, reference: lookupReference(value) /* TODO(api-gap): 타 플랫폼 가격 조회 API 없음(목업) */ })}/></label>
-      {reference && <div className="flex items-center gap-3 rounded-[6px] bg-[var(--soft)] p-3">{reference.image && <ProductImage src={reference.image} alt={reference.title} className="h-12 w-12 shrink-0"/>}<div className="min-w-0 flex-1"><p className="text-[11px] font-bold text-[var(--meta)]">{reference.platform}</p><p className="truncate text-[13px]">{reference.title}</p><p className="text-[14px] font-bold">{money(reference.price)}</p></div><span className="flex shrink-0 items-center gap-1 text-[12px] font-bold text-[var(--positive)]"><Check size={14}/>확인됨</span></div>}
-      {(d.extraUrls ?? []).map((url, i) => <label key={i} className="flex h-12 items-center gap-2 border-b border-[var(--line)]"><Link2 size={17} className="shrink-0 text-[var(--aux)]"/><input aria-label={`추가 URL ${i + 1}`} className="min-w-0 flex-1 bg-transparent text-[15px] outline-none" value={url} placeholder="https://" onChange={e => patch({ extraUrls: (d.extraUrls ?? []).map((u, j) => j === i ? e.target.value : u) })}/></label>)}
-      <button type="button" onClick={() => patch({ extraUrls: [...(d.extraUrls ?? []), ''] })} className="flex items-center gap-1 text-[13px] text-[var(--aux)]"><Plus size={14}/>다른 플랫폼 URL 추가</button>
-      {fieldErr.sourceUrl ? <FieldError name="sourceUrl"/> : d.originalUrl.trim() && sourceUrlProblem(d.originalUrl) ? <p className="mt-1.5 text-[12px] text-[var(--red)]">{sourceUrlProblem(d.originalUrl)}</p> : null}
+      <div><Label hint="· 필수">타 플랫폼 판매 URL</Label><p className="mt-1 text-label text-meta">쿠팡·알리 등에서 판매 중인 같은 상품의 링크</p></div>
+      <label className="flex h-12 items-center gap-2 border-b border-line"><Link2 size={17} className="shrink-0 text-aux"/><CompositionInput aria-label="타 플랫폼 판매 URL" className="min-w-0 flex-1 bg-transparent text-subhead outline-none placeholder:text-placeholder" value={d.originalUrl} placeholder="https://" onValueChange={value => patch({ originalUrl: value, reference: lookupReference(value) /* TODO(api-gap): 타 플랫폼 가격 조회 API 없음(목업) */ })}/></label>
+      {reference && <div className="flex items-center gap-3 rounded-element bg-soft p-3">{reference.image && <ProductImage src={reference.image} alt={reference.title} className="h-12 w-12 shrink-0"/>}<div className="min-w-0 flex-1"><p className="text-footnote font-bold text-meta">{reference.platform}</p><p className="truncate text-body">{reference.title}</p><p className="text-callout font-bold">{money(reference.price)}</p></div><span className="flex shrink-0 items-center gap-1 text-label font-bold text-positive"><Check size={14}/>확인됨</span></div>}
+      {(d.extraUrls ?? []).map((url, i) => <label key={i} className="flex h-12 items-center gap-2 border-b border-line"><Link2 size={17} className="shrink-0 text-aux"/><input aria-label={`추가 URL ${i + 1}`} className="min-w-0 flex-1 bg-transparent text-subhead outline-none" value={url} placeholder="https://" onChange={e => patch({ extraUrls: (d.extraUrls ?? []).map((u, j) => j === i ? e.target.value : u) })}/></label>)}
+      <button type="button" onClick={() => patch({ extraUrls: [...(d.extraUrls ?? []), ''] })} className="flex items-center gap-1 text-body text-aux"><Plus size={14}/>다른 플랫폼 URL 추가</button>
+      {fieldErr.sourceUrl ? <FieldError name="sourceUrl"/> : d.originalUrl.trim() && sourceUrlProblem(d.originalUrl) ? <p className="mt-1.5 text-label text-red">{sourceUrlProblem(d.originalUrl)}</p> : null}
     </section>
 
     </>}
 
     <section className="space-y-2.5" data-field="price"><Label hint="· 필수">한정 판매가</Label>
-      <label className="flex h-12 items-center border-b border-[var(--line)]"><input aria-label="한정 판매가" inputMode="numeric" className="min-w-0 flex-1 bg-transparent text-[16px] outline-none placeholder:text-[var(--placeholder)]" value={d.price ? d.price.toLocaleString('ko-KR') : ''} placeholder="0" onChange={e => patch({ price: Number(e.target.value.replace(/\D/g, '')) || 0 })}/><span className="text-[14px] text-[var(--aux)]">원</span></label>
-      {discount > 0 && reference && <p className="flex items-center gap-2 text-[12px] text-[var(--aux)]"><span className="rounded-[3px] bg-[var(--positive-soft)] px-1.5 py-0.5 text-[11px] font-bold text-[var(--positive)]">{Math.round(discount / reference.price * 100)}% 저렴</span>{`${reference.platform} 판매가보다 ${money(discount)} 저렴해요`}</p>}
-      <p className="text-[12px] text-[var(--meta)]">{revision && reference ? `등록한 URL의 판매가(${money(reference.price)})보다 낮아야 심사를 요청할 수 있어요` : '등록한 URL의 판매가보다 낮게 정해 주세요. 운영자가 심사 때 URL의 판매가와 비교해요'}</p>
+      <label className="flex h-12 items-center border-b border-line"><input aria-label="한정 판매가" inputMode="numeric" className="min-w-0 flex-1 bg-transparent text-headline outline-none placeholder:text-placeholder" value={d.price ? d.price.toLocaleString('ko-KR') : ''} placeholder="0" onChange={e => patch({ price: Number(e.target.value.replace(/\D/g, '')) || 0 })}/><span className="text-callout text-aux">원</span></label>
+      {discount > 0 && reference && <p className="flex items-center gap-2 text-label text-aux"><span className="rounded-badge bg-positive-soft px-1.5 py-0.5 text-footnote font-bold text-positive">{Math.round(discount / reference.price * 100)}% 저렴</span>{`${reference.platform} 판매가보다 ${money(discount)} 저렴해요`}</p>}
+      <p className="text-label text-meta">{revision && reference ? `등록한 URL의 판매가(${money(reference.price)})보다 낮아야 심사를 요청할 수 있어요` : '등록한 URL의 판매가보다 낮게 정해 주세요. 운영자가 심사 때 URL의 판매가와 비교해요'}</p>
       <FieldError name="price"/>
     </section>
 
     {!revision && <>
     <section className="space-y-3" data-field="options"><Label hint="· 필수">옵션별 한정 수량</Label>
-      <div className="flex flex-wrap items-center gap-2"><span className="mr-1 text-[12px] text-[var(--aux)]">옵션</span>{chip(!dims.length, '옵션 없음', () => { if (dims.length) askRemove('all'); })}{dims.length < OPTION_DIM_MAX ? <InlineAdd label="직접 추가" maxLength={OPTION_TEXT_MAX} className="h-8 rounded-full border border-[var(--border)] px-3" onAdd={addDim}/> : <span className="text-[12px] text-[var(--meta)]">옵션은 {OPTION_DIM_MAX}단계까지 추가할 수 있어요</span>}</div>
-      {dims.map((x, i) => <div key={i} role="group" aria-label={`옵션 ${i + 1}단계 ${x.name}`} className="space-y-2.5 rounded-[6px] border border-[var(--line)] px-3.5 py-3">
-        <div className="flex items-center gap-2"><span className="shrink-0 text-[11px] text-[var(--meta)]">{i + 1}단계</span><EditText value={x.name} label={`옵션 이름 ${x.name}`} onSave={v => renameDim(i, v)} className="min-w-0 flex-1 break-all text-[14px] font-bold"/><button type="button" aria-label={`${x.name} 옵션 삭제`} onClick={() => askRemove(i)} className="grid h-8 w-8 shrink-0 place-items-center text-[var(--aux)]"><X size={16}/></button></div>
-        <div className="flex flex-wrap items-center gap-2">{x.values.map(v => <span key={v} className="inline-flex h-9 max-w-full items-center gap-0.5 rounded-[6px] border border-[var(--border)] pl-3"><EditText value={v} label={`${x.name} 값 ${v}`} onSave={nv => renameValue(i, v, nv)} className="min-w-0 truncate text-[13px]"/><button type="button" aria-label={`${x.name} 값 ${v} 삭제`} onClick={() => deleteValue(i, v)} className="grid h-8 w-8 shrink-0 place-items-center text-[var(--aux)]"><X size={13}/></button></span>)}<InlineAdd label={`${x.name} 추가`} maxLength={OPTION_TEXT_MAX} className="h-9 rounded-[6px] border border-[var(--border)] px-3" onAdd={v => addValue(i, v)}/></div>
+      <div className="flex flex-wrap items-center gap-2"><span className="mr-1 text-label text-aux">옵션</span>{chip(!dims.length, '옵션 없음', () => { if (dims.length) askRemove('all'); })}{dims.length < OPTION_DIM_MAX ? <InlineAdd label="직접 추가" maxLength={OPTION_TEXT_MAX} className="h-8 rounded-full border border-border px-3" onAdd={addDim}/> : <span className="text-label text-meta">옵션은 {OPTION_DIM_MAX}단계까지 추가할 수 있어요</span>}</div>
+      {dims.map((x, i) => <div key={i} role="group" aria-label={`옵션 ${i + 1}단계 ${x.name}`} className="space-y-2.5 rounded-element border border-line px-3.5 py-3">
+        <div className="flex items-center gap-2"><span className="shrink-0 text-footnote text-meta">{i + 1}단계</span><EditText value={x.name} label={`옵션 이름 ${x.name}`} onSave={v => renameDim(i, v)} className="min-w-0 flex-1 break-all text-callout font-bold"/><button type="button" aria-label={`${x.name} 옵션 삭제`} onClick={() => askRemove(i)} className="grid h-8 w-8 shrink-0 place-items-center text-aux"><X size={16}/></button></div>
+        <div className="flex flex-wrap items-center gap-2">{x.values.map(v => <span key={v} className="inline-flex h-9 max-w-full items-center gap-0.5 rounded-element border border-border pl-3"><EditText value={v} label={`${x.name} 값 ${v}`} onSave={nv => renameValue(i, v, nv)} className="min-w-0 truncate text-body"/><button type="button" aria-label={`${x.name} 값 ${v} 삭제`} onClick={() => deleteValue(i, v)} className="grid h-8 w-8 shrink-0 place-items-center text-aux"><X size={13}/></button></span>)}<InlineAdd label={`${x.name} 추가`} maxLength={OPTION_TEXT_MAX} className="h-9 rounded-element border border-border px-3" onAdd={v => addValue(i, v)}/></div>
       </div>)}
-      {optErr && <p role="alert" className="text-[12px] text-[var(--red)]">{optErr}</p>}
-      <div className="rounded-[6px] border border-[var(--line)] px-4">
-        {dims.length > 0 && <div className="flex min-h-12 items-center justify-between gap-3 border-b border-[var(--line)] py-2"><p className="min-w-0 break-all text-[13px] font-bold">{dims.map(x => x.name).join(' × ')}별 수량</p><p className="shrink-0 text-[13px] font-bold text-[var(--aux)]">{total}개</p></div>}
-        {!dims.length ? qtyRow('기본 수량', comboKey([]), true) : combos.length ? combos.map((vals, k) => qtyRow(comboLabel(vals), comboKey(vals), k === combos.length - 1)) : <p className="py-4 text-[13px] text-[var(--meta)]">옵션 값을 추가하면 조합별 수량을 넣을 수 있어요</p>}
+      {optErr && <p role="alert" className="text-label text-red">{optErr}</p>}
+      <div className="rounded-element border border-line px-4">
+        {dims.length > 0 && <div className="flex min-h-12 items-center justify-between gap-3 border-b border-line py-2"><p className="min-w-0 break-all text-body font-bold">{dims.map(x => x.name).join(' × ')}별 수량</p><p className="shrink-0 text-body font-bold text-aux">{total}개</p></div>}
+        {!dims.length ? qtyRow('기본 수량', comboKey([]), true) : combos.length ? combos.map((vals, k) => qtyRow(comboLabel(vals), comboKey(vals), k === combos.length - 1)) : <p className="py-4 text-body text-meta">옵션 값을 추가하면 조합별 수량을 넣을 수 있어요</p>}
       </div>
-      <div className="flex items-center justify-between gap-3 rounded-[6px] bg-[var(--soft)] px-4 py-3.5"><div className="min-w-0"><p className="text-[13px] font-bold">총 한정 수량</p>{dims.length >= 2 && dims[0].values.length > 0 && <p className="mt-0.5 break-all text-[12px] text-[var(--meta)]">{dims[0].values.map(v => `${v} ${firstTotal(v)}`).join(' · ')}</p>}</div><p className="shrink-0 text-[18px] font-bold">{total}개</p></div>
-      {dropDim !== null && <Modal title={dropDim === 'all' ? '옵션을 모두 지울까요?' : `'${dims[dropDim]?.name}' 옵션을 지울까요?`} onClose={() => setDropDim(null)}><div className="space-y-4"><p className="text-[13px] text-[var(--aux)]">입력한 옵션 값과 한정 수량도 함께 지워져요.</p><div className="flex gap-2"><Button outline className="flex-1" closeSheet>취소</Button><Button className="flex-1" onClick={() => removeDims(dropDim)}>삭제</Button></div></div></Modal>}
-      <p className="text-[12px] text-[var(--meta)]">판매가 시작되면 옵션과 수량을 바꿀 수 없어요</p>
+      <div className="flex items-center justify-between gap-3 rounded-element bg-soft px-4 py-3.5"><div className="min-w-0"><p className="text-body font-bold">총 한정 수량</p>{dims.length >= 2 && dims[0].values.length > 0 && <p className="mt-0.5 break-all text-label text-meta">{dims[0].values.map(v => `${v} ${firstTotal(v)}`).join(' · ')}</p>}</div><p className="shrink-0 text-title font-bold">{total}개</p></div>
+      {dropDim !== null && <Modal title={dropDim === 'all' ? '옵션을 모두 지울까요?' : `'${dims[dropDim]?.name}' 옵션을 지울까요?`} onClose={() => setDropDim(null)}><div className="space-y-4"><p className="text-body text-aux">입력한 옵션 값과 한정 수량도 함께 지워져요.</p><div className="flex gap-2"><Button outline className="flex-1" closeSheet>취소</Button><Button className="flex-1" onClick={() => removeDims(dropDim)}>삭제</Button></div></div></Modal>}
+      <p className="text-label text-meta">판매가 시작되면 옵션과 수량을 바꿀 수 없어요</p>
       <FieldError name="options"/>
     </section>
 
@@ -455,25 +455,25 @@ export function WizardPage() {
 
     <section className="space-y-3" data-field="startsAt"><Label hint="· 필수">판매 일정</Label>
       <div className="flex gap-4">
-        <label className="relative flex h-12 min-w-0 flex-[1.6] items-center justify-between border-b border-[var(--line)]"><span className="text-[16px]">{startOk ? dateLabel(d.startsAt) : '날짜 선택'}</span><Calendar size={18} className="text-[var(--aux)]"/><input aria-label="판매 날짜" type="date" className="absolute inset-0 opacity-0" min={localDateTime(now).slice(0, 10)} max={localDateTime(now + 7 * 86_400_000).slice(0, 10)} value={startOk ? localDateTime(start.getTime()).slice(0, 10) : ''} onChange={e => setDate(e.target.value)}/></label>
-        <label className="relative flex h-12 min-w-0 flex-1 items-center justify-between border-b border-[var(--line)]"><span className="text-[16px]">{startOk ? hhmm(start.getHours(), start.getMinutes()) : '시간'}</span><ChevronDown size={18} className="text-[var(--aux)]"/>{QUICK_SCHEDULE ? <input aria-label="판매 시작 시각" type="time" step={60} className="absolute inset-0 opacity-0" value={startOk ? hhmm(start.getHours(), start.getMinutes()) : ''} onChange={e => e.target.value && setTime(e.target.value)}/> : <select aria-label="판매 시작 시각" className="absolute inset-0 opacity-0" value={startOk ? hhmm(start.getHours(), start.getMinutes()) : ''} onChange={e => setTime(e.target.value)}>{TIME_SLOTS.map(t => <option key={t} disabled={startOk && new Date(`${localDateTime(start.getTime()).slice(0, 10)}T${t}`).getTime() <= now}>{t}</option>)}</select>}</label>
+        <label className="relative flex h-12 min-w-0 flex-[1.6] items-center justify-between border-b border-line"><span className="text-headline">{startOk ? dateLabel(d.startsAt) : '날짜 선택'}</span><Calendar size={18} className="text-aux"/><input aria-label="판매 날짜" type="date" className="absolute inset-0 opacity-0" min={localDateTime(now).slice(0, 10)} max={localDateTime(now + 7 * 86_400_000).slice(0, 10)} value={startOk ? localDateTime(start.getTime()).slice(0, 10) : ''} onChange={e => setDate(e.target.value)}/></label>
+        <label className="relative flex h-12 min-w-0 flex-1 items-center justify-between border-b border-line"><span className="text-headline">{startOk ? hhmm(start.getHours(), start.getMinutes()) : '시간'}</span><ChevronDown size={18} className="text-aux"/>{QUICK_SCHEDULE ? <input aria-label="판매 시작 시각" type="time" step={60} className="absolute inset-0 opacity-0" value={startOk ? hhmm(start.getHours(), start.getMinutes()) : ''} onChange={e => e.target.value && setTime(e.target.value)}/> : <select aria-label="판매 시작 시각" className="absolute inset-0 opacity-0" value={startOk ? hhmm(start.getHours(), start.getMinutes()) : ''} onChange={e => setTime(e.target.value)}>{TIME_SLOTS.map(t => <option key={t} disabled={startOk && new Date(`${localDateTime(start.getTime()).slice(0, 10)}T${t}`).getTime() <= now}>{t}</option>)}</select>}</label>
       </div>
-      {QUICK_SCHEDULE && <button type="button" className="w-full rounded-[6px] border border-dashed border-[var(--line)] py-2.5 text-[12px] font-bold text-[var(--aux)]" onClick={() => patch({ startsAt: localDateTime(Math.ceil((now + 5 * 60_000) / 60_000) * 60_000) })}>테스트: 5분 뒤 시작</button>}
-      {startOk && <p className="flex items-center gap-2 rounded-[6px] bg-[var(--soft)] px-4 py-3 text-[13px] font-bold"><Timer size={16}/>{`${hhmm(start.getHours(), start.getMinutes())} 시작 – ${endLabel} 자동 종료 · 3시간 선착순 판매`}</p>}
-      <p className="flex items-start gap-1.5 text-[12px] text-[var(--aux)]"><Info size={14} className="mt-[2px] shrink-0"/>운영자 승인 전에 시작 시각이 지나면 승인이 실패해요. 여유 있게 잡아 주세요</p>
-      {startOk && start.getTime() <= now && !fieldErr.startsAt ? <p className="mt-1.5 text-[12px] text-[var(--red)]">판매 시작 시각이 지났어요. 지금보다 뒤로 바꿔 주세요.</p> : <FieldError name="startsAt"/>}
+      {QUICK_SCHEDULE && <button type="button" className="w-full rounded-element border border-dashed border-line py-2.5 text-label font-bold text-aux" onClick={() => patch({ startsAt: localDateTime(Math.ceil((now + 5 * 60_000) / 60_000) * 60_000) })}>테스트: 5분 뒤 시작</button>}
+      {startOk && <p className="flex items-center gap-2 rounded-element bg-soft px-4 py-3 text-body font-bold"><Timer size={16}/>{`${hhmm(start.getHours(), start.getMinutes())} 시작 – ${endLabel} 자동 종료 · 3시간 선착순 판매`}</p>}
+      <p className="flex items-start gap-1.5 text-label text-aux"><Info size={14} className="mt-0.5 shrink-0"/>운영자 승인 전에 시작 시각이 지나면 승인이 실패해요. 여유 있게 잡아 주세요</p>
+      {startOk && start.getTime() <= now && !fieldErr.startsAt ? <p className="mt-1.5 text-label text-red">판매 시작 시각이 지났어요. 지금보다 뒤로 바꿔 주세요.</p> : <FieldError name="startsAt"/>}
     </section>
 
     {!revision && <>
     <section className="space-y-3" data-field="dispatchDays"><Label hint="· 필수">출고 기한</Label>
-      <div className="grid grid-cols-3 gap-2">{[1, 2, 3].map(n => <button type="button" key={n} onClick={() => patch({ dispatchDays: n })} className={`h-10 rounded-[6px] text-[13px] ${d.dispatchDays === n ? 'bg-[var(--ink)] font-bold text-white' : 'border border-[var(--border)] text-[var(--aux)]'}`}>{n}영업일</button>)}</div>
+      <div className="grid grid-cols-3 gap-2">{[1, 2, 3].map(n => <button type="button" key={n} onClick={() => patch({ dispatchDays: n })} className={`h-10 rounded-element text-body ${d.dispatchDays === n ? 'bg-ink font-bold text-white' : 'border border-border text-aux'}`}>{n}영업일</button>)}</div>
       <FieldError name="dispatchDays"/>
     </section>
 
     </>}
     {/* 배송비·1인 구매 한도: 서버 필수 값(배송비 ≥ 0, 한도 > 0). Figma에 추가할 칸 */}
     <section className="space-y-2.5" data-field="shipping"><Label hint="· 필수 · 무료면 0">배송비</Label>
-      <label className="flex h-12 items-center border-b border-[var(--line)]"><input aria-label="배송비" inputMode="numeric" className="min-w-0 flex-1 bg-transparent text-[16px] outline-none" value={d.shipping.toLocaleString('ko-KR')} onChange={e => patch({ shipping: Number(e.target.value.replace(/\D/g, '')) || 0 })}/><span className="text-[14px] text-[var(--aux)]">원</span></label>
+      <label className="flex h-12 items-center border-b border-line"><input aria-label="배송비" inputMode="numeric" className="min-w-0 flex-1 bg-transparent text-headline outline-none" value={d.shipping.toLocaleString('ko-KR')} onChange={e => patch({ shipping: Number(e.target.value.replace(/\D/g, '')) || 0 })}/><span className="text-callout text-aux">원</span></label>
       <FieldError name="shipping"/>
     </section>
     {!revision && <>
@@ -483,12 +483,12 @@ export function WizardPage() {
         const set = (v: Partial<Pick<Draft, 'carrier' | 'returnFee' | 'exchangeFee'>>) => { const n = { carrier: d.carrier ?? '', returnFee: d.returnFee ?? '', exchangeFee: '', ...v }; /* 교환은 지원하지 않아 교환 배송비는 안내하지 않는다 */ patch({ ...n, shippingNotice: composeShippingNotice(n.carrier, n.returnFee, n.exchangeFee) }); };
         const digits = (v: string) => v.replace(/\D/g, '');
         return <>
-          <label className="block text-[13px]">택배사<select aria-label="택배사" className="field-line" value={d.carrier ?? ''} onChange={e => set({ carrier: e.target.value })}><option value="">선택 안 함</option>{['CJ대한통운', '한진택배', '롯데택배', '우체국택배'].map(c => <option key={c}>{c}</option>)}</select></label>
-          <label className="block text-[13px]">반품 배송비<span className="flex items-center border-b border-[var(--line)]"><input aria-label="반품 배송비" inputMode="numeric" className="min-w-0 flex-1 bg-transparent py-3 text-[16px] outline-none" value={d.returnFee ? Number(d.returnFee).toLocaleString('ko-KR') : ''} placeholder="3,000" onChange={e => set({ returnFee: digits(e.target.value) })}/><span className="text-[14px] text-[var(--aux)]">원</span></span></label>
+          <label className="block text-body">택배사<select aria-label="택배사" className="field-line" value={d.carrier ?? ''} onChange={e => set({ carrier: e.target.value })}><option value="">선택 안 함</option>{['CJ대한통운', '한진택배', '롯데택배', '우체국택배'].map(c => <option key={c}>{c}</option>)}</select></label>
+          <label className="block text-body">반품 배송비<span className="flex items-center border-b border-line"><input aria-label="반품 배송비" inputMode="numeric" className="min-w-0 flex-1 bg-transparent py-3 text-headline outline-none" value={d.returnFee ? Number(d.returnFee).toLocaleString('ko-KR') : ''} placeholder="3,000" onChange={e => set({ returnFee: digits(e.target.value) })}/><span className="text-callout text-aux">원</span></span></label>
         </>;
       })()}
-      <label className="block text-[13px]">배송 안내 글<textarea aria-label="배송 안내" rows={3} className="mt-1 w-full rounded-[6px] border border-[var(--border)] p-3 text-[14px] outline-none" value={d.shippingNotice ?? ''} onChange={e => patch({ shippingNotice: e.target.value })}/></label>
-      <p className={`text-right text-[12px] ${(d.shippingNotice ?? '').length > SHIPPING_NOTICE_MAX ? 'text-[var(--danger,#d32f2f)]' : 'text-[var(--meta)]'}`}>{(d.shippingNotice ?? '').length.toLocaleString('ko-KR')} / {SHIPPING_NOTICE_MAX.toLocaleString('ko-KR')}자</p>
+      <label className="block text-body">배송 안내 글<textarea aria-label="배송 안내" rows={3} className="mt-1 w-full rounded-element border border-border p-3 text-callout outline-none" value={d.shippingNotice ?? ''} onChange={e => patch({ shippingNotice: e.target.value })}/></label>
+      <p className={`text-right text-label ${(d.shippingNotice ?? '').length > SHIPPING_NOTICE_MAX ? 'text-[var(--danger,#d32f2f)]' : 'text-meta'}`}>{(d.shippingNotice ?? '').length.toLocaleString('ko-KR')} / {SHIPPING_NOTICE_MAX.toLocaleString('ko-KR')}자</p>
       <FieldError name="shippingNotice"/>
     </section>
     <section className="space-y-2.5" data-field="maxPerAccount"><div className="flex items-center justify-between"><Label hint="· 필수">1인 구매 한도</Label><Stepper label="1인 구매 한도" value={d.maxPerAccount} onChange={n => patch({ maxPerAccount: n })}/></div>
@@ -498,33 +498,33 @@ export function WizardPage() {
     </>}
 
     <section className="space-y-2.5" data-field="addresses"><Label hint="· 필수">출고지 · 반품지</Label>
-      {USE_MOCK ? ([['출고지', s.sellerSettings[user.id]?.shippingAddress], ['반품지', s.sellerSettings[user.id]?.returnAddress]] as const).map(([k, v]) => <div key={k} className="flex justify-between gap-3 text-[13px]"><span className="shrink-0 text-[var(--aux)]">{k}</span><span className="text-right">{v || '등록된 주소가 없어요'}</span></div>)
-        : book.data && ([['출고지', 'dispatchAddressId', book.data[0]], ['반품지', 'returnAddressId', book.data[1]]] as const).map(([k, key, list]) => <label key={k} className="flex items-center gap-3 text-[13px]"><span className="w-12 shrink-0 text-[var(--aux)]">{k}</span>
+      {USE_MOCK ? ([['출고지', s.sellerSettings[user.id]?.shippingAddress], ['반품지', s.sellerSettings[user.id]?.returnAddress]] as const).map(([k, v]) => <div key={k} className="flex justify-between gap-3 text-body"><span className="shrink-0 text-aux">{k}</span><span className="text-right">{v || '등록된 주소가 없어요'}</span></div>)
+        : book.data && ([['출고지', 'dispatchAddressId', book.data[0]], ['반품지', 'returnAddressId', book.data[1]]] as const).map(([k, key, list]) => <label key={k} className="flex items-center gap-3 text-body"><span className="w-12 shrink-0 text-aux">{k}</span>
           {/* 선택하지 않으면 서버가 기본 주소를 쓴다 */}
           {list.length ? <select aria-label={k} className="field-line min-w-0 flex-1" value={d[key] && list.some(a => a.id === d[key]) ? d[key] : list.find(a => a.defaultAddress)?.id ?? ''} onChange={e => patch({ [key]: e.target.value })}>{list.map(a => <option key={a.id} value={a.id}>{a.label}{a.defaultAddress ? ' (기본)' : ''} · {a.address.roadAddress}</option>)}</select> : <span>등록된 주소가 없어요</span>}
         </label>)}
       {!USE_MOCK && <LiveStatus state={book}/>}
       <FieldError name="addresses"/>
-      <Link to="/seller/settings/addresses" className="text-[12px] text-[var(--aux)] underline">출고지·반품지 관리</Link>
+      <Link to="/seller/settings/addresses" className="text-label text-aux underline">출고지·반품지 관리</Link>
     </section>
 
     {!editId && <section data-field="inspection" className="space-y-3">
-      <div><Label hint="· 판매 심사에 포함">물품 검수</Label><p className="mt-1 text-[12px] text-[var(--aux)]">심사 때 운영팀이 사진으로 실제 상품 상태를 확인해요</p></div>
-      <div className="space-y-3 rounded-[6px] bg-[var(--soft)] p-4">
-        <p className="text-[13px] font-bold">검수용 사진 안내</p>
-        <ul className="space-y-1.5 text-[12px] text-[var(--aux)]">{INSPECTION_PHOTOS.map((t, n) => <li key={t} className="flex items-center gap-2"><span className="grid h-4 w-4 place-items-center rounded-full bg-[var(--ink)] text-[10px] text-[var(--surface)]">{n + 1}</span>{t}</li>)}</ul>
-        <p className="flex items-start gap-1.5 text-[12px] text-[var(--meta)]"><Info size={14} className="mt-[2px] shrink-0"/>위 사진을 위의 상품 사진으로 올려 주세요. 사진은 상품 사진과 같은 곳에 올라가요.</p>
+      <div><Label hint="· 판매 심사에 포함">물품 검수</Label><p className="mt-1 text-label text-aux">심사 때 운영팀이 사진으로 실제 상품 상태를 확인해요</p></div>
+      <div className="space-y-3 rounded-element bg-soft p-4">
+        <p className="text-body font-bold">검수용 사진 안내</p>
+        <ul className="space-y-1.5 text-label text-aux">{INSPECTION_PHOTOS.map((t, n) => <li key={t} className="flex items-center gap-2"><span className="grid h-4 w-4 place-items-center rounded-full bg-ink text-caption text-surface">{n + 1}</span>{t}</li>)}</ul>
+        <p className="flex items-start gap-1.5 text-label text-meta"><Info size={14} className="mt-0.5 shrink-0"/>위 사진을 위의 상품 사진으로 올려 주세요. 사진은 상품 사진과 같은 곳에 올라가요.</p>
       </div>
-      <div className="space-y-1">{INSPECTION_CHECKS.map((t, n) => { const on = !!d.inspection?.includes(n); return <label key={t} className="flex min-h-11 cursor-pointer items-center gap-3 border-b border-[var(--line)] text-[13px]"><input type="checkbox" className="h-5 w-5" checked={on} onChange={() => patch({ inspection: on ? (d.inspection ?? []).filter(x => x !== n) : [...(d.inspection ?? []), n] })}/>{t}</label>; })}</div>
+      <div className="space-y-1">{INSPECTION_CHECKS.map((t, n) => { const on = !!d.inspection?.includes(n); return <label key={t} className="flex min-h-11 cursor-pointer items-center gap-3 border-b border-line text-body"><input type="checkbox" className="h-5 w-5" checked={on} onChange={() => patch({ inspection: on ? (d.inspection ?? []).filter(x => x !== n) : [...(d.inspection ?? []), n] })}/>{t}</label>; })}</div>
       <FieldError name="inspection"/>
-      <p className="flex items-start gap-1.5 text-[12px] text-[var(--meta)]"><Info size={14} className="mt-[2px] shrink-0"/>미통과 시 알림으로 사유를 알려드리고 재등록할 수 있어요.</p>
+      <p className="flex items-start gap-1.5 text-label text-meta"><Info size={14} className="mt-0.5 shrink-0"/>미통과 시 알림으로 사유를 알려드리고 재등록할 수 있어요.</p>
     </section>}
 
     {blocked && <ErrorBox message="지원하지 않는 상품은 등록할 수 없습니다."/>}
     <ErrorBox message={error}/>
     <div className="space-y-3 pt-4">
-      <p className="text-center text-[12px] text-[var(--meta)]">{editId ? '수정 내용은 판매 심사 후 반영돼요 · 영업일 기준 1일 이내' : '판매 심사(물품 확인 포함)는 영업일 기준 1일 이내에 완료돼요'}</p>
-      <Button className="w-full text-[15px]!" disabled={busy || uploading || blocked} onClick={submit}>{busy ? '요청 중…' : editId ? (editing?.reviewStatus === 'REJECTED' ? '수정하고 재심사 요청' : '수정 심사 요청') : '판매 심사 요청하기'}</Button>
+      <p className="text-center text-label text-meta">{editId ? '수정 내용은 판매 심사 후 반영돼요 · 영업일 기준 1일 이내' : '판매 심사(물품 확인 포함)는 영업일 기준 1일 이내에 완료돼요'}</p>
+      <Button className="w-full text-subhead!" disabled={busy || uploading || blocked} onClick={submit}>{busy ? '요청 중…' : editId ? (editing?.reviewStatus === 'REJECTED' ? '수정하고 재심사 요청' : '수정 심사 요청') : '판매 심사 요청하기'}</Button>
     </div>
 
     {!revision && photo !== null && d.images[photo] && <Modal title={`상품 사진 ${photo + 1}`} onClose={() => setPhoto(null)}><div className="space-y-3"><ProductImage src={d.images[photo]} alt="선택한 사진" className="aspect-square w-full"/>{photo > 0 && <Button className="w-full" onClick={() => void coverPhoto(photo)}>대표 사진으로 지정</Button>}<Button outline className="w-full" onClick={() => void removePhoto(photo)}>삭제</Button></div></Modal>}
@@ -539,21 +539,21 @@ function CategoryPicker({ value, recommended, onClose, onSave }: { value: string
   const tree = meta.data ? categoryTree(meta.data) : [];
   const searching = !!q.trim(), found = (meta.data?.categories ?? []).filter(c => c.includes(q.trim()));
   const m = tree.find(x => x.code === major), g = m?.groups.find(x => x.label === group);
-  const radio = (path: string) => <label key={path} className="divider flex items-center gap-3 py-3 text-[13px]"><input type="radio" name="category" value={path} checked={pick === path} onChange={() => setPick(path)}/>{path}</label>;
-  const row = (label: string, count: number, onClick: () => void) => <button key={label} type="button" onClick={onClick} className="divider flex w-full items-center justify-between py-3 text-left text-[14px]"><span>{label} <span className="muted text-[12px]">{count}</span></span><ChevronRight size={16}/></button>;
+  const radio = (path: string) => <label key={path} className="divider flex items-center gap-3 py-3 text-body"><input type="radio" name="category" value={path} checked={pick === path} onChange={() => setPick(path)}/>{path}</label>;
+  const row = (label: string, count: number, onClick: () => void) => <button key={label} type="button" onClick={onClick} className="divider flex w-full items-center justify-between py-3 text-left text-callout"><span>{label} <span className="muted text-label">{count}</span></span><ChevronRight size={16}/></button>;
   return <Modal title="카테고리 선택" onClose={onClose}><div className="space-y-1">
       <CompositionInput aria-label="카테고리 검색" className="field-line" value={q} onValueChange={setQ} placeholder="카테고리 이름으로 찾기 (전체에서 검색)"/>
     <LiveStatus state={meta}/>
-    {recommended && !searching && <button type="button" onClick={() => onSave(recommended)} className="mt-2 flex w-full items-center justify-between rounded-[6px] bg-[var(--soft)] p-3 text-left"><span><span className="block text-[11px] font-bold text-[var(--positive)]">AI 추천</span><span className="text-[14px] font-bold">{recommended}</span></span><span className="text-[12px]">바로 선택</span></button>}
-    {!searching && (m || g) && <div className="flex items-center gap-1 pt-2 text-[12px]"><button type="button" aria-label="이전 단계" className="muted" onClick={() => (g ? setGroup(null) : setMajor(null))}><ArrowLeft size={16}/></button><span className="muted">{m!.name}{g ? ` › ${g.label}` : ''}</span></div>}
+    {recommended && !searching && <button type="button" onClick={() => onSave(recommended)} className="mt-2 flex w-full items-center justify-between rounded-element bg-soft p-3 text-left"><span><span className="block text-footnote font-bold text-positive">AI 추천</span><span className="text-callout font-bold">{recommended}</span></span><span className="text-label">바로 선택</span></button>}
+    {!searching && (m || g) && <div className="flex items-center gap-1 pt-2 text-label"><button type="button" aria-label="이전 단계" className="muted" onClick={() => (g ? setGroup(null) : setMajor(null))}><ArrowLeft size={16}/></button><span className="muted">{m!.name}{g ? ` › ${g.label}` : ''}</span></div>}
     <div className="max-h-[50dvh] overflow-y-auto">
       {searching ? found.map(radio)
         : g ? g.items.map(radio)
         : m ? m.groups.map(x => row(x.label, x.items.length, () => setGroup(x.label)))
         : tree.map(x => row(x.name, x.groups.reduce((n, y) => n + y.items.length, 0), () => setMajor(x.code)))}
     </div>
-    {searching && meta.data && !found.length && <p className="py-3 text-[13px] text-[var(--meta)]">찾는 카테고리가 없어요</p>}
-    {pick && <p className="pt-2 text-[12px]">선택: <b>{pick}</b></p>}
+    {searching && meta.data && !found.length && <p className="py-3 text-body text-meta">찾는 카테고리가 없어요</p>}
+    {pick && <p className="pt-2 text-label">선택: <b>{pick}</b></p>}
     <Note>지원 목록에서만 선택할 수 있습니다. 등록 대상이 아닌 상품은 다른 카테고리로 우회 등록할 수 없습니다.</Note><Button className="mt-4 w-full" disabled={!pick} onClick={() => onSave(pick)}>카테고리 저장</Button></div></Modal>;
 }
 
@@ -561,7 +561,7 @@ function CategoryPicker({ value, recommended, onClose, onSave }: { value: string
 function AiFrame({ children, footer }: { children: ReactNode; footer: ReactNode }) {
   return <div className="flex min-h-[calc(100dvh-44px)] flex-col"><Header title="AI 상품 분석" bare/><div className="flex-1 space-y-5">{children}</div><div className="pt-8">{footer}</div></div>;
 }
-function Thumbs({ images }: { images: string[] }) { return <div className="flex gap-2">{(images.length ? images.slice(0, 4) : ['', '']).map((src, i) => <div key={i} className="h-[72px] w-[72px] rounded-[4px] bg-[var(--soft)]" aria-hidden={!src}/>)}</div>; }
+function Thumbs({ images }: { images: string[] }) { return <div className="flex gap-2">{(images.length ? images.slice(0, 4) : ['', '']).map((src, i) => <div key={i} className="h-18 w-18 rounded-inner bg-soft" aria-hidden={!src}/>)}</div>; }
 
 export function AiAnalysisPage() {
   const { user, d, suffix, patch } = useDraft(); const navigate = useNavigate(); const meta = useRegistrationMeta();
@@ -572,15 +572,15 @@ export function AiAnalysisPage() {
   if (d.ai.status === 'failed' || !d.ai.result) return <Navigate to={`/seller/new/ai/failed${suffix}`} replace/>;
   const r = d.ai.result, chosen = r.category;
   const back = () => navigate(`/seller/new${suffix}`);
-  return <AiFrame footer={<div className="flex gap-2"><Button outline className="w-[128px] text-[15px]!" onClick={() => { startAnalysis(user.id); navigate(`/seller/new/ai/analyzing${suffix}`, { replace: true }); }}>다시 분석</Button>{d.category === chosen ? <Button className="flex-1 text-[15px]!" onClick={back}>등록 화면으로</Button> : <Button className="flex-1 text-[15px]!" onClick={() => { patch({ category: chosen, aiCategory: chosen }); back(); }}>이 카테고리로 적용</Button>}</div>}>
-    <div className="space-y-2"><div className="relative"><ProductImage src={d.images[0]} alt="분석한 대표 사진" className="h-[240px] w-full"/><span className="absolute left-3 top-3 flex items-center gap-1 rounded-[4px] bg-black/70 px-2 py-1 text-[11px] font-bold text-white"><Sparkles size={12}/>AI 분석 완료</span></div><p className="text-[12px] text-[var(--meta)]">등록한 사진 {r.photos}장을 분석했어요</p></div>
-    <div className="space-y-1"><p className="text-[12px] font-bold text-[var(--meta)]">AI 추천 카테고리</p><p className="text-[22px] font-bold">{r.category}</p></div>
-    <section><h2 className="mb-1 text-[14px] font-bold">카테고리 선택</h2><LiveStatus state={meta}/>
-      <div className="flex h-12 items-center gap-3 border-b border-[var(--line)]"><span className="grid h-5 w-5 place-items-center rounded-full border-[1.5px] border-[var(--ink)]"><span className="h-2.5 w-2.5 rounded-full bg-[var(--ink)]"/></span><span className="flex-1 text-[14px]">{r.category}</span><span className="text-[11px] font-bold text-[var(--positive)]">AI 추천</span></div>
-      <button type="button" onClick={() => navigate(`/seller/new${suffix}${suffix ? '&' : '?'}pick=category`)} className="mt-3 flex items-center text-[13px] text-[var(--aux)]">다른 카테고리 직접 선택<ChevronRight size={15}/></button>
+  return <AiFrame footer={<div className="flex gap-2"><Button outline className="w-32 text-subhead!" onClick={() => { startAnalysis(user.id); navigate(`/seller/new/ai/analyzing${suffix}`, { replace: true }); }}>다시 분석</Button>{d.category === chosen ? <Button className="flex-1 text-subhead!" onClick={back}>등록 화면으로</Button> : <Button className="flex-1 text-subhead!" onClick={() => { patch({ category: chosen, aiCategory: chosen }); back(); }}>이 카테고리로 적용</Button>}</div>}>
+    <div className="space-y-2"><div className="relative"><ProductImage src={d.images[0]} alt="분석한 대표 사진" className="h-[240px] w-full"/><span className="absolute left-3 top-3 flex items-center gap-1 rounded-inner bg-black/70 px-2 py-1 text-footnote font-bold text-white"><Sparkles size={12}/>AI 분석 완료</span></div><p className="text-label text-meta">등록한 사진 {r.photos}장을 분석했어요</p></div>
+    <div className="space-y-1"><p className="text-label font-bold text-meta">AI 추천 카테고리</p><p className="text-heading font-bold">{r.category}</p></div>
+    <section><h2 className="mb-1 text-callout font-bold">카테고리 선택</h2><LiveStatus state={meta}/>
+      <div className="flex h-12 items-center gap-3 border-b border-line"><span className="grid h-5 w-5 place-items-center rounded-full border-[1.5px] border-ink"><span className="h-2.5 w-2.5 rounded-full bg-ink"/></span><span className="flex-1 text-callout">{r.category}</span><span className="text-footnote font-bold text-positive">AI 추천</span></div>
+      <button type="button" onClick={() => navigate(`/seller/new${suffix}${suffix ? '&' : '?'}pick=category`)} className="mt-3 flex items-center text-body text-aux">다른 카테고리 직접 선택<ChevronRight size={15}/></button>
     </section>
-    {r.questions.length > 0 && <><div className="-mx-4 h-2 bg-[var(--divider)]"/><section className="space-y-3"><h2 className="text-[16px] font-bold">구매자가 물어볼 만한 질문</h2><p className="text-[12px] text-[var(--aux)]">등록 화면의 AI 질문에서 예상 답변을 확인하거나 고치면 상품 FAQ로 구매자에게 공개돼요</p>{r.questions.map((q, i) => <div key={i} className="space-y-1 rounded-[6px] border border-[var(--line)] p-3.5"><p className="text-[14px] font-bold">{q.question}</p>{q.reason && <p className="text-[12px] text-[var(--aux)]">{q.reason}</p>}{q.suggestedAnswer && <p className="text-[12px]"><span className="font-bold">AI 예상 답변</span> {q.suggestedAnswer}</p>}</div>)}</section></>}
-    <div className="flex gap-2 rounded-[6px] bg-[var(--soft)] p-4"><Info size={15} className="mt-[2px] shrink-0 text-[var(--aux)]"/><p className="text-[12px] leading-[1.5] text-[var(--aux)]">AI 분석 결과는 판매 심사에서 한 번 더 확인해요.<br/>카테고리가 다르면 목록에서 바꿔 주세요.</p></div>
+    {r.questions.length > 0 && <><div className="-mx-4 h-2 bg-divider"/><section className="space-y-3"><h2 className="text-headline font-bold">구매자가 물어볼 만한 질문</h2><p className="text-label text-aux">등록 화면의 AI 질문에서 예상 답변을 확인하거나 고치면 상품 FAQ로 구매자에게 공개돼요</p>{r.questions.map((q, i) => <div key={i} className="space-y-1 rounded-element border border-line p-3.5"><p className="text-callout font-bold">{q.question}</p>{q.reason && <p className="text-label text-aux">{q.reason}</p>}{q.suggestedAnswer && <p className="text-label"><span className="font-bold">AI 예상 답변</span> {q.suggestedAnswer}</p>}</div>)}</section></>}
+    <div className="flex gap-2 rounded-element bg-soft p-4"><Info size={15} className="mt-0.5 shrink-0 text-aux"/><p className="text-label leading-[1.5] text-aux">AI 분석 결과는 판매 심사에서 한 번 더 확인해요.<br/>카테고리가 다르면 목록에서 바꿔 주세요.</p></div>
   </AiFrame>;
 }
 
@@ -590,13 +590,13 @@ export function AiAnalyzingPage() {
   useEffect(() => { if (d && d.ai.status !== 'analyzing') navigate(d.ai.status === 'failed' || d.ai.status === 'delayed' ? `/seller/new/ai/failed${suffix}` : `/seller/new${suffix}`, { replace: true }); }, [d?.ai.status]);
   if (!user.seller) return <Unavailable message="승인된 판매자만 상품을 등록할 수 있습니다."/>;
   if (!d) return null;
-  return <AiFrame footer={<Button outline className="w-full text-[15px]!" onClick={() => navigate(`/seller/new${suffix}`)}>기다리지 않고 등록 계속하기</Button>}>
+  return <AiFrame footer={<Button outline className="w-full text-subhead!" onClick={() => navigate(`/seller/new${suffix}`)}>기다리지 않고 등록 계속하기</Button>}>
     <Thumbs images={d.images}/>
-    <span className="grid h-11 w-11 place-items-center rounded-full bg-[var(--soft)]"><Sparkles size={18}/></span>
-    <div className="space-y-3"><h1 className="text-[24px] font-bold leading-[1.45] tracking-[-.7px]">등록한 사진 {d.images.length}장을<br/>분석하고 있어요</h1>{d.ai.retry ? <p role="status" className="text-[13px] text-[var(--aux)]">잠시 후 다시 분석해요{d.ai.retry.nextAttemptAt ? ` (다음 시도 ${kstTime(parseServerTime(d.ai.retry.nextAttemptAt)).slice(0, 5)})` : ''} · {d.ai.retry.attempts}번째 시도 중</p> : <p className="text-[13px] text-[var(--aux)]">보통 10초 안에 끝나요.</p>}</div>
-    <div className="h-1 w-full overflow-hidden rounded-full bg-[var(--line)]"><div className="h-1 w-[60%] rounded-full bg-[var(--ink)]"/></div>
-    <div className="space-y-3.5">{([['카테고리', 60], ['점검 질문', 44]] as const).map(([label, w]) => <div key={label} className="flex items-center justify-between"><span className="text-[12px] text-[var(--muted)]">{label}</span><span className="h-3 rounded-[2px] bg-[var(--soft)]" style={{ width: `${w}%` }}/></div>)}</div>
-    <div className="flex gap-2 rounded-[6px] bg-[var(--soft)] p-4"><Info size={15} className="mt-[2px] shrink-0 text-[var(--aux)]"/><p className="text-[12px] leading-[1.6] text-[var(--aux)]">분석을 기다리지 않아도 돼요. 분석이 끝나면 추천 카테고리와 점검 질문이 등록 화면에 바로 반영돼요. 직접 고른 카테고리는 바꾸지 않아요.</p></div>
+    <span className="grid h-11 w-11 place-items-center rounded-full bg-soft"><Sparkles size={18}/></span>
+    <div className="space-y-3"><h1 className="text-heading-lg font-bold leading-[1.45] tracking-[-.7px]">등록한 사진 {d.images.length}장을<br/>분석하고 있어요</h1>{d.ai.retry ? <p role="status" className="text-body text-aux">잠시 후 다시 분석해요{d.ai.retry.nextAttemptAt ? ` (다음 시도 ${kstTime(parseServerTime(d.ai.retry.nextAttemptAt)).slice(0, 5)})` : ''} · {d.ai.retry.attempts}번째 시도 중</p> : <p className="text-body text-aux">보통 10초 안에 끝나요.</p>}</div>
+    <div className="h-1 w-full overflow-hidden rounded-full bg-line"><div className="h-1 w-[60%] rounded-full bg-ink"/></div>
+    <div className="space-y-3.5">{([['카테고리', 60], ['점검 질문', 44]] as const).map(([label, w]) => <div key={label} className="flex items-center justify-between"><span className="text-label text-muted">{label}</span><span className="h-3 rounded-[2px] bg-soft" style={{ width: `${w}%` }}/></div>)}</div>
+    <div className="flex gap-2 rounded-element bg-soft p-4"><Info size={15} className="mt-0.5 shrink-0 text-aux"/><p className="text-label leading-[1.6] text-aux">분석을 기다리지 않아도 돼요. 분석이 끝나면 추천 카테고리와 점검 질문이 등록 화면에 바로 반영돼요. 직접 고른 카테고리는 바꾸지 않아요.</p></div>
   </AiFrame>;
 }
 
@@ -605,12 +605,12 @@ export function AiFailedPage() {
   if (!user.seller) return <Unavailable message="승인된 판매자만 상품을 등록할 수 있습니다."/>;
   if (!d) return null;
   const delayed = d.ai.status === 'delayed'; // 3분이 지나도 끝나지 않음 — 실패가 아니다(서버는 계속 분석한다)
-  return <AiFrame footer={<div className="flex gap-2"><Button outline className="w-[128px] text-[15px]!" onClick={() => navigate(`/seller/new${suffix}${suffix ? '&' : '?'}pick=category`, { replace: true })}>직접 입력하기</Button><Button className="flex-1 text-[15px]!" onClick={() => { startAnalysis(user.id); navigate(`/seller/new/ai/analyzing${suffix}`, { replace: true }); }}>{delayed ? '다시 확인' : '다시 분석'}</Button></div>}>
+  return <AiFrame footer={<div className="flex gap-2"><Button outline className="w-32 text-subhead!" onClick={() => navigate(`/seller/new${suffix}${suffix ? '&' : '?'}pick=category`, { replace: true })}>직접 입력하기</Button><Button className="flex-1 text-subhead!" onClick={() => { startAnalysis(user.id); navigate(`/seller/new/ai/analyzing${suffix}`, { replace: true }); }}>{delayed ? '다시 확인' : '다시 분석'}</Button></div>}>
     <Thumbs images={d.images}/>
-    <span className="grid h-11 w-11 place-items-center rounded-full bg-[var(--red-soft)]"><AlertCircle size={18} className="text-[var(--action)]"/></span>
-    {d.ai.fields && <div role="alert" className="space-y-2 rounded-[6px] bg-[var(--red-soft)] p-4"><p className="text-[13px] font-bold text-[var(--red)]">분석 요청 전에 확인할 정보가 있어요</p>{Object.entries(d.ai.fields).map(([k, v]) => <p key={k} className="text-[12px] text-[var(--red)]">{FIELD_LABELS[k] ?? k} · {v}</p>)}<Button outline className="w-full" onClick={() => navigate(`/seller/new${suffix}`, { replace: true })}>입력 정보 확인하기</Button></div>}
-    <div className="space-y-2"><h1 className="text-[24px] font-bold tracking-[-.7px]">{delayed ? '분석이 지연되고 있어요' : '사진을 분석하지 못했어요'}</h1><p className="text-[13px] text-[var(--aux)]">{delayed ? '나중에 다시 확인해 주세요. 서버는 계속 분석하고 있어요. 다시 확인해도 비용은 들지 않아요.' : d.ai.reason ? d.ai.reason : '사진이 흐리거나 상품이 잘 보이지 않으면 분석이 어려워요.'}</p></div>
-    <div className="space-y-2 rounded-[6px] bg-[var(--infobar)] p-4"><p className="text-[13px] font-bold">이렇게 하면 더 잘 분석돼요</p><p className="whitespace-pre-line text-[12px] leading-[1.7] text-[var(--aux)]">{'· 상품 전체가 보이도록 밝은 곳에서 촬영\n· 라벨·택이 보이는 사진을 함께 등록\n· 한 사진에 상품 하나만'}</p></div>
-    <div className="flex gap-2 rounded-[6px] bg-[var(--soft)] p-4"><Info size={15} className="mt-[2px] shrink-0 text-[var(--aux)]"/><p className="text-[12px] leading-[1.6] text-[var(--aux)]">AI 분석 없이 카테고리를 직접 선택해도 판매 심사를 요청할 수 있어요. 입력한 내용은 그대로 저장돼 있어요.</p></div>
+    <span className="grid h-11 w-11 place-items-center rounded-full bg-red-soft"><AlertCircle size={18} className="text-action"/></span>
+    {d.ai.fields && <div role="alert" className="space-y-2 rounded-element bg-red-soft p-4"><p className="text-body font-bold text-red">분석 요청 전에 확인할 정보가 있어요</p>{Object.entries(d.ai.fields).map(([k, v]) => <p key={k} className="text-label text-red">{FIELD_LABELS[k] ?? k} · {v}</p>)}<Button outline className="w-full" onClick={() => navigate(`/seller/new${suffix}`, { replace: true })}>입력 정보 확인하기</Button></div>}
+    <div className="space-y-2"><h1 className="text-heading-lg font-bold tracking-[-.7px]">{delayed ? '분석이 지연되고 있어요' : '사진을 분석하지 못했어요'}</h1><p className="text-body text-aux">{delayed ? '나중에 다시 확인해 주세요. 서버는 계속 분석하고 있어요. 다시 확인해도 비용은 들지 않아요.' : d.ai.reason ? d.ai.reason : '사진이 흐리거나 상품이 잘 보이지 않으면 분석이 어려워요.'}</p></div>
+    <div className="space-y-2 rounded-element bg-infobar p-4"><p className="text-body font-bold">이렇게 하면 더 잘 분석돼요</p><p className="whitespace-pre-line text-label leading-[1.7] text-aux">{'· 상품 전체가 보이도록 밝은 곳에서 촬영\n· 라벨·택이 보이는 사진을 함께 등록\n· 한 사진에 상품 하나만'}</p></div>
+    <div className="flex gap-2 rounded-element bg-soft p-4"><Info size={15} className="mt-0.5 shrink-0 text-aux"/><p className="text-label leading-[1.6] text-aux">AI 분석 없이 카테고리를 직접 선택해도 판매 심사를 요청할 수 있어요. 입력한 내용은 그대로 저장돼 있어요.</p></div>
   </AiFrame>;
 }

@@ -70,35 +70,35 @@ export function AddressFormPage() {
     } catch (e) { setError(errorMessage(e)); } finally { setBusy(false); }
   }
   const input = (key: keyof AddressBody, label: string, placeholder: string, extra: Record<string, unknown> = {}) => <input aria-label={label} className="field-line" value={value[key]} placeholder={placeholder} onChange={e => set({ [key]: e.target.value } as Partial<FormValue>)} {...extra}/>;
-  const labelRow = (text: string, required = false) => <p className="mb-1 text-[13px] font-bold">{text}{required && <span className="ml-1.5 text-[11px] font-normal text-[var(--meta)]">· 필수</span>}</p>;
+  const labelRow = (text: string, required = false) => <p className="mb-1 text-body font-bold">{text}{required && <span className="ml-1.5 text-footnote font-normal text-meta">· 필수</span>}</p>;
 
   return <div className="flex min-h-[calc(100dvh-44px)] flex-col">
     <Header title={isNew ? '새 배송지 추가' : '배송지 수정'} bare/>
-    {(location.state as { reason?: string } | null)?.reason === 'checkout' && <p className="mb-4 rounded-[6px] bg-[var(--blue-soft)] p-3 text-[12px] leading-relaxed">구매하려면 배송지가 필요해요. 배송지를 저장하면 고른 수량으로 바로 재고 확보를 이어서 진행해요.</p>}
-    {ready && loadError && <div className="space-y-2 py-4"><ErrorBox message={loadError}/><button type="button" onClick={() => navigate(0)} className="h-11 w-full rounded-[6px] border border-[var(--border)] text-[14px] font-bold">다시 시도</button></div>}
-    {!ready && <p role="status" className="muted py-8 text-center text-[12px]">불러오는 중이에요…</p>}
+    {(location.state as { reason?: string } | null)?.reason === 'checkout' && <p className="mb-4 rounded-element bg-blue-soft p-3 text-label leading-relaxed">구매하려면 배송지가 필요해요. 배송지를 저장하면 고른 수량으로 바로 재고 확보를 이어서 진행해요.</p>}
+    {ready && loadError && <div className="space-y-2 py-4"><ErrorBox message={loadError}/><button type="button" onClick={() => navigate(0)} className="h-11 w-full rounded-element border border-border text-callout font-bold">다시 시도</button></div>}
+    {!ready && <p role="status" className="muted py-8 text-center text-label">불러오는 중이에요…</p>}
     {ready && !loadError && <form className="flex flex-1 flex-col" onSubmit={e => { e.preventDefault(); void submit(); }}>
-      <div className="space-y-[26px]">
+      <div className="space-y-6.5">
         <div>{labelRow('배송지명')}{input('label', '배송지명', '예: 집, 회사')}</div>
         <div>{labelRow('받는 분', true)}{input('recipientName', '받는 분', '이름을 입력해 주세요')}</div>
         <div>{labelRow('연락처', true)}{input('recipientPhone', '연락처', "'-' 없이 숫자만 입력", { type: 'tel', inputMode: 'numeric' })}</div>
         <div>{labelRow('주소', true)}
-          <div className="flex items-center gap-3">{input('postalCode', '우편번호', '우편번호', { readOnly: true, onClick: openSearch })}<button type="button" onClick={openSearch} className="h-10 shrink-0 rounded-[6px] border border-[var(--border)] px-3.5 text-[12px] font-bold">주소 검색</button></div>
-          <input aria-label="기본 주소" className="field-line text-[var(--aux)]!" value={value.roadAddress} placeholder="기본 주소" readOnly onClick={openSearch}/>
-          {jibun && jibun !== value.roadAddress && <p className="mt-1 text-[12px] text-[var(--meta)]">지번 {jibun}</p>}
+          <div className="flex items-center gap-3">{input('postalCode', '우편번호', '우편번호', { readOnly: true, onClick: openSearch })}<button type="button" onClick={openSearch} className="h-10 shrink-0 rounded-element border border-border px-3.5 text-label font-bold">주소 검색</button></div>
+          <input aria-label="기본 주소" className="field-line text-aux!" value={value.roadAddress} placeholder="기본 주소" readOnly onClick={openSearch}/>
+          {jibun && jibun !== value.roadAddress && <p className="mt-1 text-label text-meta">지번 {jibun}</p>}
           {input('detailAddress', '상세 주소', '상세 주소를 입력해 주세요', { ref: detailRef })}
         </div>
         <div>{labelRow('배송 요청사항')}
-          <label className="relative block"><select aria-label="배송 요청사항" className={`field-line appearance-none pr-8 ${value.deliveryMemo ? '' : 'text-[var(--placeholder)]'}`} value={value.deliveryMemo} onChange={e => set({ deliveryMemo: e.target.value })}><option value="">요청사항을 선택해 주세요</option>{DELIVERY_MEMOS.map(m => <option key={m} value={m}>{m}</option>)}{value.deliveryMemo && !DELIVERY_MEMOS.includes(value.deliveryMemo) && <option value={value.deliveryMemo}>{value.deliveryMemo}</option>}</select><ChevronDown size={18} className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 text-[var(--muted)]"/></label>
+          <label className="relative block"><select aria-label="배송 요청사항" className={`field-line appearance-none pr-8 ${value.deliveryMemo ? '' : 'text-placeholder'}`} value={value.deliveryMemo} onChange={e => set({ deliveryMemo: e.target.value })}><option value="">요청사항을 선택해 주세요</option>{DELIVERY_MEMOS.map(m => <option key={m} value={m}>{m}</option>)}{value.deliveryMemo && !DELIVERY_MEMOS.includes(value.deliveryMemo) && <option value={value.deliveryMemo}>{value.deliveryMemo}</option>}</select><ChevronDown size={18} className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 text-muted"/></label>
         </div>
-        <div className="flex items-center justify-between gap-4 rounded-[6px] bg-[var(--infobar)] px-4 py-4">
-          <div><p className="text-[14px] font-bold">기본 배송지로 설정</p><p className="mt-1 text-[12px] text-[var(--aux)]">주문 시 이 배송지가 자동으로 선택돼요</p></div>
+        <div className="flex items-center justify-between gap-4 rounded-element bg-infobar px-4 py-4">
+          <div><p className="text-callout font-bold">기본 배송지로 설정</p><p className="mt-1 text-label text-aux">주문 시 이 배송지가 자동으로 선택돼요</p></div>
           <Toggle label="기본 배송지로 설정" checked={value.makeDefault} onChange={makeDefault => set({ makeDefault })}/>
         </div>
-        {isNew && <p className="text-[12px] text-[var(--meta)]">저장하면 이 화면을 연 곳(결제 또는 배송지 관리)으로 돌아가요.</p>}
+        {isNew && <p className="text-label text-meta">저장하면 이 화면을 연 곳(결제 또는 배송지 관리)으로 돌아가요.</p>}
         <ErrorBox message={error}/>
       </div>
-      <div className="mt-auto pt-8"><button type="submit" disabled={busy} className={`flex h-12 w-full items-center justify-center rounded-[6px] text-[15px] font-bold ${valid ? 'bg-[var(--ink)] text-white' : 'bg-[var(--soft-btn)] text-[var(--placeholder)]'}`}>{busy ? '저장 중…' : '저장하기'}</button></div>
+      <div className="mt-auto pt-8"><button type="submit" disabled={busy} className={`flex h-12 w-full items-center justify-center rounded-element text-subhead font-bold ${valid ? 'bg-ink text-white' : 'bg-soft-btn text-placeholder'}`}>{busy ? '저장 중…' : '저장하기'}</button></div>
     </form>}
   </div>;
 }
@@ -137,25 +137,25 @@ export function AddressSearchPage() {
     {/* 검색 뒤에는 카카오 검색 결과 창의 검색칸을 쓴다(검색칸이 두 개 겹치지 않게). 결과가 없을 때만 우리 검색칸을 다시 보여 준다 */}
     {(!searched || empty) && <form onSubmit={e => { e.preventDefault(); run(query); }}>
       {searched
-        ? <label className="flex h-12 items-center gap-2.5 rounded-[6px] bg-[var(--soft)] px-4"><Search size={18} className="shrink-0 text-[var(--meta)]"/><input aria-label="주소 검색" value={query} onChange={e => setQuery(e.target.value)} className="min-w-0 flex-1 bg-transparent text-[15px] outline-none"/><button type="button" aria-label="검색어 지우기" onClick={() => { setQuery(''); setSearched(''); setCount(null); }}><X size={16} className="text-[var(--meta)]"/></button></label>
-        : <label className="flex h-12 items-center gap-2.5 rounded-[6px] border-[1.5px] border-[var(--ink)] px-3.5"><Search size={18} className="shrink-0"/><input aria-label="주소 검색" value={query} onChange={e => setQuery(e.target.value)} placeholder="도로명, 건물명 또는 지번으로 검색" className="min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-[var(--placeholder)]" autoFocus/></label>}
+        ? <label className="flex h-12 items-center gap-2.5 rounded-element bg-soft px-4"><Search size={18} className="shrink-0 text-meta"/><input aria-label="주소 검색" value={query} onChange={e => setQuery(e.target.value)} className="min-w-0 flex-1 bg-transparent text-subhead outline-none"/><button type="button" aria-label="검색어 지우기" onClick={() => { setQuery(''); setSearched(''); setCount(null); }}><X size={16} className="text-meta"/></button></label>
+        : <label className="flex h-12 items-center gap-2.5 rounded-element border-[1.5px] border-ink px-3.5"><Search size={18} className="shrink-0"/><input aria-label="주소 검색" value={query} onChange={e => setQuery(e.target.value)} placeholder="도로명, 건물명 또는 지번으로 검색" className="min-w-0 flex-1 bg-transparent text-subhead outline-none placeholder:text-placeholder" autoFocus/></label>}
     </form>}
-    {!searched && <button type="button" disabled={locating} onClick={async () => { setLocating(true); setGeoError(''); try { sessionStorage.setItem(PICK_KEY, JSON.stringify(await currentAddress())); navigate(returnTo, { replace: true }); } catch (e) { setGeoError((e as Error).message); } finally { setLocating(false); } }} className="flex h-11 w-full items-center justify-center gap-2 rounded-[6px] border border-[var(--border)] text-[14px] font-bold disabled:opacity-60"><LocateFixed size={16}/>{locating ? '현재 위치를 찾는 중…' : '현재 위치로 주소 찾기'}</button>}
+    {!searched && <button type="button" disabled={locating} onClick={async () => { setLocating(true); setGeoError(''); try { sessionStorage.setItem(PICK_KEY, JSON.stringify(await currentAddress())); navigate(returnTo, { replace: true }); } catch (e) { setGeoError((e as Error).message); } finally { setLocating(false); } }} className="flex h-11 w-full items-center justify-center gap-2 rounded-element border border-border text-callout font-bold disabled:opacity-60"><LocateFixed size={16}/>{locating ? '현재 위치를 찾는 중…' : '현재 위치로 주소 찾기'}</button>}
     {!searched && <ErrorBox message={geoError}/>}
     {searched && <div ref={frame} aria-label="주소 검색 결과" className={empty ? 'hidden' : 'h-[calc(100dvh-150px)] w-full'}/>}
     {empty && <div className="space-y-8 pt-8">
-      <div className="flex flex-col items-center text-center"><span className="grid h-11 w-11 place-items-center rounded-full bg-[var(--soft)]"><MapPin size={20} className="text-[var(--meta)]"/></span><p className="mt-4 text-[15px] font-bold">'{searched}' 검색 결과가 없어요</p><p className="mt-2 px-2 text-[13px] leading-relaxed text-[var(--aux)]">결과가 없으면 띄어쓰기를 바꾸거나 건물번호를 빼고 검색해 보세요.</p></div>
-      <div className="space-y-3 rounded-[6px] bg-[var(--infobar)] p-4"><p className="text-[13px] font-bold">이렇게 검색해 보세요</p>{TIPS.map(([label, example]) => <div key={label} className="flex items-center justify-between text-[12px]"><span className="text-[var(--aux)]">{label}</span><button type="button" onClick={() => run(example)}>{example}</button></div>)}</div>
+      <div className="flex flex-col items-center text-center"><span className="grid h-11 w-11 place-items-center rounded-full bg-soft"><MapPin size={20} className="text-meta"/></span><p className="mt-4 text-subhead font-bold">'{searched}' 검색 결과가 없어요</p><p className="mt-2 px-2 text-body leading-relaxed text-aux">결과가 없으면 띄어쓰기를 바꾸거나 건물번호를 빼고 검색해 보세요.</p></div>
+      <div className="space-y-3 rounded-element bg-infobar p-4"><p className="text-body font-bold">이렇게 검색해 보세요</p>{TIPS.map(([label, example]) => <div key={label} className="flex items-center justify-between text-label"><span className="text-aux">{label}</span><button type="button" onClick={() => run(example)}>{example}</button></div>)}</div>
     </div>}
     {!searched && <>
-      <div className="-mx-4 h-2 bg-[var(--divider)]"/>
+      <div className="-mx-4 h-2 bg-divider"/>
       <section className="space-y-4 pt-2">
-        <p className="text-[15px] font-bold">이렇게 검색해 보세요</p>
-        {TIPS.map(([label, a, b], i) => <div key={label} className={`space-y-2.5 pb-4 ${i < TIPS.length - 1 ? 'border-b border-[var(--divider)]' : ''}`}>
-          <p className="text-[14px] font-bold">{label}</p>
-          <div className="flex items-center gap-2"><span className="text-[12px] text-[var(--meta)]">예)</span>{[a, b].map(x => <button type="button" key={x} onClick={() => run(x)} className="rounded-[4px] bg-[var(--soft)] px-2.5 py-1 text-[12px] text-[var(--aux)]">{x}</button>)}</div>
+        <p className="text-subhead font-bold">이렇게 검색해 보세요</p>
+        {TIPS.map(([label, a, b], i) => <div key={label} className={`space-y-2.5 pb-4 ${i < TIPS.length - 1 ? 'border-b border-divider' : ''}`}>
+          <p className="text-callout font-bold">{label}</p>
+          <div className="flex items-center gap-2"><span className="text-label text-meta">예)</span>{[a, b].map(x => <button type="button" key={x} onClick={() => run(x)} className="rounded-inner bg-soft px-2.5 py-1 text-label text-aux">{x}</button>)}</div>
         </div>)}
-        <p className="flex items-start gap-1.5 text-[12px] text-[var(--meta)]"><Info size={14} className="mt-[2px] shrink-0"/>결과가 없으면 띄어쓰기를 바꾸거나 건물번호를 빼고 검색해 보세요.</p>
+        <p className="flex items-start gap-1.5 text-label text-meta"><Info size={14} className="mt-0.5 shrink-0"/>결과가 없으면 띄어쓰기를 바꾸거나 건물번호를 빼고 검색해 보세요.</p>
       </section>
     </>}
   </div>;

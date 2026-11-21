@@ -20,10 +20,10 @@ export function SalesRestrictionBanner() {
   const r = useApi(signal => (USE_MOCK ? Promise.resolve(null) : fetchReviewStatus(signal)), []);
   if (!r.data?.salesRestricted) return null;
   const s = reviewSummary(r.data);
-  return <Link to="/seller/review" role="alert" className="mb-4 block space-y-1 rounded-[6px] bg-[var(--red-soft)] p-4">
-    <p className="text-[13px] font-bold text-[var(--red)]">판매가 제한돼 있어요 · {s.title}</p>
-    <p className="text-[12px] leading-relaxed text-[var(--red)]">{s.body}</p>
-    <p className="text-[12px] font-bold text-[var(--red)] underline">재심사 상태 보기</p>
+  return <Link to="/seller/review" role="alert" className="mb-4 block space-y-1 rounded-element bg-red-soft p-4">
+    <p className="text-body font-bold text-red">판매가 제한돼 있어요 · {s.title}</p>
+    <p className="text-label leading-relaxed text-red">{s.body}</p>
+    <p className="text-label font-bold text-red underline">재심사 상태 보기</p>
   </Link>;
 }
 
@@ -43,23 +43,23 @@ export function SellerReviewPage() {
     catch (e) { setConfirm(false); setError(errorMessage(e)); }
     finally { setBusy(false); }
   }
-  const tone = s.tone === 'red' ? 'bg-[var(--red-soft)] text-[var(--red)]' : s.tone === 'green' ? 'bg-[var(--green-soft)] text-[var(--green)]' : 'bg-[var(--blue-soft)]';
+  const tone = s.tone === 'red' ? 'bg-red-soft text-red' : s.tone === 'green' ? 'bg-green-soft text-green' : 'bg-blue-soft';
   return <div className="space-y-5">
     <Header title="사업자등록증 재심사"/>
-    <section role="status" aria-label="재심사 상태" className={`space-y-1 rounded-[6px] p-4 ${tone}`}>
-      <p className="text-[11px] font-bold">{status.salesRestricted ? '판매 제한 중' : '판매 가능'}</p>
-      <p className="text-[15px] font-bold">{s.title}</p>
-      <p className="whitespace-pre-line text-[12px] leading-relaxed">{s.body}</p>
+    <section role="status" aria-label="재심사 상태" className={`space-y-1 rounded-element p-4 ${tone}`}>
+      <p className="text-footnote font-bold">{status.salesRestricted ? '판매 제한 중' : '판매 가능'}</p>
+      <p className="text-subhead font-bold">{s.title}</p>
+      <p className="whitespace-pre-line text-label leading-relaxed">{s.body}</p>
     </section>
     {a && <section className="space-y-2">
-      <h2 className="text-[15px] font-bold">최근 심사</h2>
-      <div className="divider flex items-center justify-between py-3 text-[12px]"><span>{a.certificateRecheck ? '사업자등록증 재심사' : '입점 심사'}</span><span className="font-bold">{STATUS_LABEL[a.status] ?? a.status}</span></div>
-      <div className="divider flex items-center justify-between py-3 text-[12px]"><span>제출</span><span>{dateTime(Date.parse(a.submittedAt))}</span></div>
-      {a.reviewedAt && <div className="divider flex items-center justify-between py-3 text-[12px]"><span>심사 완료</span><span>{dateTime(Date.parse(a.reviewedAt))}</span></div>}
+      <h2 className="text-subhead font-bold">최근 심사</h2>
+      <div className="divider flex items-center justify-between py-3 text-label"><span>{a.certificateRecheck ? '사업자등록증 재심사' : '입점 심사'}</span><span className="font-bold">{STATUS_LABEL[a.status] ?? a.status}</span></div>
+      <div className="divider flex items-center justify-between py-3 text-label"><span>제출</span><span>{dateTime(Date.parse(a.submittedAt))}</span></div>
+      {a.reviewedAt && <div className="divider flex items-center justify-between py-3 text-label"><span>심사 완료</span><span>{dateTime(Date.parse(a.reviewedAt))}</span></div>}
     </section>}
     {a?.status === 'CHANGES_REQUESTED' && <Button className="w-full" to="/apply">보완 요청 확인하기</Button>}
     {s.canSubmit && <section className="space-y-3">
-      <h2 className="text-[15px] font-bold">사업자등록증 다시 제출</h2>
+      <h2 className="text-subhead font-bold">사업자등록증 다시 제출</h2>
       <PdfField value={doc} onChange={file => { setError(''); setDoc(file); }}/>
       <Note title="제출하면 바로 판매가 제한돼요">재심사가 승인될 때까지 새 상품 등록과 판매 업무를 할 수 없어요. 이미 받은 주문의 배송과 문의 답변은 계속할 수 있어요.</Note>
       <ErrorBox message={error}/>
@@ -67,11 +67,11 @@ export function SellerReviewPage() {
     </section>}
     {!s.canSubmit && <ErrorBox message={error}/>}
     {confirm && <div className="fixed inset-0 z-50 flex items-end bg-black/60" role="dialog" aria-label="재심사 신청 확인">
-      <div className="mx-auto w-full max-w-[390px] rounded-t-[16px] bg-white px-4 pb-8 pt-2">
-        <div className="mx-auto mb-4 h-1 w-8 rounded-full bg-[#DEDEDE]"/>
-        <h2 className="mb-1 text-[18px] font-bold">재심사를 신청할까요?</h2>
-        <p className="mb-5 text-[13px] text-[#7B7B7B]">신청하면 승인될 때까지 새 판매가 제한돼요.</p>
-        <div className="flex gap-2"><Button outline className="w-[86px]" disabled={busy} onClick={() => setConfirm(false)}>취소</Button><Button className="flex-1" disabled={busy} onClick={submit}>{busy ? '신청 중…' : '신청하기'}</Button></div>
+      <div className="mx-auto w-full max-w-[390px] rounded-t-container bg-white px-4 pb-8 pt-2">
+        <div className="mx-auto mb-4 h-1 w-8 rounded-full bg-border"/>
+        <h2 className="mb-1 text-title font-bold">재심사를 신청할까요?</h2>
+        <p className="mb-5 text-body text-aux">신청하면 승인될 때까지 새 판매가 제한돼요.</p>
+        <div className="flex gap-2"><Button outline className="w-21.5" disabled={busy} onClick={() => setConfirm(false)}>취소</Button><Button className="flex-1" disabled={busy} onClick={submit}>{busy ? '신청 중…' : '신청하기'}</Button></div>
       </div>
     </div>}
   </div>;

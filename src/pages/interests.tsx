@@ -36,20 +36,20 @@ export function InterestsPage() {
   return <div className="space-y-6">
     <Header title="관심사와 맞춤 추천" subtitle="관심 카테고리를 고르면 맞춤 추천에 반영돼요."/>
     <section className="space-y-3" aria-label="관심 카테고리">
-      <div className="flex items-center justify-between"><h2 className="text-[15px] font-bold">관심 카테고리</h2><span className="muted text-[12px]">{picked.length} / {MAX_INTERESTS}</span></div>
+      <div className="flex items-center justify-between"><h2 className="text-subhead font-bold">관심 카테고리</h2><span className="muted text-label">{picked.length} / {MAX_INTERESTS}</span></div>
       {options.data && mine.data ? <div className="flex flex-wrap gap-2">{options.data.categories.map(c => <Chip key={c.code} selected={picked.includes(c.code)} onClick={() => toggle(c.code)}>{c.label}</Chip>)}</div>
         : <LiveStatus state={options.error ? options : mine}/>}
-      {options.data && !options.data.categories.length && <p className="muted text-[12px]">고를 수 있는 카테고리가 아직 없어요.</p>}
+      {options.data && !options.data.categories.length && <p className="muted text-label">고를 수 있는 카테고리가 아직 없어요.</p>}
       <ErrorBox message={error}/>
       <Button className="w-full" disabled={busy || !dirty || !options.data || !mine.data} onClick={save}>{busy ? '저장 중…' : '관심 카테고리 저장'}</Button>
     </section>
     <section className="space-y-3" aria-label="맞춤 추천 프로필">
-      <h2 className="text-[15px] font-bold">내 맞춤 추천 프로필</h2>
-      {!view ? <LiveStatus state={profile}/> : <div role="status" className={`space-y-1 rounded-[6px] p-4 ${view.kind === 'ready' ? 'bg-[var(--green-soft)]' : 'bg-[var(--soft)]'}`}>
-        {view.kind === 'ready' && <p className="text-[11px] font-bold text-[var(--green)]">가장 관심 있는 카테고리</p>}
-        <p className="text-[15px] font-bold">{view.title}</p>
-        <p className="muted text-[12px] leading-relaxed">{view.body}</p>
-        {view.kind === 'ready' && profile.data?.profileAsOf && <p className="muted text-[11px]">{kstDay(Date.parse(profile.data.profileAsOf))} 집계 기준</p>}
+      <h2 className="text-subhead font-bold">내 맞춤 추천 프로필</h2>
+      {!view ? <LiveStatus state={profile}/> : <div role="status" className={`space-y-1 rounded-element p-4 ${view.kind === 'ready' ? 'bg-green-soft' : 'bg-soft'}`}>
+        {view.kind === 'ready' && <p className="text-footnote font-bold text-green">가장 관심 있는 카테고리</p>}
+        <p className="text-subhead font-bold">{view.title}</p>
+        <p className="muted text-label leading-relaxed">{view.body}</p>
+        {view.kind === 'ready' && profile.data?.profileAsOf && <p className="muted text-footnote">{kstDay(Date.parse(profile.data.profileAsOf))} 집계 기준</p>}
       </div>}
       {view?.kind === 'off' && <Button outline className="w-full" to={SETTINGS_HREF('/my/interests')}>알림 설정에서 맞춤 상품 알림 켜기</Button>}
     </section>
