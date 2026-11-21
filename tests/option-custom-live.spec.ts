@@ -53,7 +53,7 @@ test('직접 정한 옵션 이름 세 단계를 서버 옵션 저장 요청에 �
   }, { px: PIXEL, start: '2099-01-01T12:00' });
   await page.reload();
   await expect(page.getByLabel('상품명')).toHaveValue('울 니트');
-  await page.goto('/#/seller/new?step=3'); // 옵션은 3단계
+  await page.goto('/#/seller/new?step=2'); // 옵션은 2단계
   await expect(page.getByRole('button', { name: '색상', exact: true })).toHaveCount(0);
   await addOption(page, '컬러'); await addValue(page, '컬러', '블랙'); await addValue(page, '컬러', '화이트');
   await addOption(page, '사이즈'); await addValue(page, '사이즈', 'M');
@@ -73,7 +73,7 @@ test('반려된 예전 색상 x 사이즈 상품을 열면 같은 이름과 수�
   const sent = await setup(page, { status: 'REJECTED',
     optionDimensions: [{ name: '색상', values: ['면/마'] }, { name: '사이즈', values: ['S', 'M'] }],
     options: [{ id: 'o1', label: '면\\/마 / S', initialQuantity: 3, reservedQuantity: 0, confirmedQuantity: 0 }, { id: 'o2', label: '면\\/마 / M', initialQuantity: 5, reservedQuantity: 0, confirmedQuantity: 0 }] });
-  await page.goto('/#/seller/new?edit=p1&step=3');
+  await page.goto('/#/seller/new?edit=p1&step=2');
   await expect(page.getByRole('group', { name: '옵션 1단계 색상', exact: true })).toBeVisible();
   await expect(page.getByRole('group', { name: '옵션 2단계 사이즈', exact: true })).toBeVisible();
   await expect(qty(page, '면/마 / S')).toHaveValue('3'); await expect(qty(page, '면/마 / M')).toHaveValue('5');
@@ -95,10 +95,10 @@ test('판매 등록 5단계: 심사 요청 때 서버가 칸 오류를 주면 �
     localStorage.setItem(key, JSON.stringify(s));
   }, { px: PIXEL, start: '2099-01-01T12:00' });
   await page.reload();
-  await page.goto('/#/seller/new?step=3'); await page.getByLabel('기본 수량 증가').click(); await page.getByLabel('기본 수량 증가').click();
+  await page.goto('/#/seller/new?step=2'); await page.getByLabel('기본 수량 증가').click(); await page.getByLabel('기본 수량 증가').click();
   await page.goto('/#/seller/new?step=5');
   await page.getByRole('button', { name: '판매 심사 요청하기' }).click();
-  await expect(page).toHaveURL(/step=3/);
-  await expect(page.getByRole('group', { name: /판매 등록 3\/5단계/ })).toBeVisible();
+  await expect(page).toHaveURL(/step=2/);
+  await expect(page.getByRole('group', { name: /판매 등록 2\/5단계/ })).toBeVisible();
   await expect(page.locator('[data-field="price"]').getByRole('alert')).toHaveText('판매가는 타 플랫폼 판매가보다 낮아야 해요.');
 });

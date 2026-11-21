@@ -70,7 +70,8 @@ export type AiStatus = 'before' | 'analyzing' | 'recommended' | 'uncertain' | 'f
 export interface Draft {
   /** 승인 상품 수정: 편집을 시작할 때의 상품 version. 수정 심사 제출의 expectedVersion으로 보내, 그사이 바뀐 상품을 덮어쓰지 않게 한다 */ editingVersion?: number;
   editingId?: string; step: number;
-  /** 판매 등록 단계 화면(1~5)에서 마지막으로 본 단계. 다시 열면 이 단계부터 이어 쓴다 */ wizardStep?: number; name: string; brand: string; description: string; images: string[];
+  /** 판매 등록 단계 화면(1~5)에서 마지막으로 본 단계. 다시 열면 이 단계부터 이어 쓴다 */ wizardStep?: number;
+  /** wizardStep을 저장한 단계 순서 판(없으면 1판). 순서가 바뀌면 옛 단계 번호를 바꿔 연다 */ wizardOrder?: number; name: string; brand: string; description: string; images: string[];
   category: string; originalUrl: string; extras: Extra[]; reason: string; dimensions: Dimension[];
   noOptions: boolean; options: Option[]; price: number; shipping: number; dispatchDays: number;
   maxPerAccount: number; startsAt: string; faqs: Faq[];
