@@ -57,7 +57,7 @@ export function SellerReviewPage() {
       <div className="divider flex items-center justify-between py-3 text-[12px]"><span>제출</span><span>{dateTime(Date.parse(a.submittedAt))}</span></div>
       {a.reviewedAt && <div className="divider flex items-center justify-between py-3 text-[12px]"><span>심사 완료</span><span>{dateTime(Date.parse(a.reviewedAt))}</span></div>}
     </section>}
-    {a?.status === 'CHANGES_REQUESTED' && <Link className="btn w-full" to="/apply">보완 요청 확인하기</Link>}
+    {a?.status === 'CHANGES_REQUESTED' && <Button className="w-full" to="/apply">보완 요청 확인하기</Button>}
     {s.canSubmit && <section className="space-y-3">
       <h2 className="text-[15px] font-bold">사업자등록증 다시 제출</h2>
       <PdfField value={doc} onChange={file => { setError(''); setDoc(file); }}/>

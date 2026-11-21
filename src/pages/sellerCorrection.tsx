@@ -4,7 +4,7 @@
  */
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { Application, DocumentFile } from '../domain';
 import type { CorrectionField } from '../api';
 import { FIELD_LABEL, errorMessage, resubmitApplication } from '../api';
@@ -102,7 +102,7 @@ export function CorrectionScreen({ app, onSubmitted, onReapply }: { app: Applica
       <div><h1 className="text-[22px] font-bold leading-[1.5] tracking-[-1px]">{expired ? <>보완 기한이 지나<br/>신청이 취소됐어요</> : <>입점 심사를<br/>통과하지 못했어요</>}</h1>
         <p className="muted mt-2 text-[12px] leading-relaxed">{expired ? '처음부터 다시 신청하면 새로 심사해 드려요.' : '사유를 확인하고 내용을 고쳐 새로 신청해 주세요.'}</p></div>
       {reasons.length > 0 && <section className="space-y-2">{reasons.map((r, i) => <div key={i} className="rounded-[4px] border border-[var(--line)] p-4"><p className="text-[13px] font-bold">{r.field}</p><p className="mt-1 whitespace-pre-line text-[12px] leading-relaxed text-[var(--red)]">{r.reason}</p></div>)}</section>}
-      <div className="flex gap-2"><Link className="btn btn-outline flex-1" to="/support">고객센터 문의</Link><Button className="flex-1" onClick={onReapply}>다시 신청하기</Button></div>
+      <div className="flex gap-2"><Button outline className="flex-1" to="/support">고객센터 문의</Button><Button className="flex-1" onClick={onReapply}>다시 신청하기</Button></div>
     </div>;
   }
   if (!detail) return <div className="space-y-5">
@@ -118,7 +118,7 @@ export function CorrectionScreen({ app, onSubmitted, onReapply }: { app: Applica
       {CORRECTION_FIELDS.map(c => <div key={c} className="divider flex items-center justify-between py-3"><span className="text-[12px]">{FIELD_LABEL[c]}</span><span className={`text-[11px] font-semibold ${codes.includes(c) ? 'text-[var(--red)]' : 'text-[var(--green)]'}`}>{codes.includes(c) ? '보완 필요' : '확인 완료'}</span></div>)}
     </section>
     <Note title="기한 안에 보완하지 않으면 신청이 취소돼요.">취소되면 처음부터 다시 신청해야 해요.</Note>
-    <div className="flex gap-2"><Link className="btn btn-outline flex-1" to="/support">고객센터 문의</Link><Button className="flex-1" onClick={() => setDetail(true)}>사유 확인하기</Button></div>
+    <div className="flex gap-2"><Button outline className="flex-1" to="/support">고객센터 문의</Button><Button className="flex-1" onClick={() => setDetail(true)}>사유 확인하기</Button></div>
   </div>;
   return <div className="space-y-5">
     {steps}

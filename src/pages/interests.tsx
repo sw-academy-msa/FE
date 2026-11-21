@@ -51,7 +51,7 @@ export function InterestsPage() {
         <p className="muted text-[12px] leading-relaxed">{view.body}</p>
         {view.kind === 'ready' && profile.data?.profileAsOf && <p className="muted text-[11px]">{kstDay(Date.parse(profile.data.profileAsOf))} 집계 기준</p>}
       </div>}
-      {view?.kind === 'off' && <Link className="btn btn-outline w-full" to={SETTINGS_HREF('/my/interests')}>알림 설정에서 맞춤 상품 알림 켜기</Link>}
+      {view?.kind === 'off' && <Button outline className="w-full" to={SETTINGS_HREF('/my/interests')}>알림 설정에서 맞춤 상품 알림 켜기</Button>}
     </section>
   </div>;
 }

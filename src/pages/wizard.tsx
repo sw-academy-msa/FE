@@ -187,7 +187,7 @@ export function WizardPage() {
   const editing = editId ? s.products.find(p => p.id === editId && (!USE_MOCK || p.sellerId === user.id)) : undefined;
   // 실제 모드는 서버 편집 원본(status 포함)을 받기 전엔 판단하지 않는다(목록·알림에서 온 status 없는 상품으로 잘못 막던 문제)
   if (editId && !USE_MOCK && (live.loading || live.error || !editing?.reviewStatus)) return <LiveStatus state={live}/>;
-  if (editId && (!editing || !canEdit(editing, now))) return <Empty title={editing ? editBlocker(editing, now)! : '상품을 찾을 수 없어요'}><Link to="/seller/products" className="btn">상품 관리로</Link></Empty>;
+  if (editId && (!editing || !canEdit(editing, now))) return <Empty title={editing ? editBlocker(editing, now)! : '상품을 찾을 수 없어요'}><Button to="/seller/products">상품 관리로</Button></Empty>;
   if (!d || !(d.optionDims || d.axes) || (editId && d.editingId !== editId)) return <LiveStatus state={live}/>;
   const { dims, stock } = optionModel(d), combos = optionCombos(dims);
   // 승인 상품 수정 심사: 설명·판매가·배송비·판매 시작·출고지·반품지만 바꾼다(REVISION_FIELDS). 상품명·사진은 읽기 전용, 나머지 칸은 숨긴다
@@ -446,7 +446,7 @@ export function WizardPage() {
         {!dims.length ? qtyRow('기본 수량', comboKey([]), true) : combos.length ? combos.map((vals, k) => qtyRow(comboLabel(vals), comboKey(vals), k === combos.length - 1)) : <p className="py-4 text-[13px] text-[var(--meta)]">옵션 값을 추가하면 조합별 수량을 넣을 수 있어요</p>}
       </div>
       <div className="flex items-center justify-between gap-3 rounded-[6px] bg-[var(--soft)] px-4 py-3.5"><div className="min-w-0"><p className="text-[13px] font-bold">총 한정 수량</p>{dims.length >= 2 && dims[0].values.length > 0 && <p className="mt-0.5 break-all text-[12px] text-[var(--meta)]">{dims[0].values.map(v => `${v} ${firstTotal(v)}`).join(' · ')}</p>}</div><p className="shrink-0 text-[18px] font-bold">{total}개</p></div>
-      {dropDim !== null && <Modal title={dropDim === 'all' ? '옵션을 모두 지울까요?' : `'${dims[dropDim]?.name}' 옵션을 지울까요?`} onClose={() => setDropDim(null)}><div className="space-y-4"><p className="text-[13px] text-[var(--aux)]">입력한 옵션 값과 한정 수량도 함께 지워져요.</p><div className="flex gap-2"><Button outline className="flex-1" onClick={() => setDropDim(null)}>취소</Button><Button className="flex-1" onClick={() => removeDims(dropDim)}>삭제</Button></div></div></Modal>}
+      {dropDim !== null && <Modal title={dropDim === 'all' ? '옵션을 모두 지울까요?' : `'${dims[dropDim]?.name}' 옵션을 지울까요?`} onClose={() => setDropDim(null)}><div className="space-y-4"><p className="text-[13px] text-[var(--aux)]">입력한 옵션 값과 한정 수량도 함께 지워져요.</p><div className="flex gap-2"><Button outline className="flex-1" closeSheet>취소</Button><Button className="flex-1" onClick={() => removeDims(dropDim)}>삭제</Button></div></div></Modal>}
       <p className="text-[12px] text-[var(--meta)]">판매가 시작되면 옵션과 수량을 바꿀 수 없어요</p>
       <FieldError name="options"/>
     </section>

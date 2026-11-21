@@ -50,7 +50,7 @@ export function AddressBookPage() {
     </div>
     {removing && <Modal title={`${LABEL[tab]}를 삭제할까요?`} onClose={() => setRemoving(null)}><div className="space-y-4">
       <div className="space-y-1 rounded-[4px] bg-[var(--canvas)] p-3"><p className="text-[13px] font-bold">{removing.label}</p><p className="muted text-[12px]">{line(removing)}</p></div>
-      <div className="flex gap-2"><Button outline className="flex-1" onClick={() => setRemoving(null)}>취소</Button><Button className="flex-1" disabled={!!busy} onClick={() => { const a = removing; setRemoving(null); void run(a.id, () => deleteAddressBook(tab, a.id)); }}>삭제</Button></div>
+      <div className="flex gap-2"><Button outline className="flex-1" closeSheet>취소</Button><Button className="flex-1" disabled={!!busy} onClick={() => { const a = removing; setRemoving(null); void run(a.id, () => deleteAddressBook(tab, a.id)); }}>삭제</Button></div>
     </div></Modal>}
   </div>;
 }

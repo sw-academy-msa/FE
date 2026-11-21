@@ -1,8 +1,9 @@
-import { createContext, isValidElement, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, isValidElement, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Button as AxButton } from '@astryxdesign/core/Button';
 import { BottomSheet as AxBottomSheet } from '@astryxdesign/core/BottomSheet';
-import type { ButtonHTMLAttributes, CSSProperties, ReactNode } from 'react';
-import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { Dialog as AxDialog } from '@astryxdesign/core/Dialog';
+import type { ButtonHTMLAttributes, CSSProperties, MouseEvent, ReactNode } from 'react';
+import { Link, NavLink, useHref, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Bell, Timer, X, Home, CalendarDays, Package, UserRound, ChevronRight, Info, Copy } from 'lucide-react';
 import type { Product, Order } from '../domain';
 import { money, saleState, stockTotal } from '../domain';
@@ -19,12 +20,26 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 export const useToast = () => useContext(ToastContext);
 /** 버튼 안 글자를 이어 붙인다. Astryx Button은 label을 접근 이름(aria-label)으로 쓰므로 보이는 글자와 같게 맞춘다 */
 const textOf = (node: ReactNode): string => node == null || typeof node === 'boolean' ? '' : typeof node === 'string' || typeof node === 'number' ? String(node) : Array.isArray(node) ? node.map(textOf).join('') : isValidElement<{ children?: ReactNode }>(node) ? textOf(node.props.children) : '';
-/** 공통 버튼(Astryx Button). 기본은 검정, outline은 흰 바탕 테두리, buy는 빨강. disabled는 지금처럼 진짜 disabled로 둬서 Enter 제출과 :disabled 스타일을 지킨다 */
-export function Button({ children, outline, buy, className = '', disabled, type = 'button', ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { outline?: boolean; buy?: boolean }) {
+/**
+ * 공통 버튼(Astryx Button). 기본은 검정, outline은 흰 바탕 테두리, buy는 빨강. disabled는 지금처럼 진짜 disabled로 둬서 Enter 제출과 :disabled 스타일을 지킨다.
+ * closeSheet가 있으면 감싼 시트(Modal, BottomSheet)를 닫는다.
+ * to가 있으면 화면 이동 링크(<a href>)로 그린다(예전 btn 클래스를 붙인 Link). state, replace는 react-router Link와 같다
+ */
+export function Button({ children, outline, buy, className = '', disabled, type = 'button', to, state, replace, closeSheet, onClick, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { outline?: boolean; buy?: boolean; to?: string; state?: unknown; replace?: boolean; closeSheet?: boolean }) {
+  const navigate = useNavigate(), href = useHref(to ?? '.'), sheetClose = useContext(SheetClose);
   const label = props['aria-label'] ?? (textOf(children).trim() || '버튼');
   const native = { disabled } as Record<string, unknown>;
-  return <AxButton {...props} {...native} label={label} type={type as 'button' | 'submit' | 'reset'} variant={outline ? 'secondary' : buy ? 'buy' : 'primary'} size="lg" isDisabled={disabled} className={`ax-btn ${className}`}>{children}</AxButton>;
+  const link = to !== undefined && !disabled;
+  const click = (e: MouseEvent<HTMLButtonElement>) => {
+    onClick?.(e);
+    // closeSheet: 시트 안 "취소" 같은 버튼. 시트가 내려가는 움직임을 마친 뒤 시트의 onClose가 불린다
+    if (closeSheet && sheetClose && !e.defaultPrevented) { sheetClose(); return; }
+    if (!link || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    e.preventDefault(); navigate(to, { state, replace });
+  };
+  return <AxButton {...props} {...native} label={label} type={type as 'button' | 'submit' | 'reset'} href={link ? href : undefined} onClick={click} variant={outline ? 'secondary' : buy ? 'buy' : 'primary'} size="lg" isDisabled={disabled} className={`ax-btn ${className}`}>{children}</AxButton>;
 }
+
 export function Field({ label, hint, required, error, children }: { label: string; hint?: string; required?: boolean; error?: string; children: ReactNode }) { return <div><span className="label">{label}{required && <span className="muted ml-1 text-[10px]">· 필수</span>}</span>{children}{error && <p role="alert" className="mt-2 text-[12px] text-[var(--red)]">{error}</p>}{hint && <p className="muted mt-2 text-[10px] leading-relaxed">{hint}</p>}</div>; }
 export function Note({ title, children, green = false }: { title?: string; children: ReactNode; green?: boolean }) { return <div className={`note ${green ? 'bg-[var(--green-soft)]!' : ''}`}>{title && <h3 className="mb-1 font-bold">{title}</h3>}<div className="muted">{children}</div></div>; }
 export function ErrorBox({ message }: { message: string }) { return message ? <div role="alert" className="rounded-[4px] bg-[var(--red-soft)] p-3 text-[12px] leading-relaxed text-[var(--red)]">{message}</div> : null; }
@@ -124,6 +139,22 @@ function useFocusReturn() {
   useEffect(() => () => { const el = opener.current; if (el?.isConnected) setTimeout(() => { if (el.isConnected && !document.querySelector('dialog[open]')) el.focus({ preventScroll: true }); }); }, [opener]);
   return opener;
 }
+/** 지워지는 시트 판의 그림 복제를 아래로 내려 보낸다(transform과 opacity만, 테마 모션 토큰 시간과 곡선) */
+function slideAwayCopy(sheet: HTMLElement | null) {
+  if (!sheet?.isConnected || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const rect = sheet.getBoundingClientRect(); if (!rect.height || rect.top >= window.innerHeight) return;
+  const root = getComputedStyle(document.documentElement);
+  const easing = root.getPropertyValue('--ease-exit').trim() || 'ease-in';
+  const scrim = document.createElement('div'), copy = sheet.cloneNode(true) as HTMLElement;
+  for (const el of [scrim, copy]) { el.setAttribute('aria-hidden', 'true'); el.inert = true; el.dataset.sheetCopy = ''; }
+  copy.querySelectorAll('[id]').forEach(el => el.removeAttribute('id'));
+  Object.assign(scrim.style, { position: 'fixed', inset: '0', zIndex: '1000', pointerEvents: 'none', background: 'var(--color-overlay)' });
+  Object.assign(copy.style, { position: 'fixed', left: `${rect.left}px`, top: `${rect.top}px`, width: `${rect.width}px`, height: `${rect.height}px`, maxHeight: 'none', margin: '0', transform: 'none', zIndex: '1001', pointerEvents: 'none', overflow: 'hidden' });
+  document.body.append(scrim, copy);
+  const options = { duration: SHEET_EXIT_MS, easing, fill: 'forwards' as const };
+  scrim.animate([{ opacity: 1 }, { opacity: 0 }], options);
+  copy.animate([{ transform: 'translateY(0)' }, { transform: `translateY(${window.innerHeight - rect.top}px)` }], options).finished.catch(() => {}).finally(() => { scrim.remove(); copy.remove(); });
+}
 /** 아래에서 올라오는 창(Astryx BottomSheet). Esc, 바깥 누르기, 아래로 밀기, 뒤로 가기로 닫히고 닫으면 포커스가 연 버튼으로 돌아간다 */
 function Sheet({ label, onClose, restoreOnUnmount = true, padding, children }: { label: string; onClose: () => void; restoreOnUnmount?: boolean; padding: 4 | 5; children: ReactNode }) {
   // 닫기(X, Esc, 바깥 누르기, 아래로 끌기, 뒤로 가기)는 먼저 시트를 내려 보내고, 다 내려간 뒤 부모에게 알린다
@@ -141,6 +172,9 @@ function Sheet({ label, onClose, restoreOnUnmount = true, padding, children }: {
   }).current;
   useCloseOnBack(requestClose, restoreOnUnmount);
   const opener = useFocusReturn();
+  // 페이지가 시트를 바로 지울 때(시트 안 "취소", 처리 뒤 닫기, 화면 이동 등)도 내려가는 움직임을 보여 준다:
+  // 지워지기 직전 시트 판을 그림만 복제해(누를 수 없고 읽히지 않음) 같은 자리에서 아래로 내려 보내고 지운다
+  useLayoutEffect(() => () => { if (!closing.current) slideAwayCopy(panel.current); }, []);
   // 시트가 열린 동안 문서와 body 스크롤을 잠그고, 닫으면 원래대로(이미 잠겨 있었으면 그대로) 둔다
   useEffect(() => {
     const roots = [document.documentElement, document.body].map(element => ({ element, locked: element.classList.contains('overflow-hidden') }));
@@ -163,7 +197,7 @@ export function BottomNav() {
 }
 export async function copyText(text: string) { if (!navigator.clipboard) throw new Error('클립보드를 사용할 수 없습니다. 번호를 길게 눌러 복사해 주세요.'); await navigator.clipboard.writeText(text); }
 export function CopyButton({ value }: { value: string }) { const toast = useToast(); return <button aria-label="복사" className="grid h-8 w-8 place-items-center" onClick={() => copyText(value).then(() => toast('복사했습니다.')).catch(e => toast(e.message))}><Copy size={16} className="muted"/></button>; }
-export function Unavailable({ message = '접근할 수 없는 화면입니다.' }: { message?: string }) { return <><Header title="접근 안내"/><Empty title={message} message="이 화면을 사용할 수 있는 계정으로 전환해 주세요."><Link to="/my" className="btn">마이페이지로</Link></Empty></>; }
+export function Unavailable({ message = '접근할 수 없는 화면입니다.' }: { message?: string }) { return <><Header title="접근 안내"/><Empty title={message} message="이 화면을 사용할 수 있는 계정으로 전환해 주세요."><Button to="/my">마이페이지로</Button></Empty></>; }
 export function Loading({ text = '확인하고 있어요…' }: { text?: string }) { return <div className="muted flex items-center justify-center gap-2 py-10 text-[12px]"><Info size={16}/>{text}</div>; }
 
 /** 바텀시트 — 상단 모서리 16, 손잡이, 뒤 배경 어둡게(Astryx BottomSheet) */
@@ -191,53 +225,48 @@ export function Chip({ selected, onClick, children }: { selected: boolean; onCli
   );
 }
 
-/** 작성 중 나가기 확인 대화상자 */
+/**
+ * 가운데 대화상자(Astryx Dialog, native dialog). 폭 318, 모서리 8, 안쪽 여백 24, 그림자 없음은 지금 디자인 그대로.
+ * onDismiss가 있으면 Esc로 닫히고(form), dismissOnBackdrop이면 바깥 누르기로도 닫힌다(info). 없으면 버튼으로만 닫힌다(required)
+ */
+function CenterDialog({ title, onDismiss, dismissOnBackdrop = false, children }: { title: string; onDismiss?: () => void; dismissOnBackdrop?: boolean; children: ReactNode }) {
+  return <AxDialog isOpen onOpenChange={open => { if (!open) onDismiss?.(); }} purpose={!onDismiss ? 'required' : dismissOnBackdrop ? 'info' : 'form'} width={318} maxHeight="92dvh" padding={6} aria-label={title} className="max-w-[calc(100%-32px)] rounded-[8px] bg-[var(--surface)] text-[var(--ink)] shadow-none">
+    <div className="space-y-4"><h2 className="text-[16px] font-bold">{title}</h2>{children}</div>
+  </AxDialog>;
+}
+
+/** 작성 중 나가기 확인 대화상자. Esc는 계속 작성 */
 export function ConfirmLeave({ onLeave, onStay }: { onLeave: () => void; onStay: () => void }) {
-  return (
-    <div className="sd-fade fixed inset-0 z-50 flex items-center justify-center px-4" style={{ background: 'var(--overlay)' }}>
-      <div className="sd-pop w-[318px] rounded-[8px] bg-[var(--surface)] p-6 space-y-4">
-        <h2 className="text-[16px] font-bold">작성을 그만할까요?</h2>
-        <p className="muted text-[13px] leading-relaxed">지금 나가면 입력한 내용이 저장되지 않아요.</p>
-        <div className="flex gap-2">
-          <Button outline className="flex-1" onClick={onLeave}>나가기</Button>
-          <Button className="flex-1" onClick={onStay}>계속 작성</Button>
-        </div>
-      </div>
+  return <CenterDialog title="작성을 그만할까요?" onDismiss={onStay}>
+    <p className="muted text-[13px] leading-relaxed">지금 나가면 입력한 내용이 저장되지 않아요.</p>
+    <div className="flex gap-2">
+      <Button outline className="flex-1" onClick={onLeave}>나가기</Button>
+      <Button className="flex-1" onClick={onStay}>계속 작성</Button>
     </div>
-  );
+  </CenterDialog>;
 }
 
-/** 처리 실패와 재시도 — 입력 내용 유지 (Figma: 가운데 대화상자, 뒤 화면 어둡게) */
+/** 처리 실패와 재시도 — 입력 내용 유지 (Figma: 가운데 대화상자, 뒤 화면 어둡게). Esc는 이전으로(있을 때) */
 export function RetryError({ message, onRetry, onBack }: { message: string; onRetry: () => void; onBack?: () => void }) {
-  return (
-    <div className="sd-fade fixed inset-0 z-50 flex items-center justify-center px-4" style={{ background: 'var(--overlay)' }}>
-      <div className="sd-pop w-[318px] rounded-[8px] bg-[var(--surface)] p-6 space-y-4">
-        <h2 className="text-[16px] font-bold">요청을 처리하지 못했어요</h2>
-        <p className="muted text-[13px] leading-relaxed">{message || '일시적인 오류로 문의가 접수되지 않았어요. 입력한 내용은 그대로 남아 있어요.'}</p>
-        <div className="flex gap-2">
-          {onBack && <Button outline className="flex-1" onClick={onBack}>이전으로</Button>}
-          <Button className="flex-1" onClick={onRetry}>다시 시도</Button>
-        </div>
-      </div>
+  return <CenterDialog title="요청을 처리하지 못했어요" onDismiss={onBack}>
+    <p className="muted text-[13px] leading-relaxed">{message || '일시적인 오류로 문의가 접수되지 않았어요. 입력한 내용은 그대로 남아 있어요.'}</p>
+    <div className="flex gap-2">
+      {onBack && <Button outline className="flex-1" onClick={onBack}>이전으로</Button>}
+      <Button className="flex-1" onClick={onRetry}>다시 시도</Button>
     </div>
-  );
+  </CenterDialog>;
 }
 
-/** 로그인 필요 대화상자 — 로그인 후 returnTo로 복귀 */
+/** 로그인 필요 대화상자 — 로그인 후 returnTo로 복귀. Esc와 바깥 누르기로 닫힌다 */
 export function LoginRequired({ returnTo, onClose }: { returnTo: string; onClose: () => void }) {
-  return (
-    <div className="sd-fade fixed inset-0 z-50 flex items-center justify-center px-4" style={{ background: 'var(--overlay)' }}>
-      <div className="sd-pop w-[318px] rounded-[8px] bg-[var(--surface)] p-6 space-y-4">
-        <h2 className="text-[16px] font-bold">로그인이 필요해요</h2>
-        <p className="muted text-[13px] leading-relaxed">로그인하면 보고 있던 상품으로 바로 돌아와요.</p>
-        <div className="space-y-2">
-          <Link to={`/login?next=${encodeURIComponent(returnTo)}`} className="btn w-full">로그인</Link>
-          <Link to={`/signup?next=${encodeURIComponent(returnTo)}`} className="btn btn-outline w-full">이메일로 회원가입</Link>
-          <button onClick={onClose} className="muted w-full py-2 text-[12px]">닫기</button>
-        </div>
-      </div>
+  return <CenterDialog title="로그인이 필요해요" onDismiss={onClose} dismissOnBackdrop>
+    <p className="muted text-[13px] leading-relaxed">로그인하면 보고 있던 상품으로 바로 돌아와요.</p>
+    <div className="space-y-2">
+      <Button to={`/login?next=${encodeURIComponent(returnTo)}`} className="w-full">로그인</Button>
+      <Button outline to={`/signup?next=${encodeURIComponent(returnTo)}`} className="w-full">이메일로 회원가입</Button>
+      <button onClick={onClose} className="muted w-full py-2 text-[12px]">닫기</button>
     </div>
-  );
+  </CenterDialog>;
 }
 
 /** 토글 스위치 — 48×28, 켜짐 #222222 */

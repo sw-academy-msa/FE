@@ -117,7 +117,7 @@ export function ApplicationPage() {
           </section>
           <Note title="기한 안에 보완하지 않으면 신청이 취소돼요.">취소되면 처음부터 다시 신청해야 해요.</Note>
           <div className="flex gap-2">
-            <Link className="btn btn-outline flex-1" to="/support">고객센터 문의</Link>
+            <Button outline className="flex-1" to="/support">고객센터 문의</Button>
             <Button className="flex-1" onClick={() => setShowDetail(true)}>사유 확인하기</Button>
           </div>
         </div>;
@@ -193,8 +193,8 @@ export function ApplicationPage() {
       </section>
       <Note title="심사 중에는 신청 정보를 수정할 수 없어요.">변경이 필요하면 고객센터로 문의해 주세요.</Note>
       <div className="flex gap-2">
-        <Link className="btn btn-outline flex-1" to="/support">고객센터 문의</Link>
-        <Link className="btn flex-1" to="/">홈으로</Link>
+        <Button outline className="flex-1" to="/support">고객센터 문의</Button>
+        <Button className="flex-1" to="/">홈으로</Button>
       </div>
     </div>;
   }
@@ -586,7 +586,7 @@ export function AdminProductDetailPage() {
   useLive(sig => user.admin ? listAdminApplications({ status: 'APPROVED' }, sig) : Promise.resolve([]), mergeAdminApplications, [user.admin]); // 판매자 이름(승인된 입점 신청)
   const live = useLive(sig => user.admin && id ? getAdminProductReviewWithImages(id, sig) : Promise.resolve(null), (st, x) => { if (x) mergeProducts(st, [x]); }, [id, user.admin]);
   if (!user.admin) return <Unavailable message="운영자만 사용할 수 있습니다."/>;
-  if (!p) return live.loading || live.error ? <LiveStatus state={live}/> : <Empty title="상품을 찾을 수 없어요"><Link to="/admin/products" className="btn">심사 목록으로</Link></Empty>;
+  if (!p) return live.loading || live.error ? <LiveStatus state={live}/> : <Empty title="상품을 찾을 수 없어요"><Button to="/admin/products">심사 목록으로</Button></Empty>;
   const openLabel = `오픈 ${kstShort(p.startsAt)}`;
   const dDay = Math.ceil((p.startsAt - Date.now()) / 86_400_000);
   const totalStock = p.options.reduce((s, o) => s + o.stock, 0);
@@ -735,7 +735,7 @@ export function AdminProductDetailPage() {
       </div>}/>}
       {/* CTA */}
       {p.published
-        ? <Link className="btn btn-outline w-full" to="/admin/products">심사 목록으로</Link>
+        ? <Button outline className="w-full" to="/admin/products">심사 목록으로</Button>
         : !p.rejectionReason
           ? <div className="fixed bottom-0 left-1/2 w-full max-w-[390px] -translate-x-1/2 border-t border-[var(--line)] bg-white px-4 safe-bottom pt-3">
               <p className="mb-2 text-center text-[12px] text-[#949494]">승인하면 판매 일정에 맞춰 자동으로 오픈돼요</p>
@@ -744,7 +744,7 @@ export function AdminProductDetailPage() {
                 <Button className="flex-1" disabled={busy} onClick={() => setApproveConfirm(true)}>승인하기</Button>
               </div>
             </div>
-          : <Link className="btn btn-outline w-full" to="/admin/products">심사 목록으로</Link>
+          : <Button outline className="w-full" to="/admin/products">심사 목록으로</Button>
       }
       {/* Approve bottom sheet */}
       {approveConfirm && (
@@ -956,7 +956,7 @@ export function AddressManagePage() {
             </div>
             <p className="text-[12px] text-[#7B7B7B]">삭제한 배송지는 복구할 수 없어요</p>
             <div className="flex gap-2">
-              <Button outline className="flex-1" onClick={() => setConfirmDelete(null)}>취소</Button>
+              <Button outline className="flex-1" closeSheet>취소</Button>
               <Button className="flex-1" onClick={() => handleDelete(confirmDelete)}>삭제</Button>
             </div>
           </div>
@@ -1012,8 +1012,8 @@ export function FaqPage() {
       <div className="rounded-[6px] bg-[var(--soft)] p-4 space-y-2">
         <p className="text-[13px] font-bold">원하는 답을 찾지 못했나요?</p>
         <div className="flex gap-2">
-          <Link to="/inquiries/compose" className="btn btn-outline flex-1 text-[12px]">1:1 문의하기</Link>
-          <Link to="/inquiries" className="btn btn-outline flex-1 text-[12px]">내 문의 내역</Link>
+          <Button outline to="/inquiries/compose" className="flex-1 text-[12px]">1:1 문의하기</Button>
+          <Button outline to="/inquiries" className="flex-1 text-[12px]">내 문의 내역</Button>
         </div>
       </div>
     </div>
@@ -1088,7 +1088,7 @@ export function InquiryDetailPage() {
     if (!q && !USE_MOCK && id) throw new ApiError('문의를 찾을 수 없어요.', 404, NOT_PROJECTED);
     return null;
   }, sig).catch(e => { if (isApiError(e) && e.code === NOT_PROJECTED) return null; throw e; }), (st, d) => { if (d) mergeInquiries(st, [d]); }, [id, s.activeUserId, productId, relatedOrderId]);
-  if (!q) return live.loading || live.error ? <LiveStatus state={live}/> : <Empty title="문의를 찾을 수 없어요"><Link to="/inquiries" className="btn">문의 목록</Link></Empty>;
+  if (!q) return live.loading || live.error ? <LiveStatus state={live}/> : <Empty title="문의를 찾을 수 없어요"><Button to="/inquiries">문의 목록</Button></Empty>;
   if (q.sellerId === 'stockdrop') return <div className="space-y-5">
     <Header title="문의 상세" back={true}/>
     <div className="flex items-center justify-between"><span className={`rounded px-2 py-0.5 text-[10px] font-semibold ${q.answer ? 'bg-[var(--positive-soft)] text-[var(--positive)]' : 'bg-[var(--blue-soft)] text-[var(--muted)]'}`}>{q.answer ? '답변 완료' : '접수됨'}</span><span className="muted text-[10px]">{q.kind} · {dateTime(q.createdAt)}</span></div>
@@ -1096,7 +1096,7 @@ export function InquiryDetailPage() {
     {q.answer ? <div className="space-y-2"><p className="text-[12px] font-bold">StockDrop 운영팀 답변</p><div className="rounded-[6px] border border-[var(--line)] p-4"><p className="text-[13px] leading-[1.8] whitespace-pre-line">{q.answer}</p></div></div> : <Note title="답변 대기 중">영업일 기준 1일 내에 답변드릴게요. 2영업일 안에 답변이 없으면 StockDrop이 직접 확인합니다.</Note>}
     {/* 운영 1:1 문의는 추가 메시지 API가 없어 로컬 성공 동작을 노출하지 않는다. */}
     <Note>추가로 궁금한 점은 새 1:1 문의로 남겨 주세요.</Note>
-    <Link to="/inquiries/compose" className="btn btn-outline w-full">새 1:1 문의</Link>
+    <Button outline to="/inquiries/compose" className="w-full">새 1:1 문의</Button>
   </div>;
   if (q.messages?.length && q.orderId) return <div className="space-y-5"> {/* 실제 API 주문 문의: 메시지 스레드 */}
     <Header title="문의 상세" back={true}/>
@@ -1106,7 +1106,7 @@ export function InquiryDetailPage() {
     {q.messages.map((m, i) => <div key={i} className={`rounded-[6px] p-4 space-y-1 ${m.seller ? 'border border-[var(--line)]' : 'bg-[var(--soft)]'}`}><p className="text-[11px] font-bold">{m.seller ? '판매자' : '나'} <span className="muted font-normal">{dateTime(m.createdAt)}</span></p><p className="text-[13px] leading-[1.8] whitespace-pre-line">{m.body}</p></div>)}
     {!!q.imageIds?.length && <div className="flex gap-2 overflow-x-auto">{q.imageIds.map(imageId => <InquiryImage key={imageId} orderId={q.orderId!} imageId={imageId}/>)}</div>}
     <Field label="추가 문의"><textarea aria-label="추가 문의" className="field field-box" value={replyText} onChange={e => setReplyText(e.target.value.slice(0, 1000))} placeholder="추가로 궁금한 점을 입력해 주세요" rows={4}/></Field>
-    <div className="flex gap-2"><Link className="btn btn-outline flex-1" to="/inquiries">내 문의 내역</Link><Button className="flex-1" disabled={replyBusy || !replyText.trim()} onClick={async () => { setReplyBusy(true); try { const u = await addInquiryMessage(q.orderId!, q.id, replyText.trim(), s.activeUserId); mutate(st => mergeInquiries(st, [u])); setReplyText(''); toast('추가 문의가 접수되었습니다.'); } catch (e) { toast(errorMessage(e)); } finally { setReplyBusy(false); } }}>추가 문의 보내기</Button></div>
+    <div className="flex gap-2"><Button outline className="flex-1" to="/inquiries">내 문의 내역</Button><Button className="flex-1" disabled={replyBusy || !replyText.trim()} onClick={async () => { setReplyBusy(true); try { const u = await addInquiryMessage(q.orderId!, q.id, replyText.trim(), s.activeUserId); mutate(st => mergeInquiries(st, [u])); setReplyText(''); toast('추가 문의가 접수되었습니다.'); } catch (e) { toast(errorMessage(e)); } finally { setReplyBusy(false); } }}>추가 문의 보내기</Button></div>
   </div>;
   return (
     <div className="space-y-5">
@@ -1146,10 +1146,10 @@ export function InquiryDetailPage() {
       )}
       <div className="flex gap-2">
         {/* 상품 문의에는 추가 메시지 API가 없다. 기존 질문을 새 질문으로 복제하지 않는다. */}
-        {!q.orderId && <Link className="btn btn-outline flex-1" to={`/product/${encodeURIComponent(q.productId)}`}>새 문의는 상품 상세에서 남겨 주세요</Link>}
+        {!q.orderId && <Button outline className="flex-1" to={`/product/${encodeURIComponent(q.productId)}`}>새 문의는 상품 상세에서 남겨 주세요</Button>}
         {q.orderId && <Button className="flex-1" onClick={() => navigate(`/orders/${q.orderId}`)}>주문 보기</Button>}
       </div>
-      <Link to="/inquiries" className="btn btn-outline w-full">문의 목록으로</Link>
+      <Button outline to="/inquiries" className="w-full">문의 목록으로</Button>
     </div>
   );
 }

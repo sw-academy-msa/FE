@@ -100,12 +100,12 @@ export function SellerProductsPage() {
         {isLive && <><div className="flex items-center justify-between text-[12px]"><span className="font-bold">{sold} / {total}개 판매</span><span className="muted">{hh}:{mm}:{ss} 남음</span></div><div className="h-1 w-full rounded-full bg-[var(--line)]"><div className="h-1 rounded-full bg-[var(--ink)]" style={{width: total > 0 ? `${(sold/total)*100}%` : '0%'}}/></div></>}
         {ended && <><div className="flex items-center justify-between text-[12px]"><span className="font-bold">{sold} / {total}개 판매</span><span className="muted">{soldOut ? '완판' : '판매 종료'}</span></div><div className="h-1 w-full rounded-full bg-[var(--line)]"><div className="h-1 rounded-full bg-[var(--muted)]" style={{width: total > 0 ? `${Math.min(100, sold/total*100)}%` : '0%'}}/></div></>}
         {status === '판매 예정' && <p className="muted text-[12px]">{openDay(p.startsAt, now)}{USE_MOCK && ` · 알림 신청 ${alarmCount}명`}</p>}
-        {isLive || ended ? <Link to={`/seller/product/${p.id}`} className="btn btn-outline w-full text-[13px]!">{isLive ? '판매 현황' : '판매 결과'}</Link> : status === '판매 예정' && <Link to={`/seller/new?edit=${p.id}`} className="btn btn-outline w-full text-[13px]!">판매 정보 수정</Link>}
-        {status === '게시 전' && (p.reviewStatus === 'IN_REVIEW' ? <Link to={`/seller/published/${p.id}`} className="btn btn-outline w-full text-[13px]!">심사 상태 보기</Link> : p.reviewStatus === 'REJECTED' && !USE_MOCK ? <RejectedActions p={p}/> : <Link to={`/seller/new?edit=${p.id}`} className="btn btn-outline w-full text-[13px]!">{p.reviewStatus === 'REJECTED' ? '수정하고 다시 요청' : '이어서 등록'}</Link>)}
+        {isLive || ended ? <Button outline to={`/seller/product/${p.id}`} className="w-full text-[13px]!">{isLive ? '판매 현황' : '판매 결과'}</Button> : status === '판매 예정' && <Button outline to={`/seller/new?edit=${p.id}`} className="w-full text-[13px]!">판매 정보 수정</Button>}
+        {status === '게시 전' && (p.reviewStatus === 'IN_REVIEW' ? <Button outline to={`/seller/published/${p.id}`} className="w-full text-[13px]!">심사 상태 보기</Button> : p.reviewStatus === 'REJECTED' && !USE_MOCK ? <RejectedActions p={p}/> : <Button outline to={`/seller/new?edit=${p.id}`} className="w-full text-[13px]!">{p.reviewStatus === 'REJECTED' ? '수정하고 다시 요청' : '이어서 등록'}</Button>)}
       </div>;
     })}
     {!products.length && !live.loading && <Empty title={tab === '전체' ? '등록한 상품이 없어요' : `${tab} 상품이 없어요`}/>}
-    <Link className="btn mt-6 w-full" to="/seller/new"><Plus size={17}/>새 한정 판매 등록</Link>
+    <Button className="mt-6 w-full" to="/seller/new"><Plus size={17}/>새 한정 판매 등록</Button>
   </div>;
 }
 /** 서버 심사 status → 목록 배지 (승인은 판매 예정·판매 중·판매 종료로 보인다) */
@@ -126,7 +126,7 @@ function RejectedActions({ p }: { p: Product }) {
   return <div className="space-y-2">
     {open && <Note title="반려 사유">{p.rejectionReason || '반려 사유가 등록되지 않았어요.'}</Note>}
     <ErrorBox message={error}/>
-    <div className="flex gap-2"><Button outline className="flex-1 text-[13px]!" disabled={busy} onClick={show}>{busy ? '불러오는 중…' : open ? '반려 사유 닫기' : '반려 사유 보기'}</Button><Link to={`/seller/new?edit=${p.id}`} className="btn flex-1 text-[13px]!">수정 후 재요청</Link></div>
+    <div className="flex gap-2"><Button outline className="flex-1 text-[13px]!" disabled={busy} onClick={show}>{busy ? '불러오는 중…' : open ? '반려 사유 닫기' : '반려 사유 보기'}</Button><Button to={`/seller/new?edit=${p.id}`} className="flex-1 text-[13px]!">수정 후 재요청</Button></div>
   </div>;
 }
 export function SellerProductPage() {
@@ -244,7 +244,7 @@ export function SellerProductPage() {
           </div>
         </div>
       </section>}
-      <div className="flex gap-2 pt-4"><Link to="/seller" className="btn btn-outline flex-1">홈</Link><Link to={approved ? '/seller/products' : '/seller/new'} className="btn flex-[1.6]">{approved ? '판매 상품 관리' : '다른 상품 등록하기'}</Link></div>
+      <div className="flex gap-2 pt-4"><Button outline to="/seller" className="flex-1">홈</Button><Button to={approved ? '/seller/products' : '/seller/new'} className="flex-[1.6]">{approved ? '판매 상품 관리' : '다른 상품 등록하기'}</Button></div>
     </div>;
   }
 
@@ -304,7 +304,7 @@ export function SellerProductPage() {
         })}
         {!recentOrders.length && <Empty title="아직 주문이 없어요"/>}
       </section>
-      {!USE_MOCK && <Link className="btn btn-outline w-full" to={`/seller/product/${p.id}/faqs`}>FAQ 수정</Link>}
+      {!USE_MOCK && <Button outline className="w-full" to={`/seller/product/${p.id}/faqs`}>FAQ 수정</Button>}
       <div className="space-y-1 rounded-[8px] bg-[var(--soft)] p-4"><p className="text-[13px] font-bold">판매가 끝나면 주문 내역을 알림으로 보내드려요</p><p className="text-[12px] text-[#7B7B7B]">발송 준비와 송장 등록도 알림에서 바로 이어서 할 수 있어요. 판매 중에는 이 화면에서 실시간 현황만 확인해 주세요.</p></div>
     </div>;
   }
@@ -356,7 +356,7 @@ export function SellerProductPage() {
         <p className="text-[12px] text-[#7B7B7B]">반품·환불은 STOCKDROP이 처리하지 않아요. 구매자와 직접 협의해 진행해 주세요.</p>
         <p className="text-[12px] text-[#7B7B7B]">정산 내역은 마이페이지 &gt; 정산 계좌에서 볼 수 있어요.</p>
       </div>
-      {!USE_MOCK && <Link className="btn btn-outline w-full" to={`/seller/product/${p.id}/faqs`}>FAQ 수정</Link>}
+      {!USE_MOCK && <Button outline className="w-full" to={`/seller/product/${p.id}/faqs`}>FAQ 수정</Button>}
     </div>;
   }
 
@@ -369,9 +369,9 @@ export function SellerProductPage() {
     <div className="rounded-[4px] bg-[var(--canvas)] p-5"><p className="text-[11px] opacity-70">판매 시작까지</p><p className="font-number my-2 text-[32px] font-bold">{hh2}:{mm2}:{ss2}</p><p className="text-[10px] opacity-70">{dateTime(p.startsAt)} · 자동 시작</p></div>
     <div className="space-y-2"><InfoRow label="판매 시작" value={dateTime(p.startsAt)}/><InfoRow label="판매 종료" value={dateTime(p.endsAt)}/><InfoRow label="최초 판매 수량" value={`${fee.initial}개`}/><InfoRow label="판매가격" value={money(p.price)}/></div>
     {rev && <Note title={rev.status === 'IN_REVIEW' ? '수정 심사 중' : rev.status === 'APPROVED' ? '수정 내용이 승인됐어요' : '수정 심사 반려'}>{rev.status === 'IN_REVIEW' ? '승인되면 구매자 화면에 반영돼요. 심사 중에는 다시 수정 요청할 수 없어요.' : rev.status === 'APPROVED' ? '변경한 내용이 구매자 화면에 반영됐어요.' : rev.reason || '반려 사유가 없어요.'}</Note>}
-    {now < p.startsAt ? <Link className="btn btn-outline w-full" to={`/seller/new?edit=${p.id}`}>상품 정보 수정</Link> : <Note title="핵심 정보는 변경할 수 없어요">판매 시작 후 가격·옵션·최초 수량·종료 시각은 변경할 수 없습니다.</Note>}
-    <Link className="btn w-full" to={`/seller/orders?product=${p.id}`}>주문 관리</Link>
-    {!USE_MOCK && <Link className="btn btn-outline w-full" to={`/seller/product/${p.id}/faqs`}>FAQ 수정</Link>}
+    {now < p.startsAt ? <Button outline className="w-full" to={`/seller/new?edit=${p.id}`}>상품 정보 수정</Button> : <Note title="핵심 정보는 변경할 수 없어요">판매 시작 후 가격·옵션·최초 수량·종료 시각은 변경할 수 없습니다.</Note>}
+    <Button className="w-full" to={`/seller/orders?product=${p.id}`}>주문 관리</Button>
+    {!USE_MOCK && <Button outline className="w-full" to={`/seller/product/${p.id}/faqs`}>FAQ 수정</Button>}
   </div>;
 }
 
@@ -409,7 +409,7 @@ export function SellerInquiryDetailPage() {
       const upd = q.orderId ? await answerOrderInquiry(q.orderId, q.id, text, user.id) : await answerProductInquiry(user.id, q.productId, q.id, { expectedVersion: q.version ?? 0, answer: text, publishToFaq: publicAnswer });
       mutate(st => mergeInquiries(st, [upd]));
     } else mutate(state => { const item = state.inquiries.find(i => i.id === id && i.sellerId === user.id); if (!item || !activeUser(state).seller) throw new Error('이 문의에 답변할 권한이 없습니다.'); item.answer = text; item.public = !item.orderId && publicAnswer; if (item.public) { const p = state.products.find(p => p.id === item.productId); if (p) { const old = p.faqs.find(f => f.question === item.question); if (old) { old.answer = item.answer; old.confirmed = true; } else p.faqs.push({ id: uid('faq-'), question: item.question, answer: item.answer, confirmed: true }); } } });
-    setAnswer(''); toast('답변을 저장했습니다.'); } catch (e) { setError(errorMessage(e)); /* 실패하면 입력 내용은 그대로 둔다 */ } finally { sending.current = false; setBusy(false); } }}><textarea aria-label="답변 입력" value={answer} onChange={e => setAnswer(e.target.value)} className="field field-box" placeholder={!q.orderId && q.answer ? '새 답변으로 바꾸려면 입력해 주세요.' : '답변을 작성해 주세요.'} maxLength={1500}/>{!q.orderId && q.answer && !answer && <button type="button" className="text-[11px] font-bold underline" onClick={() => setAnswer(q.answer ?? '')}>기존 답변 불러와 수정</button>}{!q.orderId && <label className="flex items-center gap-2 text-[11px]"><input type="checkbox" checked={publicAnswer} onChange={e => setPublic(e.target.checked)}/>공개 가능한 답변을 상품 FAQ에 반영</label>}<ErrorBox message={error}/><Button type="submit" className="w-full" disabled={busy}>{busy ? '등록 중…' : '답변 등록'}</Button></form><Link className="btn btn-outline w-full" to="/seller/inquiries">문의 목록으로</Link></div>;
+    setAnswer(''); toast('답변을 저장했습니다.'); } catch (e) { setError(errorMessage(e)); /* 실패하면 입력 내용은 그대로 둔다 */ } finally { sending.current = false; setBusy(false); } }}><textarea aria-label="답변 입력" value={answer} onChange={e => setAnswer(e.target.value)} className="field field-box" placeholder={!q.orderId && q.answer ? '새 답변으로 바꾸려면 입력해 주세요.' : '답변을 작성해 주세요.'} maxLength={1500}/>{!q.orderId && q.answer && !answer && <button type="button" className="text-[11px] font-bold underline" onClick={() => setAnswer(q.answer ?? '')}>기존 답변 불러와 수정</button>}{!q.orderId && <label className="flex items-center gap-2 text-[11px]"><input type="checkbox" checked={publicAnswer} onChange={e => setPublic(e.target.checked)}/>공개 가능한 답변을 상품 FAQ에 반영</label>}<ErrorBox message={error}/><Button type="submit" className="w-full" disabled={busy}>{busy ? '등록 중…' : '답변 등록'}</Button></form><Button outline className="w-full" to="/seller/inquiries">문의 목록으로</Button></div>;
 }
 
 export function SellerOrdersPage() {
@@ -785,7 +785,7 @@ export function SellerSettingsPage() {
             <p className="muted text-[12px]">{USE_MOCK ? '서울 성동구 성수이로 118, 3층 (04782)' : form.returnAddress || '-'}</p>
             <p className="muted text-[12px]">{USE_MOCK ? '김서윤 · 010-2481-****' : [user.name, phone].filter(Boolean).join(' · ')}</p>
           </div>
-          <Link to="/seller/settings/returns" className="btn btn-outline block w-full text-center">반품지 추가</Link>
+          <Button outline to="/seller/settings/returns" className="block w-full text-center">반품지 추가</Button>
         </div>
       )}
       {USE_MOCK && <div className="mt-6 rounded-[8px] bg-[var(--canvas)] p-4 space-y-3">
@@ -827,7 +827,7 @@ export function SellerSettingsPage() {
         <div className="space-y-2">
           <div className="flex gap-2">
             <input aria-label="우편번호" className="field flex-1" defaultValue={USE_MOCK ? '04782' : form.shippingPostal ?? ''} readOnly/>
-            <button type="button" className="btn btn-outline shrink-0 text-[12px]!">주소 검색</button>
+            <Button outline className="shrink-0 text-[12px]!">주소 검색</Button>
           </div>
           <input aria-label="도로명 주소" className="field" defaultValue={USE_MOCK ? '서울특별시 성동구 성수이로 118' : form.shippingAddress}/>
           <input aria-label="상세 주소" className="field" defaultValue={USE_MOCK ? '3층 물류팀' : form.shippingDetail ?? ''}/>
@@ -868,7 +868,7 @@ export function SellerSettingsPage() {
         <div className="space-y-2">
           <div className="flex gap-2">
             <input aria-label="우편번호" className="field flex-1" value={form.returnPostal ?? ''} onChange={e => change('returnPostal', e.target.value)} placeholder="10881"/>
-            <button type="button" className="btn btn-outline shrink-0 text-[12px]!">주소 검색</button>
+            <Button outline className="shrink-0 text-[12px]!">주소 검색</Button>
           </div>
           <input aria-label="도로명 주소" className="field" value={form.returnAddress ?? ''} onChange={e => change('returnAddress', e.target.value)} placeholder="경기 파주시 문발로 242"/>
           <input aria-label="상세 주소" className="field" placeholder="B동"/>
@@ -988,8 +988,8 @@ export function SellerSupportPage() {
       <div className="rounded-[8px] bg-[var(--canvas)] p-4 space-y-3">
         <p className="text-[14px] font-bold">원하는 답을 못 찾으셨나요?</p>
         <div className="flex gap-2">
-          <Link to="/inquiries/compose" className="btn btn-outline flex-1 text-[12px]!">1:1 문의하기</Link>
-          <Link to="/inquiries" className="btn btn-outline flex-1 text-[12px]!">내 문의 내역</Link>
+          <Button outline to="/inquiries/compose" className="flex-1 text-[12px]!">1:1 문의하기</Button>
+          <Button outline to="/inquiries" className="flex-1 text-[12px]!">내 문의 내역</Button>
         </div>
       </div>
     </div>

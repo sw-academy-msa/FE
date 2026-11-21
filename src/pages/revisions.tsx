@@ -49,7 +49,7 @@ export function AdminRevisionDetailPage() {
   }, [productId, revisionId, user.admin]);
   if (!user.admin) return <Unavailable message="운영자만 사용할 수 있습니다."/>;
   const d = data.data;
-  if (!d) return data.loading || data.error ? <LiveStatus state={{ loading: data.loading, error: data.error, reload: data.reload }}/> : <Empty title="수정 심사를 찾을 수 없어요"><Link to="/admin/products?kind=revision" className="btn">심사 목록으로</Link></Empty>;
+  if (!d) return data.loading || data.error ? <LiveStatus state={{ loading: data.loading, error: data.error, reload: data.reload }}/> : <Empty title="수정 심사를 찾을 수 없어요"><Button to="/admin/products?kind=revision">심사 목록으로</Button></Empty>;
   // 처리가 끝난 회차는 현재 상품이 이미 바뀐 뒤라 '변경 전'으로 쓸 수 없다(확인할 수 없음으로 표시). 심사 대기 회차만 현재 상품과 비교한다
   const { rev } = d, p = rev.status === 'IN_REVIEW' ? d.product : null, a = ch(rev), pending = rev.status === 'IN_REVIEW';
   const decide = async (approved: boolean) => {
@@ -78,7 +78,7 @@ export function AdminRevisionDetailPage() {
     {reject && <Modal title="수정 내용 반려" onClose={() => setReject(false)}>
       <textarea aria-label="반려 사유" className="min-h-[96px] w-full rounded-[6px] border border-[var(--line)] p-3 text-[13px]" maxLength={2000} placeholder="반려 사유를 입력해 주세요" value={reason} onChange={e => setReason(e.target.value)}/>
       <ErrorBox message={error}/>
-      <div className="mt-4 flex gap-3"><Button outline className="flex-1" onClick={() => setReject(false)}>취소</Button><Button className="flex-1" disabled={busy} onClick={() => decide(false)}>{busy ? '처리 중…' : '반려하기'}</Button></div>
+      <div className="mt-4 flex gap-3"><Button outline className="flex-1" closeSheet>취소</Button><Button className="flex-1" disabled={busy} onClick={() => decide(false)}>{busy ? '처리 중…' : '반려하기'}</Button></div>
     </Modal>}
   </div>;
 }
