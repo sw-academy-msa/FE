@@ -46,14 +46,14 @@ test('결제 대기 때문에 남은 수량이 0이어도 확정 수량이 모�
   await expect(page.getByText('완판됐어요', { exact: true })).toHaveCount(0);
 });
 
-test('판매 상품 관리 목록과 판매 현황 요약도 완판 상품의 남은 시간을 보여 주지 않는다', async ({ page }) => {
+test('판매 상품 관리는 완판과 카드 링크를 표시하고 판매 현황은 월별 그래프를 표시한다', async ({ page }) => {
   await mockSeller(page, { initial: 2, confirmed: 2, reserved: 0 });
   await signIn(page, '/seller/products', 'seller@example.com');
   await expect(page.getByText('2 / 2개 판매', { exact: true })).toBeVisible();
   await expect(page.getByText(/남음$/)).toHaveCount(0);
-  await expect(page.getByRole('link', { name: '판매 결과', exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: /판매 결과 보기$/ })).toBeVisible();
   await page.goto('/#/seller/sales');
-  await expect(page.getByRole('link', { name: /패딩/ })).toContainText('완판');
+  await expect(page.getByRole('region', { name: '월별 판매 현황' })).toBeVisible();
   await expect(page.getByText(/남음 ›$/)).toHaveCount(0);
 });
 
