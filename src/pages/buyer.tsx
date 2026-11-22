@@ -15,6 +15,7 @@ import { confirmPurchase, changeShippingAddress, createOrder, createOrderInquiry
 import type { CheckoutTermsDto, InboxItem } from '../api';
 import { USE_MOCK } from '../config';
 import { CompositionInput } from '../components/CompositionInput';
+import { Card as AxCard } from '@astryxdesign/core/Card';
 import { useNotified } from '../productAlerts';
 import { useBackgroundPush } from '../pushStatus';
 import { homePage, newestFirst, pageCount, rankByServerOrder } from '../homeList';
@@ -323,9 +324,26 @@ function AddressSelectSheet({ addresses, selectedId, expiresAt, now, onClose, on
   </div></BottomSheet>;
 }
 export function OrdersPage() {
-  const s = useStore(), now = useClock(), fromTab = useFromTab(); const live = useLive(signal => listOrders({}, signal), mergeOrderList); const [tab, setTab] = useState('전체'); const orders = s.orders.filter(o => o.userId === s.activeUserId); const activeHolds = s.holds.filter(h => h.userId === s.activeUserId && (h.status === 'pending' || h.status === 'reserved' && (h.expiresAt ?? Infinity) > now)); const tabs = ['전체', '배송 준비', '배송 중', '배송 완료', '취소·환불'];
-  const filtered = orders.filter(o => tab === '전체' || tab === '배송 준비' && ['paid', 'preparing'].includes(o.status) || ORDER_LABELS[o.status] === tab || tab === '취소·환불' && ['cancelled', 'refunded'].includes(o.status));
-  return <><Header title="주문 · 배송" subtitle="주문 상세와 배송 조회를 구분해서 확인하세요." back={!fromTab}/>{activeHolds.map(h => <Link key={h.id} to={`/checkout/${h.id}`} className="mb-4 block rounded-inner bg-blue-soft p-4"><b className="text-label">{h.status === 'pending' ? '결제 결과 확인 중' : '확보한 주문 이어서 결제'}</b><p className="muted mt-2 text-footnote">{s.products.find(p => p.id === h.productId)?.name} · {h.status === 'pending' ? '결제 완료 여부를 확인해 주세요.' : `${countdown(h.expiresAt, now)} 남음`} ›</p></Link>)}<div className="divider flex justify-between gap-1 pb-2">{tabs.map(t => <button key={t} onClick={() => setTab(t)} className={`border-b-2 py-2 text-caption ${tab === t ? 'border-ink font-bold' : 'muted border-transparent'}`}>{t}</button>)}</div>{filtered.map(o => <article key={o.id} className="divider space-y-4 py-5"><div className="flex items-center justify-between"><span className="muted text-caption">주문번호 {orderNo(o.id)}</span><Badge live={['shipping', 'delivered'].includes(o.status)}>{ORDER_LABELS[o.status]}</Badge></div><ProductSummary product={o.product} option={o.lines.map(l => `${l.name} ${l.quantity}개`).join(' · ')} amount={o.total}/><div className="grid grid-cols-2 gap-2"><Button to={`/orders/${o.id}${['shipping', 'delivered'].includes(o.status) ? '?tracking=1' : ''}`}>{['shipping', 'delivered'].includes(o.status) ? '배송 조회' : '주문 상세'}</Button><Button outline to={['shipping', 'delivered'].includes(o.status) ? `/orders/${o.id}` : `/orders/${o.id}/inquiry`}>{['shipping', 'delivered'].includes(o.status) ? '주문 상세' : '판매자 문의'}</Button></div></article>)}{!filtered.length && (live.loading || live.error ? <LiveStatus state={live}/> : <Empty title="주문 내역이 없어요"><Button to="/">상품 둘러보기</Button></Empty>)}</>;
+  const s = useStore(), now = useClock(), fromTab = useFromTab(); const live = useLive(signal => listOrders({}, signal), mergeOrderList); const [tab, setTab] = useState('전체');
+  const orders = s.orders.filter(o => o.userId === s.activeUserId), shippingCount = orders.filter(o => o.status === 'shipping').length;
+  const activeHolds = s.holds.filter(h => h.userId === s.activeUserId && (h.status === 'pending' || h.status === 'reserved' && (h.expiresAt ?? Infinity) > now));
+  const tabs = ['전체', '배송준비', '배송중', '배송완료', '취소/환불'];
+  const matches = (o: Order) => tab === '전체' || tab === '배송준비' && ['paid', 'preparing'].includes(o.status) || tab === '배송중' && o.status === 'shipping' || tab === '배송완료' && o.status === 'delivered' || tab === '취소/환불' && ['cancelled', 'refunded'].includes(o.status);
+  const filtered = orders.filter(matches), photo = useProductPhotos(filtered.map(o => o.productId));
+  const cardClass = 'block min-h-11 rounded-dialog outline-offset-2 focus-visible:outline-2 focus-visible:outline-green';
+  return <><Header title="주문 / 배송" back={!fromTab}/>
+    <div role="group" aria-label="주문 상태" className="divider mb-3 flex pb-2">{tabs.map(t => <button key={t} type="button" aria-pressed={tab === t} onClick={() => setTab(t)} className={`min-h-11 min-w-0 flex-1 whitespace-nowrap border-b-2 text-subhead ${tab === t ? 'border-ink font-bold text-ink' : 'muted border-transparent font-normal'}`}>{t}</button>)}</div>
+    {shippingCount > 0 && <div className="mb-3 flex items-center gap-3 rounded-dialog bg-positive-soft p-3"><Truck aria-hidden className="h-5 w-5 shrink-0"/><p className="text-body font-bold">배송 중인 주문이 {shippingCount}건 있어요</p></div>}
+    <div className="space-y-2">
+      {activeHolds.map(h => <Link key={h.id} to={`/checkout/${h.id}`} className={cardClass} aria-label={`${h.status === 'pending' ? '결제 결과 확인' : '이어서 결제'}: ${s.products.find(p => p.id === h.productId)?.name ?? '확보한 주문'}`}><AxCard padding={2} variant="default"><div className="flex items-center gap-2"><div className="min-w-0 flex-1"><b className="text-label">{h.status === 'pending' ? '결제 결과 확인 중' : '확보한 주문 이어서 결제'}</b><p className="muted mt-1 break-words text-footnote">{s.products.find(p => p.id === h.productId)?.name} · {h.status === 'pending' ? '결제 완료 여부를 확인해 주세요.' : `${countdown(h.expiresAt, now)} 남음`}</p></div><ChevronRight aria-hidden className="h-4 w-4 shrink-0"/></div></AxCard></Link>)}
+      {filtered.map(o => <Link key={o.id} to={`/orders/${o.id}`} className={cardClass} aria-label={`${o.product.name} ${ORDER_LABELS[o.status]} 주문 상세 보기`}><AxCard padding={2} variant="default"><div className="space-y-2">
+        <Badge live={['shipping', 'delivered'].includes(o.status)}>{ORDER_LABELS[o.status]}</Badge>
+        <div className="flex items-center gap-2"><ProductImage src={photo(o.productId, o.product.image)} alt={o.product.name} className="h-16 w-14 shrink-0"/><div className="min-w-0 flex-1 space-y-1"><p className="muted break-words text-footnote">{o.product.brand}</p><p className="break-words text-callout font-semibold">{o.product.name}</p><p className="muted break-words text-label">{o.lines.map(l => `${l.name} ${l.quantity}개`).join(' · ')}</p><p className="font-number text-subhead font-bold">{money(o.total)}</p></div><ChevronRight aria-hidden className="h-4 w-4 shrink-0"/></div>
+        <p className="muted text-footnote">{shortDate(o.createdAt)} 주문</p>
+      </div></AxCard></Link>)}
+    </div>
+    {!filtered.length && !activeHolds.length && (live.loading || live.error ? <LiveStatus state={live}/> : <Empty title="주문 내역이 없어요"><Button to="/">상품 둘러보기</Button></Empty>)}
+  </>;
 }
 
 // 구매 확정은 confirmPurchase로 서버에 보낸다. TODO(api-gap): 주문 취소·환불 API는 명세에 없다(반품·환불은 플랫폼이 처리하지 않고 판매자 문의로 협의) — 취소/환불 상태 표시는 목업 유지

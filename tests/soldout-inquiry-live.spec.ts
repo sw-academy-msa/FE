@@ -83,7 +83,7 @@ test('주문 문의를 보낸 직후 조회 모델이 아직 없어도 다시 �
   let detailCalls = 0;
   await mockBuyer(page, () => ++detailCalls);
   await signIn(page, '/orders', 'buyer@example.com');
-  await page.getByRole('link', { name: '주문 상세', exact: true }).click();
+  await page.getByRole('link', { name: /주문 상세 보기$/ }).click();
   await page.getByRole('button', { name: '판매자에게 문의', exact: true }).click();
   await expect(page.getByText('주문번호 o1', { exact: true })).toBeVisible();
   await page.getByRole('textbox', { name: '문의 내용' }).fill('포장이 찢어져 왔어요');
