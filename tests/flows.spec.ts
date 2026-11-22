@@ -103,7 +103,7 @@ test('마이페이지에서 연 화면: 알림 설정은 설정 모드, 주문·
   await page.getByRole('button', { name: '저장', exact: true }).click();
   await expect(page).toHaveURL(/#\/my$/);
   await page.getByRole('navigation', { name: '하단 메뉴' }).getByRole('link', { name: '주문' }).click();
-  await expect(page.getByRole('heading', { name: '주문 · 배송' })).toBeVisible(); await expect(page.getByRole('button', { name: '이전 화면' })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: '주문 / 배송' })).toBeVisible(); await expect(page.getByRole('button', { name: '이전 화면' })).toHaveCount(0);
   await page.goto('/#/my'); await page.getByText('주문 · 배송 조회').first().click();
   await expect(page.getByRole('button', { name: '이전 화면' })).toBeVisible();
   await page.goto('/#/support');
