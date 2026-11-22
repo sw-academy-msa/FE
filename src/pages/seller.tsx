@@ -1,9 +1,13 @@
+import { Card as AxCard } from '@astryxdesign/core/Card';
+import { SellerStatusTabs } from '../components/SellerStatusTabs';
+import { SellerMonthlySales } from '../components/SellerMonthlySales';
+import { salesGauge, sellerMonth } from '../sellerMetrics';
 import { LogoutButton, SETTINGS_HREF } from './auth';
 import { FaqList, SELLER_FAQ_ITEMS } from './account';
 import { BankField } from '../components/BankField';
 import { useEffect, useRef, useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Plus, Check, ChevronRight, FileText, Info, Rocket, ScanSearch, Share2, Truck } from 'lucide-react';
+import { Check, ChevronRight, FileText, Info, Rocket, ScanSearch, Share2, Truck } from 'lucide-react';
 import { activeUser, feeFor, formatPhone, markDelivered, maskName, money, nowOf, orderNo, parseRejection, saleState, salesSoldOut, uid } from '../domain';
 import type { Order, Product, SellerSettings } from '../domain';
 import { atomic, mutate, useStore } from '../store';
@@ -22,42 +26,18 @@ import { useProductPhotos } from '../productPhotos';
 import { retryable } from '../api/live';
 const hm = (t: number) => new Date(t).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false });
 const md = (t: number) => { const d = new Date(t); return `${d.getMonth() + 1}.${d.getDate()} (${'일월화수목금토'[d.getDay()]})`; };
-/** 판매 현황 요약 — 이번 달 판매·남은 수량(상품 집계), 상품 상태별 수, 처리할 주문(주문 집계), 지금 판매 중인 상품 */
 export function SellerSalesPage() {
-  const s = useStore(), user = activeUser(s), now = useClock();
-  const month = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit' }).format(now);
-  const live = useLive(async signal => (user.seller ? listSellerProducts(user.id, {}, signal) : null), (st, items) => { if (items) mergeProducts(st, items); }, [user.id]);
-  const sales = useApi(async signal => (USE_MOCK || !user.seller ? null : getSalesSummary(month, signal)), [user.id, month]);
-  const orders = useApi(async signal => (USE_MOCK || !user.seller ? null : getSellerOrderSummary({}, signal)), [user.id]);
-  const settle = useApi(async signal => (USE_MOCK || !user.seller ? null : getSellerSettlement(month, signal)), [user.id, month]);
+  const s = useStore(), user = activeUser(s), now = useClock(), month = sellerMonth(now);
+  const live = useLive(async signal => user.seller ? listSellerProducts(user.id, {}, signal) : null, (st, rows) => { if (rows) mergeProducts(st, rows); }, [user.id]);
+  const orders = useApi(async signal => USE_MOCK || !user.seller ? null : getSellerOrderSummary({}, signal), [user.id]);
   if (!user.seller) return <Unavailable/>;
   const mine = s.products.filter(p => p.sellerId === user.id && p.reviewStatus !== 'DRAFT');
-  const onSale = mine.filter(p => saleState(p, now) === '판매 중'), sd = sales.data, od = orders.data;
-  const num = (v: number | undefined, unit: string) => (v === undefined ? '-' : `${v.toLocaleString('ko-KR')}${unit}`);
-  const tile = (label: string, value: string, to?: string) => { const body = <><p className="font-number text-title font-bold">{value}</p><p className="muted mt-1 text-footnote">{label}</p></>; return to ? <Link key={label} to={to} className="rounded-element bg-canvas py-4 text-center">{body}</Link> : <div key={label} className="rounded-element bg-canvas py-4 text-center">{body}</div>; };
-  return <div className="space-y-6">
-    <Header title="판매 현황" subtitle={`${Number(month.slice(5))}월 기준 · 이번 달 시작한 승인 상품`} backTo="/my"/>
-    <LiveStatus state={{ loading: sales.loading, error: sales.error, reload: sales.reload }}/>
-    <section className="space-y-2"><h2 className="text-subhead font-bold">이번 달 판매</h2>
-      <div className="grid grid-cols-3 gap-2">{tile('판매 수량', num(sd?.confirmedQuantity, '개'))}{tile('결제 대기', num(sd?.reservedQuantity, '개'))}{tile('남은 수량', num(sd?.availableQuantity, '개'))}</div>
-    </section>
-    <section className="space-y-2"><h2 className="text-subhead font-bold">정산(구매 확정 기준)</h2>
-      {(() => { const st = settle.data, n = st ? settlementNet(st, Object.fromEntries(mine.map(p => [p.id, p.listQuantity]))) : undefined;
-        return <><div className="grid grid-cols-3 gap-2">{tile('구매 확정 금액', st ? money(st.confirmedAmount) : '-')}{tile('수수료', n ? money(n.fee) : '-')}{tile('정산 예정', n ? money(n.net) : '-')}</div>
-          <p className="muted text-footnote leading-relaxed">{st ? `확정 대기 ${st.awaitingOrders}건 · ${money(st.awaitingAmount)} (배송 완료 후 구매 확정 전). ` : ''}상품 금액 기준(배송비 제외)이에요. 상품별 한정 수량의 90%를 넘게 팔리면 판매 금액의 10%가 수수료이며, 그 외에는 0%예요.</p></>; })()}
-      {settle.error && <p className="text-label text-red">정산 금액을 불러오지 못했어요. <button type="button" className="font-bold underline" onClick={settle.reload}>다시 시도</button></p>}
-    </section>
-    <section className="space-y-2"><h2 className="text-subhead font-bold">상품</h2>
-      <div className="grid grid-cols-3 gap-2">{tile('판매 예정', num(sd?.scheduledCount, '개'), '/seller/products?state=판매 예정')}{tile('판매 중', num(sd?.onSaleCount, '개'), '/seller/products?state=판매 중')}{tile('판매 종료', num(sd?.endedCount, '개'), '/seller/products?state=판매 종료')}</div>
-    </section>
-    <section className="space-y-2"><h2 className="text-subhead font-bold">주문 처리</h2>
-      <div className="grid grid-cols-3 gap-2">{tile('배송 준비', num(od?.preparingOrders, '건'), '/seller/orders')}{tile('배송 중', num(od?.shippingOrders, '건'), '/seller/orders')}{tile('배송 완료', num(od?.deliveredOrders, '건'), '/seller/orders')}</div>
-      {orders.error && <p className="text-label text-red">주문 집계를 불러오지 못했어요. <button type="button" className="font-bold underline" onClick={orders.reload}>다시 시도</button></p>}
-    </section>
-    <section className="space-y-2"><h2 className="text-subhead font-bold">지금 판매 중</h2>
-      {onSale.map(p => <Link key={p.id} to={`/seller/product/${p.id}`} className="divider flex items-center justify-between gap-3 py-3"><span className="min-w-0 flex-1 truncate text-callout">{p.name}</span><span className="muted shrink-0 text-label">{salesSoldOut(p.listQuantity) ? '완판 ›' : `${clockLeft(p.endsAt - now)} 남음 ›`}</span></Link>)}
-      {!onSale.length && !live.loading && <p className="muted py-3 text-label">지금 판매 중인 상품이 없어요.</p>}
-    </section>
+  const ownOrders = s.orders.filter(o => o.sellerId === user.id);
+  return <div className="space-y-5">
+    <Header title="판매 현황" backTo="/my"/>
+    <LiveStatus state={live}/>
+    <SellerMonthlySales key={user.id} sellerId={user.id} month={month} products={mine} orders={ownOrders} now={now}/>
+    <section className="space-y-3"><h2 className="text-subhead font-bold">주문 처리</h2><div className="grid grid-cols-3 gap-2">{([['배송준비', 'preparingOrders', 'preparing'], ['배송중', 'shippingOrders', 'shipping'], ['배송완료', 'deliveredOrders', 'delivered']] as const).map(([label, key, status]) => <Link key={key} to={`/seller/orders?state=${status}`} className="min-h-11 rounded-element bg-canvas p-3 text-center"><p className="font-number text-title font-bold">{USE_MOCK ? ownOrders.filter(o => o.status === status).length : orders.data?.[key] ?? '-'}</p><p className="muted text-label">{label}</p></Link>)}</div>{!USE_MOCK && <LiveStatus state={orders}/>}</section>
   </div>;
 }
 export function SellerProductsPage() {
@@ -68,76 +48,46 @@ export function SellerProductsPage() {
     try { if (!USE_MOCK) await deleteProductDraft(deleting); mutate(st => { st.products = st.products.filter(p => p.id !== deleting); const d = st.drafts[user.id]; if (d?.editingId === deleting || d?.serverId === deleting) delete st.drafts[user.id]; }); setDeleting(null); }
     catch (e) { setDeleteError(errorMessage(e)); } finally { setDeleteBusy(false); }
   }
-  // 실제 모드: 본인 상품 목록과 이번 달 판매 집계를 서버에서 받는다(mock은 store 목업 그대로)
   const live = useLive(async signal => listSellerProducts(user.id, {}, signal), (st, items) => mergeProducts(st, items), [user.id]);
-  const month = `${new Date(now).getFullYear()}-${String(new Date(now).getMonth() + 1).padStart(2, '0')}`;
-  const summary = useApi(async signal => (USE_MOCK ? null : getSalesSummary(month, signal)), [month]);
   const editable = s.products.filter(p => p.sellerId === user.id && p.reviewStatus === 'APPROVED' && p.startsAt > now).map(p => p.id).join(',');
-  // 수정 심사는 목록 API가 없어 승인 상태이고 시작 전인 상품(수정 가능한 상품)만 상품별로 조회한다
   const revStatus = useApi(async signal => {
     if (USE_MOCK || !editable) return {} as Record<string, ProductRevisionDto>;
     const rows = await Promise.all(editable.split(',').map(async id => [id, (await listRevisions(id, signal).catch(() => [] as ProductRevisionDto[])).sort((a, b) => Date.parse(b.submittedAt) - Date.parse(a.submittedAt))[0]] as const));
     return Object.fromEntries(rows.filter(([, r]) => r));
   }, [editable]);
-  // 한정·판매 수량: 서버 목록 요약(listQuantity)이 있으면 그 값, 없으면 옵션 합계와 이 기기의 주문으로 센다
-  const qtyOf = (p: Product) => { const localSold = s.orders.filter(o => o.productId === p.id && !['cancelled','refunded'].includes(o.status)).reduce((n, o) => n + o.lines.reduce((a, l) => a + l.quantity, 0), 0);
-    return p.listQuantity ? { total: p.listQuantity.total, sold: Math.max(p.listQuantity.sold, localSold) } : { total: p.options.reduce((n, o) => n + o.stock, 0), sold: localSold }; };
-  if (!user.seller) return <Unavailable/>; const settings = s.sellerSettings[user.id]; const allProducts = s.products.filter(p => p.sellerId === user.id); const products = allProducts.filter(p => tab === '전체' || (tab === '판매 심사 중' ? p.reviewStatus === 'IN_REVIEW' : saleState(p, now) === tab)); const thisMonth = summary.data?.confirmedQuantity ?? s.orders.filter(o => o.sellerId === user.id && !['cancelled','refunded'].includes(o.status)).reduce((n, o) => n + o.lines.reduce((a, l) => a + l.quantity, 0), 0); const alarmCount = 226; /* TODO(api-gap): 알림 신청 인원 API 없음(목업) */ const endedCount = allProducts.filter(p => saleState(p, now) === '판매 종료').length;
-  // 완판: 한정 수량을 모두 판 상품(목록 요약의 판매 수량 기준). 판매 종료 시간 전에 다 팔린 판매 중 상품도 센다
-  const soldOutCount = allProducts.filter(p => { const st = saleState(p, now); return (st === '판매 종료' || st === '판매 중') && salesSoldOut(p.listQuantity ?? qtyOf(p)); }).length;
-  const chips: [string, number][] = [['전체', allProducts.length], ['판매 중', allProducts.filter(p => saleState(p, now) === '판매 중').length], ['판매 예정', allProducts.filter(p => saleState(p, now) === '판매 예정').length], ['판매 심사 중', allProducts.filter(p => p.reviewStatus === 'IN_REVIEW').length], ['판매 종료', endedCount]];
-  return <div className="space-y-0">
-    <Header title="판매 상품 관리" backTo="/my" action={<Link to="/seller/new" aria-label="상품 등록"><Plus size={22}/></Link>}/>
+  if (!user.seller) return <Unavailable/>;
+  const products = s.products.filter(p => p.sellerId === user.id && (tab === '전체' || (tab === '판매 심사 중' ? p.reviewStatus === 'IN_REVIEW' : saleState(p, now) === tab)));
+  const tabs = ['전체', '판매 중', '판매 예정', '판매 심사 중', '판매 종료'].map(value => ({ value, label: value.replaceAll(' ', '') }));
+  return <div>
+    <Header title="판매 상품 관리" backTo="/my"/>
     {deleting && <Modal title="작성 중인 상품을 삭제할까요? 되돌릴 수 없어요" onClose={() => { if (!deleteBusy) setDeleting(null); }}><ErrorBox message={deleteError}/><div className="flex gap-2"><Button outline className="min-h-11 flex-1" disabled={deleteBusy} onClick={() => setDeleting(null)}>취소</Button><Button className="min-h-11 flex-1" disabled={deleteBusy} onClick={() => void removeDraft()}>삭제</Button></div></Modal>}
-    <div className="flex items-center justify-between py-3"><span className="text-body font-bold">{settings?.displayName ?? user.name}</span><span className="muted text-label">{new Date(now).getMonth()+1}월 기준</span></div>
+    <SellerStatusTabs label="판매 상품 상태" tabs={tabs} value={tab} onChange={value => setParams(value === '전체' ? {} : { state: value }, { replace: true })}/>
     <LiveStatus state={live}/>
-    <div className="mb-4 flex justify-around rounded-inner bg-canvas py-4">{([['이번 달 판매', `${thisMonth}개`], ...(USE_MOCK ? [['알림 신청', `${alarmCount}명`]] : []), ['완판', `${soldOutCount}건`]] as [string,string][]).map(([label, value]) => <div key={label} className="text-center"><p className="font-number text-headline font-bold">{value}</p><p className="muted mt-1 text-footnote">{label}</p></div>)}</div>
-    <div className="-mx-4 mb-2 flex gap-1.5 overflow-x-auto px-4">{chips.map(([label, count]) => <button key={label} onClick={() => setParams(label === '전체' ? {} : { state: label }, { replace: true })} className={`h-7.5 shrink-0 rounded-inner px-2.5 text-label ${tab === label ? 'bg-ink font-bold text-surface' : 'muted bg-soft'}`}>{label} {count}</button>)}</div>
-    {products.map(p => {
-      // 판매 종료 시간 전이라도 완판(한정 수량 전부 결제 확정)이면 남은 시간을 멈추고 결과로 보인다. 판정은 서버 확정 수량(목록 요약)을 우선한다: 이 기기의 주문은 서버에서 취소·환불돼도 남아 있을 수 있다
-      const status = saleState(p, now); const { total, sold } = qtyOf(p); const remaining = Math.max(0, total - sold); const onSaleTime = status === '판매 중', soldOut = (onSaleTime || status === '판매 종료') && salesSoldOut(p.listQuantity ?? { total, sold }); const isLive = onSaleTime && !soldOut, ended = status === '판매 종료' || soldOut; const secondsLeft = Math.max(0, Math.floor((p.endsAt - now) / 1000)); const hh = String(Math.floor(secondsLeft/3600)).padStart(2,'0'), mm = String(Math.floor(secondsLeft%3600/60)).padStart(2,'0'), ss = String(secondsLeft%60).padStart(2,'0');
-      return <div key={p.id} className="divider space-y-3 py-4">
-        <div className="flex gap-3">
-          <ProductImage src={p.images[0]} alt={p.name} className="h-18 w-18 shrink-0"/>
-          <div className="min-w-0 flex-1 space-y-1">
-            <div className="flex items-center gap-2"><span className={`rounded-badge px-2 py-0.5 text-footnote font-bold ${isLive ? 'bg-positive-soft text-positive' : !USE_MOCK && p.reviewStatus === 'REJECTED' ? 'bg-red-soft text-red' : 'bg-soft text-muted'}`}>{isLive ? '판매 중' : soldOut ? '완판' : status === '게시 전' && p.reviewStatus && (!USE_MOCK || p.reviewStatus === 'DRAFT') ? REVIEW_LABEL[p.reviewStatus] : status}</span>{revStatus.data?.[p.id]?.status === 'IN_REVIEW' && <span className="rounded-badge bg-[#FFF3E0] px-2 py-0.5 text-footnote font-bold text-[#B25E09]">수정 심사 중</span>}{revStatus.data?.[p.id]?.status === 'REJECTED' && <span className="rounded-badge bg-red-soft px-2 py-0.5 text-footnote font-bold text-red">수정 반려</span>}<span className="muted text-footnote font-bold">{onSaleTime ? `오늘 ${hm(p.startsAt)} – ${hm(p.endsAt)}` : ended ? `${md(p.endsAt)} ${hm(p.endsAt)} 종료` : `${md(p.startsAt)} ${hm(p.startsAt)} 오픈`}</span></div>
-            <p className="text-callout">{p.name}</p>
-            <p className="font-number text-subhead font-bold">{money(p.price)} <span className="muted text-label font-normal">{total}개 한정</span></p>
-          </div>
-        </div>
-        {isLive && <><div className="flex items-center justify-between text-label"><span className="font-bold">{sold} / {total}개 판매</span><span className="muted">{hh}:{mm}:{ss} 남음</span></div><div className="h-1 w-full rounded-full bg-line"><div className="h-1 rounded-full bg-ink" style={{width: total > 0 ? `${(sold/total)*100}%` : '0%'}}/></div></>}
-        {ended && <><div className="flex items-center justify-between text-label"><span className="font-bold">{sold} / {total}개 판매</span><span className="muted">{soldOut ? '완판' : '판매 종료'}</span></div><div className="h-1 w-full rounded-full bg-line"><div className="h-1 rounded-full bg-muted" style={{width: total > 0 ? `${Math.min(100, sold/total*100)}%` : '0%'}}/></div></>}
-        {status === '판매 예정' && <p className="muted text-label">{openDay(p.startsAt, now)}{USE_MOCK && ` · 알림 신청 ${alarmCount}명`}</p>}
-        {isLive || ended ? <Button outline to={`/seller/product/${p.id}`} className="w-full text-body!">{isLive ? '판매 현황' : '판매 결과'}</Button> : status === '판매 예정' && <Button outline to={`/seller/new?edit=${p.id}`} className="w-full text-body!">판매 정보 수정</Button>}
-        {status === '게시 전' && (p.reviewStatus === 'IN_REVIEW' ? <Button outline to={`/seller/published/${p.id}`} className="w-full text-body!">심사 상태 보기</Button> : p.reviewStatus === 'REJECTED' && !USE_MOCK ? <RejectedActions p={p}/> : <Button outline to={`/seller/new?edit=${p.id}`} className="w-full text-body!">{p.reviewStatus === 'REJECTED' ? '수정하고 다시 요청' : '이어서 등록'}</Button>)}
-        {p.reviewStatus === 'DRAFT' && <Button outline className="min-h-11 w-full" onClick={() => { setDeleteError(''); setDeleting(p.id); }}>삭제</Button>}
-      </div>;
-    })}
-    {!products.length && !live.loading && <Empty title={tab === '전체' ? '등록한 상품이 없어요' : `${tab} 상품이 없어요`}/>}
-    <Button className="mt-6 w-full" to="/seller/new"><Plus size={17}/>새 한정 판매 등록</Button>
+    <div className="space-y-2">{products.map(p => {
+      const status = saleState(p, now), draft = p.reviewStatus === 'DRAFT', review = p.reviewStatus === 'IN_REVIEW', rejected = p.reviewStatus === 'REJECTED';
+      const localSold = s.orders.filter(o => o.productId === p.id && !['cancelled','refunded'].includes(o.status)).reduce((n, o) => n + o.lines.reduce((a, l) => a + l.quantity, 0), 0);
+      const { total, sold } = p.listQuantity ?? { total: p.options.reduce((n, o) => n + o.stock, 0), sold: localSold };
+      const gauge = salesGauge(sold, total), soldOut = total > 0 && sold >= total;
+      const onSale = status === '판매 중', ended = status === '판매 종료' || soldOut;
+      const label = draft ? '작성 중' : review ? '판매심사중' : rejected ? '판매 심사 반려' : soldOut ? '완판' : status;
+      const to = draft || status === '판매 예정' ? `/seller/new?edit=${p.id}` : review || rejected ? `/seller/published/${p.id}` : `/seller/product/${p.id}`;
+      return <AxCard key={p.id} padding={2} variant="default" className="seller-product-card rounded-dialog">
+        <Link to={to} aria-label={`${p.name} ${draft ? '이어서 등록' : review ? '심사 상태 보기' : rejected ? '반려 사유와 수정' : status === '판매 예정' ? '판매 정보 수정' : '판매 결과 보기'}`} className="block min-h-11 space-y-2 rounded-inner outline-offset-2 focus-visible:outline-2 focus-visible:outline-green">
+          <div className="flex items-center gap-2"><ProductImage src={p.images[0]} alt={p.name} className="h-16 w-14 shrink-0"/><div className="min-w-0 flex-1 space-y-1"><div className="flex flex-wrap items-center gap-1"><span className={`w-fit rounded-badge px-2 py-1 text-footnote font-bold ${review ? 'bg-warning-soft text-warning' : rejected ? 'bg-red-soft text-red' : onSale && !soldOut ? 'bg-positive-soft text-positive' : 'bg-soft text-muted'}`}>{label}</span>{revStatus.data?.[p.id]?.status === 'IN_REVIEW' && <span className="text-footnote text-warning">수정 심사 중</span>}{revStatus.data?.[p.id]?.status === 'REJECTED' && <span className="text-footnote text-red">수정 반려</span>}</div><p className="break-words text-callout font-semibold">{p.name}</p><p className="font-number text-subhead font-bold">{money(p.price)} <span className="muted text-label font-normal">{total}개 한정</span></p></div><ChevronRight className="h-4 w-4 shrink-0 text-muted"/></div>
+          {(onSale || ended) && !draft && !review && !rejected && <><p className="text-label font-bold">{sold} / {total}개 판매</p><div aria-label="판매율" role="progressbar" aria-valuenow={Math.round(gauge.ratio * 100)} aria-valuemin={0} aria-valuemax={100} aria-valuetext={total > 0 ? `${sold} / ${total}개 판매` : '한정 수량 미집계'} className="h-1 rounded-full bg-line"><div className={`h-full rounded-full ${gauge.color}`} style={{ width: `${gauge.ratio * 100}%` }}/></div></>}
+          {onSale && !soldOut && <p className="muted text-footnote">{clockLeft(p.endsAt - now)} 남음</p>}
+          {status === '판매 예정' && <p className="muted text-label">{openDay(p.startsAt, now)}</p>}
+          {draft && <p className="muted text-label">이어서 등록</p>}
+          {review && <p className="muted text-label">심사 진행 상태 확인</p>}
+        </Link>
+        {draft && <div className="mt-1 flex justify-end"><button type="button" className="min-h-11 min-w-11 text-body font-bold text-red" aria-label={`${p.name} 초안 삭제`} onClick={() => { setDeleteError(''); setDeleting(p.id); }}>삭제</button></div>}
+      </AxCard>;
+    })}</div>
+    {!products.length && !live.loading && !live.error && <div className="flex min-h-[60dvh] items-center justify-center"><Empty title={tab === '전체' || tab === '판매 중' ? '판매 중 상품이 없어요' : `${tab} 상품이 없어요`}/></div>}
   </div>;
 }
 /** 서버 심사 status → 목록 배지 (승인은 판매 예정·판매 중·판매 종료로 보인다) */
 const REVIEW_LABEL: Record<NonNullable<Product['reviewStatus']>, string> = { DRAFT: '작성 중', IN_REVIEW: '판매 심사 중', REJECTED: '판매 심사 반려', APPROVED: '승인' };
-/** 반려 상품: 반려 사유 보기(목록엔 사유가 없어 누를 때 상세를 불러온다) + 수정 후 재요청 — 알림의 심사 결과 화면과 같은 정보·같은 이동 */
-function RejectedActions({ p }: { p: Product }) {
-  const [open, setOpen] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState('');
-  async function show() {
-    if (open) { setOpen(false); return; }
-    setError('');
-    if (p.rejectionReason === undefined) {
-      setBusy(true);
-      try { const full = await getSellerProduct(p.id); mutate(st => mergeProducts(st, [full])); } catch (e) { setError(errorMessage(e)); setBusy(false); return; }
-      setBusy(false);
-    }
-    setOpen(true);
-  }
-  return <div className="space-y-2">
-    {open && <Note title="반려 사유">{p.rejectionReason || '반려 사유가 등록되지 않았어요.'}</Note>}
-    <ErrorBox message={error}/>
-    <div className="flex gap-2"><Button outline className="flex-1 text-body!" disabled={busy} onClick={show}>{busy ? '불러오는 중…' : open ? '반려 사유 닫기' : '반려 사유 보기'}</Button><Button to={`/seller/new?edit=${p.id}`} className="flex-1 text-body!">수정 후 재요청</Button></div>
-  </div>;
-}
 export function SellerProductPage() {
   const { id } = useParams(); const s = useStore(), user = activeUser(s), now = useClock(), location = useLocation(), navigate = useNavigate(), toast = useToast(); const p = s.products.find(p => p.id === id && (!USE_MOCK || p.sellerId === user.id));
   // 실제 모드: 편집 원본·이미지, 이 상품의 주문, 주문 집계, 수정 심사 이력을 서버에서 받는다(mock은 store 목업 그대로)
@@ -253,7 +203,7 @@ export function SellerProductPage() {
           </div>
         </div>
       </section>}
-      <div className="flex gap-2 pt-4"><Button outline to="/seller" className="flex-1">홈</Button><Button to={approved ? '/seller/products' : '/seller/new'} className="flex-[1.6]">{approved ? '판매 상품 관리' : '다른 상품 등록하기'}</Button></div>
+      <div className="flex gap-2 pt-4"><Button outline to="/seller" className="flex-1">홈</Button><Button to="/seller/products" className="flex-[1.6]">판매 상품 관리</Button></div>
     </div>;
   }
 
@@ -389,7 +339,7 @@ export function SellerInquiriesPage() {
   // 실제 모드: 주문 문의함·상품 문의함(+상품명 채우기용 상품 목록)을 서버에서 받는다
   const live = useLive(async signal => (user.seller ? await Promise.all([listSellerProducts(user.id, {}, signal), listSellerOrderInquiryInbox(user.id, {}, signal), listSellerProductInquiries(user.id, {}, signal)]) : null), (st, r) => { if (!r) return; mergeProducts(st, r[0]); mergeInquiries(st, [...r[1], ...r[2]]); }, [user.id]);
   if (!user.seller) return <Unavailable/>; const all = s.inquiries.filter(q => q.sellerId === user.id); const byTab = all.filter(q => tab === 'order' ? !!q.orderId : !q.orderId); const items = onlyUnanswered ? byTab.filter(q => !q.answer) : byTab;
-  return <div className="space-y-0"><Header title="문의함" subtitle="고객의 상품·주문 문의에 답변해 주세요."/><LiveStatus state={live}/><div className="divider flex gap-5">{([['order', `주문 문의 ${all.filter(q => !!q.orderId).length}`], ['product', `상품 문의 ${all.filter(q => !q.orderId).length}`]] as [string, string][]).map(([t, label]) => <button key={t} onClick={() => setTab(t as 'order' | 'product')} className={`border-b-2 py-3 text-footnote ${tab === t ? 'border-ink font-bold' : 'muted border-transparent'}`}>{label}</button>)}</div><div className="flex items-center gap-3 py-3 text-footnote"><label className="flex items-center gap-2"><input type="checkbox" checked={onlyUnanswered} onChange={e => setOnlyUnanswered(e.target.checked)}/>미답변만 보기</label>{onlyUnanswered && <span className="ml-auto font-bold text-red">미답변 {byTab.filter(q => !q.answer).length}건</span>}</div>{items.map(q => <Link key={q.id} to={`/seller/inquiries/${q.id}`} className="divider block space-y-2 py-4"><div className="flex items-center justify-between"><Badge live={!q.answer}>{q.answer ? '답변 완료' : '답변 대기'}</Badge><span className="muted text-caption">{dateTime(q.createdAt)}</span></div><p className="text-body font-bold">{q.productName}</p><p className="muted text-caption">{q.kind}{q.orderId ? ` · ${q.orderId}` : ''}</p><p className="line-clamp-2 text-label leading-relaxed">{q.question}</p></Link>)}{!items.length && !live.loading && <Empty title="해당 조건의 문의가 없어요"/>}</div>;
+  return <div className="space-y-0"><Header title="문의함" subtitle="고객의 상품·주문 문의에 답변해 주세요."/><LiveStatus state={live}/><SellerStatusTabs label="문의 종류" tabs={[{ value: 'order', label: '주문 문의' }, { value: 'product', label: '상품 문의' }]} value={tab} onChange={value => setTab(value as 'order' | 'product')}/><div className="flex items-center gap-3 py-3 text-body"><label className="flex items-center gap-2"><input type="checkbox" checked={onlyUnanswered} onChange={e => setOnlyUnanswered(e.target.checked)}/>미답변만 보기</label>{onlyUnanswered && <span className="ml-auto font-bold text-red">미답변 {byTab.filter(q => !q.answer).length}건</span>}</div>{items.map(q => <Link key={q.id} to={`/seller/inquiries/${q.id}`} className="divider block space-y-2 py-4"><div className="flex items-center justify-between"><Badge live={!q.answer}>{q.answer ? '답변 완료' : '답변 대기'}</Badge><span className="muted text-caption">{dateTime(q.createdAt)}</span></div><p className="text-subhead font-bold">{q.productName}</p><p className="muted text-caption">{q.kind}</p><p className="line-clamp-2 text-callout leading-relaxed">{q.question}</p></Link>)}{!items.length && !live.loading && <Empty title="해당 조건의 문의가 없어요"/>}</div>;
 }
 /** 구매자가 주문 문의에 첨부한 사진: 구매자 화면 InquiryImage와 같은 방식으로 판매자용 열람 URL(5분 유효)을 받아 보여 준다 */
 function SellerInquiryImage({ orderId, imageId }: { orderId: string; imageId: string }) {
@@ -415,51 +365,38 @@ export function SellerInquiryDetailPage() {
   if (!user.seller) return <Unavailable message="문의를 찾을 수 없습니다."/>;
   if (!q) return retryable(live) ? <LiveStatus state={live}/> : <Unavailable message="문의를 찾을 수 없습니다."/>;
   const buyer = s.users.find(u => u.id === q.userId); const buyerMasked = buyer?.name.replace(/^(.)(.)(.)$/, '$1*$3') ?? buyer?.name.replace(/^(.).+(.)$/, (_, a, z) => `${a}*${z}`) ?? '구매자';
-  return <div className="space-y-4"><Header title="문의 상세"/>{q.orderId && <div className="rounded-inner bg-blue-soft p-3.5 space-y-1"><p className="text-body font-bold">{q.productName}</p><p className="muted text-footnote">주문번호 {q.orderId} · 구매자 {buyerMasked}</p></div>}<div className="divider space-y-3 pb-5"><div className="flex items-center justify-between"><Badge live={!q.answer}>{q.answer ? '답변 완료' : '답변 대기'}</Badge><span className="muted text-caption">{dateTime(q.createdAt)}</span></div><p className="text-label font-bold">{q.kind}</p>{q.messages?.length ? q.messages.map((m, i) => <p key={i} className={`whitespace-pre-line text-body leading-relaxed ${m.seller ? 'rounded-inner bg-canvas p-3' : ''}`}>{m.seller ? '[판매자] ' : ''}{m.body}</p>) : <><p className="whitespace-pre-line text-body leading-relaxed">{q.question}</p>{q.answer && <p className="whitespace-pre-line rounded-inner bg-canvas p-3 text-body leading-relaxed">[판매자] {q.answer}</p>}</>}{q.orderId && !!q.imageIds?.length && <div className="flex gap-2 overflow-x-auto" aria-label="구매자 첨부 사진">{q.imageIds.map(imageId => <SellerInquiryImage key={imageId} orderId={q.orderId!} imageId={imageId}/>)}</div>}</div><Note>영업일 기준 1일 안에 답변해 주세요. 2영업일 안에 답변이 없으면 StockDrop이 직접 확인하고 구매자에게 연락해요.</Note><form className="space-y-3" onSubmit={async e => { e.preventDefault(); if (sending.current) return; setError(''); const text = answer.trim(); try { if (!text) throw new Error('답변을 입력해 주세요.'); sending.current = true; setBusy(true);
+  return <div className="space-y-4"><Header title="문의 상세"/>{q.orderId && <div className="rounded-inner bg-blue-soft p-3.5 space-y-1"><p className="text-body font-bold">{q.productName}</p><p className="muted text-footnote">구매자 {buyerMasked}</p></div>}<div className="divider space-y-3 pb-5"><div className="flex items-center justify-between"><Badge live={!q.answer}>{q.answer ? '답변 완료' : '답변 대기'}</Badge><span className="muted text-caption">{dateTime(q.createdAt)}</span></div><p className="text-label font-bold">{q.kind}</p>{q.messages?.length ? q.messages.map((m, i) => <p key={i} className={`whitespace-pre-line text-body leading-relaxed ${m.seller ? 'rounded-inner bg-canvas p-3' : ''}`}>{m.seller ? '[판매자] ' : ''}{m.body}</p>) : <><p className="whitespace-pre-line text-body leading-relaxed">{q.question}</p>{q.answer && <p className="whitespace-pre-line rounded-inner bg-canvas p-3 text-body leading-relaxed">[판매자] {q.answer}</p>}</>}{q.orderId && !!q.imageIds?.length && <div className="flex gap-2 overflow-x-auto" aria-label="구매자 첨부 사진">{q.imageIds.map(imageId => <SellerInquiryImage key={imageId} orderId={q.orderId!} imageId={imageId}/>)}</div>}</div><Note>영업일 기준 1일 안에 답변해 주세요. 2영업일 안에 답변이 없으면 StockDrop이 직접 확인하고 구매자에게 연락해요.</Note><form className="space-y-3" onSubmit={async e => { e.preventDefault(); if (sending.current) return; setError(''); const text = answer.trim(); try { if (!text) throw new Error('답변을 입력해 주세요.'); sending.current = true; setBusy(true);
     if (!USE_MOCK) { // 주문 문의=답변 메시지 추가, 상품 문의=답변 작성·수정(문의 version, FAQ 반영 선택). 서버 응답으로 한 번만 반영한다
       const upd = q.orderId ? await answerOrderInquiry(q.orderId, q.id, text, user.id) : await answerProductInquiry(user.id, q.productId, q.id, { expectedVersion: q.version ?? 0, answer: text, publishToFaq: publicAnswer });
       mutate(st => mergeInquiries(st, [upd]));
     } else mutate(state => { const item = state.inquiries.find(i => i.id === id && i.sellerId === user.id); if (!item || !activeUser(state).seller) throw new Error('이 문의에 답변할 권한이 없습니다.'); item.answer = text; item.public = !item.orderId && publicAnswer; if (item.public) { const p = state.products.find(p => p.id === item.productId); if (p) { const old = p.faqs.find(f => f.question === item.question); if (old) { old.answer = item.answer; old.confirmed = true; } else p.faqs.push({ id: uid('faq-'), question: item.question, answer: item.answer, confirmed: true }); } } });
-    setAnswer(''); toast('답변을 저장했습니다.'); } catch (e) { setError(errorMessage(e)); /* 실패하면 입력 내용은 그대로 둔다 */ } finally { sending.current = false; setBusy(false); } }}><textarea aria-label="답변 입력" value={answer} onChange={e => setAnswer(e.target.value)} className="field field-box" placeholder={!q.orderId && q.answer ? '새 답변으로 바꾸려면 입력해 주세요.' : '답변을 작성해 주세요.'} maxLength={1500}/>{!q.orderId && q.answer && !answer && <button type="button" className="text-footnote font-bold underline" onClick={() => setAnswer(q.answer ?? '')}>기존 답변 불러와 수정</button>}{!q.orderId && <label className="flex items-center gap-2 text-footnote"><input type="checkbox" checked={publicAnswer} onChange={e => setPublic(e.target.checked)}/>공개 가능한 답변을 상품 FAQ에 반영</label>}<ErrorBox message={error}/><Button type="submit" className="w-full" disabled={busy}>{busy ? '등록 중…' : '답변 등록'}</Button></form><Button outline className="w-full" to="/seller/inquiries">문의 목록으로</Button></div>;
+    setAnswer(''); toast('답변을 저장했습니다.'); } catch (e) { setError(errorMessage(e)); /* 실패하면 입력 내용은 그대로 둔다 */ } finally { sending.current = false; setBusy(false); } }}><textarea aria-label="답변 입력" value={answer} onChange={e => setAnswer(e.target.value)} className="field field-box" placeholder={!q.orderId && q.answer ? '새 답변으로 바꾸려면 입력해 주세요.' : '답변을 작성해 주세요.'} maxLength={1500}/>{!q.orderId && q.answer && !answer && <button type="button" className="text-footnote font-bold underline" onClick={() => setAnswer(q.answer ?? '')}>기존 답변 불러와 수정</button>}{!q.orderId && <label className="flex items-center gap-2 text-footnote"><input type="checkbox" checked={publicAnswer} onChange={e => setPublic(e.target.checked)}/>공개 가능한 답변을 상품 FAQ에 반영</label>}<ErrorBox message={error}/>{!!answer.trim() && <div className="seller-action-enter"><Button type="submit" className="w-full" disabled={busy}>{busy ? '등록 중…' : '답변 등록'}</Button></div>}</form></div>;
 }
 
 export function SellerOrdersPage() {
-  const s = useStore(), user = activeUser(s); const [params] = useSearchParams(); const [tab, setTab] = useState('전체');
-  // 실제 모드: 본인 주문 목록과 상태별 집계를 서버에서 받는다(mock은 store 목업 그대로)
+  const s = useStore(), user = activeUser(s); const [params, setParams] = useSearchParams();
+  const states = ['paid', 'preparing', 'shipping', 'delivered'] as const;
+  const tab = states.includes(params.get('state') as typeof states[number]) ? params.get('state')! : 'preparing';
   const productId = params.get('product') ?? undefined;
-  const live = useLive(async signal => (user.seller ? listSellerOrders(user.id, { productId }, signal) : null), (st, list) => { if (list) mergeOrders(st, list); }, [user.id, productId]);
-  const sum = useApi(async signal => (USE_MOCK || !user.seller ? null : getSellerOrderSummary({ productId }, signal)), [productId]);
-  // 주문 목록에는 상품 사진이 없다: 목록에 나온 상품을 모아 상품마다 한 번만 받아 채운다
-  const photo = useProductPhotos(s.orders.filter(o => o.sellerId === user.id).map(o => o.productId));
-  if (!user.seller) return <Unavailable/>; const allOrders = s.orders.filter(o => o.sellerId === user.id && (!params.get('product') || params.get('product') === o.productId)); const orders = allOrders.filter(o => tab === '전체' || (tab === '결제 완료' && o.status === 'paid') || (tab === '배송 준비' && o.status === 'preparing') || (tab === '배송 중' && o.status === 'shipping') || (tab === '배송 완료' && o.status === 'delivered'));
-  const sd = sum.data; // 추측(명세 없음): 결제 완료 = 확정 주문 − (배송 준비+배송 중+배송 완료)
-  const counts: Record<string, number> = sd ? { '전체': sd.confirmedOrders, '결제 완료': Math.max(0, sd.confirmedOrders - sd.preparingOrders - sd.shippingOrders - sd.deliveredOrders), '배송 준비': sd.preparingOrders, '배송 중': sd.shippingOrders, '배송 완료': sd.deliveredOrders } : { '전체': allOrders.length, '결제 완료': allOrders.filter(o => o.status === 'paid').length, '배송 준비': allOrders.filter(o => o.status === 'preparing').length, '배송 중': allOrders.filter(o => o.status === 'shipping').length, '배송 완료': allOrders.filter(o => o.status === 'delivered').length };
-  return <div className="space-y-0">
+  const live = useLive(async signal => user.seller ? listSellerOrders(user.id, { productId }, signal) : null, (st, list) => { if (list) mergeOrders(st, list); }, [user.id, productId]);
+  const allOrders = s.orders.filter(o => o.sellerId === user.id && (!productId || productId === o.productId));
+  const photo = useProductPhotos(allOrders.map(o => o.productId));
+  if (!user.seller) return <Unavailable/>;
+  const orders = allOrders.filter(o => o.status === tab);
+  return <div>
     <Header title="주문 관리"/>
+    <SellerStatusTabs label="판매자 주문 상태" tabs={states.map((value, i) => ({ value, label: ['결제완료', '배송준비', '배송중', '배송완료'][i] }))} value={tab} onChange={value => { const next = new URLSearchParams(params); next.set('state', value); setParams(next, { replace: true }); }}/>
     <LiveStatus state={live}/>
-    <div className="mb-2 flex flex-wrap gap-2 py-2">{Object.entries(counts).map(([label, count]) => <button key={label} onClick={() => setTab(label)} className={`rounded-full px-3 py-1 text-body font-bold ${tab === label ? 'bg-ink text-surface' : 'muted border border-line bg-surface'}`}>{label} {count}</button>)}</div>
-    {orders.map(o => {
-      const statusLabel = ORDER_LABELS[o.status]; const needsAction = o.status === 'paid'; const time = kstShort(o.paidAt ?? o.createdAt);
-      return <Link to={`/seller/orders/${o.id}`} key={o.id} className="divider block space-y-3 py-5">
-        <div className="flex items-center justify-between gap-2">
-          <span className={`rounded-badge px-2 py-0.5 text-footnote font-bold ${needsAction ? 'bg-ink text-surface' : o.status === 'delivered' ? 'bg-positive-soft text-positive' : 'bg-soft text-muted'}`}>{statusLabel}</span>
-          <span className="muted truncate text-label">주문번호 {orderNo(o.id)}</span>
-          <span className="muted shrink-0 text-label">{time}</span>
-        </div>
-        <div className="flex gap-3">
-          <ProductImage src={photo(o.productId, o.product.image)} alt={o.product.name} className="h-14 w-14 shrink-0"/>
-          <div className="min-w-0 flex-1 space-y-1">
-            <p className="text-callout">{o.product.name}</p>
-            <p className="muted text-label">{[...o.lines.map(l => `${l.name} · ${l.quantity}개`), maskName(o.address.name)].filter(Boolean).join(' · ')}</p>
-            <p className="font-number text-callout font-bold">{money(o.total)}</p>
-          </div>
-          <span className="muted self-center">›</span>
-        </div>
-      </Link>;
-    })}
-    {!orders.length && !live.loading && <Empty title="해당 상태의 주문이 없어요"/>}
+    <div className="space-y-2">{orders.map(o => <Link to={`/seller/orders/${o.id}`} key={o.id} aria-label={`${o.product.name} 주문 상세 보기`} className="block min-h-11 rounded-dialog outline-offset-2 focus-visible:outline-2 focus-visible:outline-green">
+      <AxCard padding={2} variant="default" className="space-y-2 rounded-dialog">
+        <div className="flex flex-wrap items-center justify-between gap-2"><Badge live={o.status === 'delivered'}>{ORDER_LABELS[o.status]}</Badge><span className="muted text-body">{kstShort(o.paidAt ?? o.createdAt)}</span></div>
+        <div className="flex items-center gap-2"><ProductImage src={photo(o.productId, o.product.image)} alt={o.product.name} className="h-16 w-14 shrink-0"/><div className="min-w-0 flex-1 space-y-1"><p className="break-words text-subhead font-semibold">{o.product.name}</p><p className="muted break-words text-body">{[...o.lines.map(l => `${l.name} · ${l.quantity}개`), maskName(o.address.name)].filter(Boolean).join(' · ')}</p><p className="font-number text-headline font-bold">{money(o.total)}</p></div><ChevronRight className="h-4 w-4 shrink-0 text-muted"/></div>
+      </AxCard>
+    </Link>)}</div>
+    {!orders.length && !live.loading && !live.error && <Empty title="해당 상태의 주문이 없어요"/>}
   </div>;
 }
+
 export function SellerOrderPage() {
   const { id } = useParams(); const s = useStore(), user = activeUser(s), toast = useToast(), now = useClock(); const order = s.orders.find(o => o.id === id && o.sellerId === user.id); const [showTracking, setShowTracking] = useState(false), [confirm, setConfirm] = useState(false), [error, setError] = useState(''), [busy, setBusy] = useState(false);
   // 실제 모드: 주문 상세(배송지·송장)와 이 주문의 문의를 서버에서 받는다
@@ -473,15 +410,15 @@ export function SellerOrderPage() {
   const o = order; const paidAt = o.paidAt ?? o.createdAt; const dueStr = o.dispatchDays ? `결제 후 ${o.dispatchDays}영업일 이내 출고 · ${kstDay(addBusinessDays(paidAt, o.dispatchDays))}까지` : '';
   const dispatchFrom = USE_MOCK ? s.sellerSettings[user.id]?.shippingAddress || '성수 물류창고' : (dispatch.data?.productId === o.productId ? dispatch.data.address : ''); const doneAt = o.deliveredAt ?? o.processedAt;
   const needsTracking = ['paid', 'preparing'].includes(o.status); const orderInquiries = s.inquiries.filter(q => q.orderId === o.id && q.sellerId === user.id);
-  return <div className="space-y-5">
+  return <div className="seller-order-detail space-y-5">
     <Header title="주문 상세" subtitle={`주문번호 ${orderNo(o.id)} · ${kstShort(paidAt)} 결제`}/>
     {needsTracking ? <><h1 className="text-heading-lg font-bold tracking-[-.7px]">송장을 등록해 주세요</h1>{dueStr && <p className="text-body text-aux">{dueStr}</p>}</> : <h1 className="text-heading-lg font-bold tracking-[-.7px]">{o.status === 'shipping' ? '상품이 배송 중이에요' : o.status === 'delivered' ? '배송이 완료됐어요' : ORDER_LABELS[o.status]}</h1>}
     <div className="flex gap-3 rounded-inner bg-canvas p-4">
       <ProductImage src={photo(o.productId, o.product.image)} alt={o.product.name} className="h-16 w-16 shrink-0"/>
-      <div className="min-w-0 flex-1 space-y-1"><p className="muted text-footnote font-bold">{o.product.brand}</p><p className="text-callout">{o.product.name}</p><p className="muted text-label">{o.lines.map(l => l.name).join(' / ')} / {o.lines.reduce((n,l)=>n+l.quantity,0)}개</p></div>
+      <div className="min-w-0 flex-1 space-y-1"><p className="muted text-footnote font-bold">{o.product.brand}</p><p className="text-subhead">{o.product.name}</p><p className="muted text-body">{o.lines.map(l => l.name).join(' / ')} / {o.lines.reduce((n,l)=>n+l.quantity,0)}개</p></div>
     </div>
     <section className="divider space-y-2 pb-4"><h2 className="text-subhead font-bold">주문 및 결제 정보</h2><InfoRow label="상품금액" value={money(o.total - o.shipping)}/><InfoRow label="고정 배송비" value={money(o.shipping)}/><InfoRow label="최종 결제금액" value={<span className="font-bold">{money(o.total)}</span>}/></section>
-    <section className="divider space-y-2 pb-4"><h2 className="text-subhead font-bold">배송지</h2><p className="text-label">{o.address.name} · {formatPhone(o.address.phone)}</p><p className="muted text-label leading-relaxed">{o.address.address} {o.address.detail}<br/>{o.address.request}</p></section>
+    <section aria-label="배송지" className="divider space-y-1 pb-4"><h2 className="text-subhead font-bold">배송지</h2><div className="flex flex-wrap items-center gap-x-3"><p className="break-words text-headline font-bold">{o.address.name}</p>{o.address.phone && <a href={`tel:${o.address.phone.replace(/[^+\d]/g, '')}`} className="inline-flex min-h-11 items-center text-subhead font-bold">{formatPhone(o.address.phone)}</a>}</div><p className="muted break-words text-body leading-relaxed">{o.address.address} {o.address.detail}<br/>{o.address.request}</p></section>
     <section className="divider space-y-2 pb-4"><h2 className="text-subhead font-bold">배송 처리</h2>{dispatchFrom && <InfoRow label="출고지" value={dispatchFrom}/>}<InfoRow label="택배사" value={o.carrier || <span className="text-muted">미등록</span>}/><InfoRow label="운송장 번호" value={o.tracking ? <span className="inline-flex items-center gap-1">{o.tracking}<CopyButton value={o.tracking}/></span> : <span className="text-muted">미등록</span>}/></section>
     <Note>송장을 등록하면 구매자에게 배송 중으로 안내돼요. 판매자의 수동 배송완료 처리는 구매확정이나 정산 송금을 의미하지 않습니다.</Note>
     {orderInquiries.length > 0 && <Link to={`/seller/inquiries/${orderInquiries[0].id}`} className="flex items-center gap-3 rounded-inner border border-line p-4"><div className="flex-1 space-y-1"><p className="text-body font-bold">이 주문의 문의</p><p className="muted text-label">{orderInquiries[0].kind} 문의 {orderInquiries.length}건</p></div>{orderInquiries.some(q => !q.answer) && <span className="rounded-badge bg-red-soft px-2 py-0.5 text-footnote font-bold text-red">미답변 {orderInquiries.filter(q => !q.answer).length}</span>}<ChevronRight size={16} className="muted"/></Link>}
@@ -583,7 +520,6 @@ export function SellerMyPage() {
         <MenuRow to="/seller/sales" label="판매 현황"/>
         <MenuRow to="/seller/orders" label="주문 관리"/>
         <MenuRow to="/seller/inquiries" label="문의 답변"><span className={`mr-1 text-label ${unanswered > 0 ? 'text-red' : 'muted'}`}>{unanswered > 0 ? `${unanswered}건 대기` : ''}</span></MenuRow>
-        <MenuRow to="/seller/new" label="새 한정 판매 등록"/>
       </section>
       <div className="h-2 bg-canvas"/>
       <section className="mb-4">
@@ -936,7 +872,8 @@ export function SellerSettingsPage() {
         </div>
       </Field>
       <ErrorBox message={error}/>
-      <Button type="submit" className="w-full" disabled={busy}>{busy ? '저장 중…' : '저장하기'}</Button>
+      {(core !== baseCore || intro !== baseIntro) && <div className="seller-action-enter"><Button type="submit" className="w-full" disabled={busy || (!USE_MOCK && (!store.data || store.loading || !!store.error))}>{busy ? '저장 중…' : '저장하기'}</Button></div>}
+      {store.error && <LiveStatus state={store}/>}
       <div className="h-px bg-line"/>
       <h2 className="text-body font-bold text-muted">로그인 정보</h2>
       <div className="divider flex items-center justify-between py-4">

@@ -49,6 +49,7 @@ export const stockdropPalette = {
   info: '#2F6FED', // 운영자 입점 심사 배지
   'info-soft': '#EAF1FF',
   warning: '#D9730D', // 운영자 판매 심사 배지
+  'gauge-warning': '#E7B93F', // 중간 판매율 게이지, 글자에는 사용하지 않는다
   'warning-soft': '#FFF1E5',
 } as const;
 export type PaletteName = keyof typeof stockdropPalette;

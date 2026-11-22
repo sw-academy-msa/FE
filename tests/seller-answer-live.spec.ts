@@ -49,7 +49,7 @@ test('주문 문의 답변을 보낸 뒤 나갔다 다시 들어와도 입력창
   await expect(page.getByText('답변을 저장했습니다.')).toBeVisible();
   await expect(box(page)).toHaveValue('');
   expect(state.posts).toBe(1);
-  await page.getByRole('link', { name: '문의 목록으로', exact: true }).click();
+  await page.getByRole('button', { name: '이전 화면', exact: true }).click();
   await page.getByRole('link', { name: /패딩/ }).click();
   await expect(page.getByText(`[판매자] ${ANSWER}`, { exact: true })).toHaveCount(1);
   await expect(box(page)).toHaveValue('');
@@ -83,7 +83,7 @@ test('상품 문의 답변은 저장 뒤 입력창이 비고 답변으로 한 �
   await expect(box(page)).toHaveValue('');
   await expect(page.getByText('[판매자] M 사이즈 기준 가슴 단면 55cm예요', { exact: true })).toHaveCount(1);
   expect(state.puts).toBe(1);
-  await page.getByRole('link', { name: '문의 목록으로', exact: true }).click();
+  await page.getByRole('button', { name: '이전 화면', exact: true }).click();
   await page.getByRole('button', { name: /상품 문의/ }).click();
   await page.getByRole('link', { name: /사이즈가 어떻게 되나요/ }).click();
   await expect(box(page)).toHaveValue('');

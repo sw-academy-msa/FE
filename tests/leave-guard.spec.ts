@@ -36,7 +36,7 @@ test('보내기(저장) 성공 뒤의 이동은 확인창 없이 진행된다', 
 
 test('판매 등록: 입력 후 뒤로 가기는 기본 안내 확인창(나가면 초안이 지워진다), 계속 작성이면 입력 유지, 나가기면 이전 화면', async ({ page }) => {
   await actor(page, 'seller'); await open(page, '/#/seller/products');
-  await page.getByRole('link', { name: '상품 등록' }).click(); await expect(page).toHaveURL(/#\/seller\/new$/);
+  await page.getByRole('button', { name: '이전 화면', exact: true }).click(); await page.getByRole('navigation', { name: '하단 메뉴' }).getByRole('link', { name: '홈', exact: true }).click(); await page.getByRole('link', { name: '판매 등록', exact: true }).click(); await expect(page).toHaveURL(/#\/seller\/new$/);
   await page.getByLabel('상품명').fill('리넨 셔츠');
   await page.goBack();
   await expect(confirmDialog(page)).toBeVisible(); await expect(confirmDialog(page)).toContainText('임시 저장한 상품은 판매 상품 관리에서 이어서 등록할 수 있어요.');
@@ -45,7 +45,7 @@ test('판매 등록: 입력 후 뒤로 가기는 기본 안내 확인창(나가�
   await page.getByRole('button', { name: '이전 화면' }).click();
   await expect(confirmDialog(page)).toBeVisible();
   await confirmDialog(page).getByRole('button', { name: '삭제하고 나가기' }).click();
-  await expect(page).toHaveURL(/#\/seller\/products$/);
+  await expect(page).toHaveURL(/#\/$/);
 });
 
 test('시트가 열려 있으면 뒤로 가기는 시트만 닫고, 하단 탭 이동은 확인창을 띄운다', async ({ page }) => {

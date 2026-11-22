@@ -86,6 +86,7 @@ body { height: auto; min-height: 100%; overflow-x: clip; }
   --color-info: var(--sd-color-info);
   --color-info-soft: var(--sd-color-info-soft);
   --color-warning: var(--sd-color-warning);
+  --color-gauge-warning: var(--sd-color-gauge-warning);
   --color-warning-soft: var(--sd-color-warning-soft);
   --text-caption: var(--sd-text-caption);
   --text-footnote: var(--sd-text-footnote);
@@ -155,6 +156,11 @@ main > div.flex:has(> header + div > img) > div:last-child :is(.btn, .ax-btn).fl
 }
 /* 가운데 대화상자: 뒷배경은 서서히 어두워지고, 상자는 살짝 커지며 나타난다(transform과 opacity만). 시간과 곡선은 테마 모션 토큰 */
 @keyframes sd-fade-in { from { opacity: 0; } to { opacity: 1; } }
+.seller-action-enter { animation: sd-fade-in var(--duration-fast) var(--ease-entrance) both; }
+.seller-order-detail .text-label { font-size: var(--sd-text-body); }
+@keyframes seller-bar-rise { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+.seller-sales-bar { transform-origin: bottom; animation: seller-bar-rise var(--duration-medium) var(--ease-entrance) both; animation-delay: calc(var(--seller-bar-index) * var(--duration-fast)); }
+@media (prefers-reduced-motion: reduce) { .seller-sales-bar, .seller-action-enter { animation: none !important; } }
 @keyframes sd-pop-in { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: scale(1); } }
 .sd-fade { animation: sd-fade-in var(--duration-fast, 200ms) ease-out both; }
 .sd-pop { animation: sd-pop-in var(--duration-fast, 200ms) var(--ease-standard, cubic-bezier(.32, .72, 0, 1)) both; }
