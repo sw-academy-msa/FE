@@ -29,7 +29,7 @@ async function setup(page: Page, rejectPrice = false, deleteCode = '', storedAdd
     await route.fulfill({ json: { success: true, data } });
   });
   await page.goto('/#/login?next=%2Fseller%2Fproducts'); await page.getByLabel('이메일', { exact: true }).fill('test@example.com'); await page.getByLabel('비밀번호', { exact: true }).fill('password'); await page.getByRole('button', { name: '로그인', exact: true }).click();
-  await page.getByRole('link', { name: '이어서 등록', exact: true }).click(); await expect(page.getByLabel('상품명', { exact: true })).toHaveValue('서버 초안');
+  await page.getByRole('link', { name: /이어서 등록$/ }).click(); await expect(page.getByLabel('상품명', { exact: true })).toHaveValue('서버 초안');
   return { product, sent };
 }
 test('기기 초안 없이도 서버 주소 스냅샷과 맞는 주소록을 선택한다', async ({ page }) => {
@@ -43,15 +43,15 @@ test('서버 초안 저장은 실제 수정 API 여섯 단계를 호출하고 �
   await page.evaluate(() => { const s = JSON.parse(localStorage.getItem('stockdrop:v1:live')!); Object.assign(s.drafts['test-seller'], { price: 15000, shipping: 3500, optionDims: [], stock: { '[]': 8 }, wizardStep: 3, wizardOrder: 2 }); localStorage.setItem('stockdrop:v1:live', JSON.stringify(s)); }); await page.reload(); await expect(page.getByRole('group', { name: /판매 등록 3\/5단계/ })).toBeVisible();
   await page.goBack(); await expect(dialog(page)).toBeVisible(); await dialog(page).getByRole('button', { name: '임시 저장하고 나가기' }).click(); await expect(dialog(page)).toHaveCount(0);
   expect(sent.filter(x => x.method === 'PUT')).toHaveLength(6); expect(product.price).toBe(15000); expect(product.shippingFee).toBe(3500); expect(product.options[0].initialQuantity).toBe(8);
-  await page.evaluate(() => { const s = JSON.parse(localStorage.getItem('stockdrop:v1:live')!); delete s.drafts['test-seller']; localStorage.setItem('stockdrop:v1:live', JSON.stringify(s)); }); await page.goto('/#/seller/products'); await page.reload(); await page.getByRole('link', { name: '이어서 등록', exact: true }).click(); await expect(page.getByLabel('상품명', { exact: true })).toHaveValue('저장한 서버 상품');
+  await page.evaluate(() => { const s = JSON.parse(localStorage.getItem('stockdrop:v1:live')!); delete s.drafts['test-seller']; localStorage.setItem('stockdrop:v1:live', JSON.stringify(s)); }); await page.goto('/#/seller/products'); await page.reload(); await page.getByRole('link', { name: /이어서 등록$/ }).click(); await expect(page.getByLabel('상품명', { exact: true })).toHaveValue('저장한 서버 상품');
   await page.goto('/#/seller/new?edit=draft1&step=2'); await expect(page.getByLabel('한정 판매가')).toHaveValue('15,000');
 });
 test('검증에 막힌 값은 이 기기에서 복원하고 서버에 성공한 단계는 유지한다', async ({ page }) => {
-  await setup(page, true); await page.getByLabel('상품명', { exact: true }).fill('미완성 저장'); await page.goBack(); await dialog(page).getByRole('button', { name: '임시 저장하고 나가기' }).click(); await expect(dialog(page)).toHaveCount(0); await page.getByRole('link', { name: '이어서 등록', exact: true }).click(); await expect(page.getByLabel('상품명', { exact: true })).toHaveValue('미완성 저장');
+  await setup(page, true); await page.getByLabel('상품명', { exact: true }).fill('미완성 저장'); await page.goBack(); await dialog(page).getByRole('button', { name: '임시 저장하고 나가기' }).click(); await expect(dialog(page)).toHaveCount(0); await page.getByRole('link', { name: /이어서 등록$/ }).click(); await expect(page.getByLabel('상품명', { exact: true })).toHaveValue('미완성 저장');
 });
 test('삭제 API 배포 뒤 DRAFT 목록 삭제가 DELETE로 반영된다', async ({ page }) => {
   test.skip(process.env.STOCKDROP_DRAFT_DELETE_READY !== 'true', '백엔드 삭제 API 배포 확인 후 실행');
-  const { sent } = await setup(page); await page.goBack(); await dialog(page).getByRole('button', { name: '임시 저장하고 나가기' }).click(); await expect(dialog(page)).toHaveCount(0); await page.getByRole('button', { name: '삭제', exact: true }).click(); const sheet = page.getByRole('dialog', { name: '작성 중인 상품을 삭제할까요? 되돌릴 수 없어요' }); await sheet.getByRole('button', { name: '삭제', exact: true }).click(); await expect(sheet).toHaveCount(0); await expect(page.getByText('서버 초안', { exact: true })).toHaveCount(0); expect(sent.some(x => x.method === 'DELETE')).toBe(true);
+  const { sent } = await setup(page); await page.goBack(); await dialog(page).getByRole('button', { name: '임시 저장하고 나가기' }).click(); await expect(dialog(page)).toHaveCount(0); await page.getByRole('button', { name: /초안 삭제$/ }).click(); const sheet = page.getByRole('dialog', { name: '작성 중인 상품을 삭제할까요? 되돌릴 수 없어요' }); await sheet.getByRole('button', { name: '삭제', exact: true }).click(); await expect(sheet).toHaveCount(0); await expect(page.getByText('서버 초안', { exact: true })).toHaveCount(0); expect(sent.some(x => x.method === 'DELETE')).toBe(true);
 });
 test('삭제하고 나가기는 서버와 기기 초안을 함께 지운다', async ({ page }) => {
   test.skip(process.env.STOCKDROP_DRAFT_DELETE_READY !== 'true', '백엔드 삭제 API 배포 확인 후 실행');

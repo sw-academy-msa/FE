@@ -16,7 +16,7 @@ test.beforeEach(async ({ page }) => { await seller(page); });
 /** 판매 상품 관리에서 + 로 들어와 1단계를 채운다 */
 async function fillStep1(page: Page) {
   await page.goto('/#/seller/products'); await page.reload();
-  await page.getByRole('link', { name: '상품 등록' }).click(); await expect(stepGroup(page, 1)).toBeVisible();
+  await page.getByRole('button', { name: '이전 화면', exact: true }).click(); await page.getByRole('navigation', { name: '하단 메뉴' }).getByRole('link', { name: '홈', exact: true }).click(); await page.getByRole('link', { name: '판매 등록', exact: true }).click(); await expect(stepGroup(page, 1)).toBeVisible();
   await page.getByLabel('상품 사진 업로드').setInputFiles([path.join(process.cwd(), 'public/images/seller-register-1.jpg')]);
   await page.getByLabel('상품명').fill('리넨 셔츠'); await page.getByLabel('짧은 설명').fill('새 상품'); await page.getByLabel('처분 사유').fill('시즌 재고');
 }
@@ -101,9 +101,9 @@ test('나가기를 고르면 초안을 지워 다시 열면 빈 화면, 계속 �
   await expect(confirmDialog(page)).toBeVisible(); await expect(confirmDialog(page)).toContainText('임시 저장한 상품은 판매 상품 관리에서 이어서 등록할 수 있어요.');
   await confirmDialog(page).getByRole('button', { name: '계속 작성' }).click(); await expect(stepGroup(page, 1)).toBeVisible(); await expect(page.getByLabel('상품명')).toHaveValue('리넨 셔츠');
   await page.getByRole('button', { name: '이전 화면' }).click(); await confirmDialog(page).getByRole('button', { name: '삭제하고 나가기' }).click();
-  await expect(page).toHaveURL(/seller\/products/);
+  await expect(page).toHaveURL(/#\/$/);
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('stockdrop:v1')!).drafts.seller)).toBeUndefined();
-  await page.getByRole('link', { name: '상품 등록' }).click(); await expect(stepGroup(page, 1)).toBeVisible();
+  await page.getByRole('link', { name: '판매 등록', exact: true }).click(); await expect(stepGroup(page, 1)).toBeVisible();
   await expect(page.getByLabel('상품명')).toHaveValue(''); await expect(page.getByText('0/10')).toBeVisible();
 });
 
