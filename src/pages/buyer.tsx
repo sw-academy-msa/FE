@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, CalendarDays, Timer, Camera, ChevronDown, Info, Search, Bell, ExternalLink, Clock3, Plus, Minus, Truck, CheckCircle2, ChevronRight, PackageCheck, Calendar } from 'lucide-react';
+import { ArrowLeft, CalendarDays, Timer, Camera, ChevronDown, Info, Search, Bell, List as ListIcon, ExternalLink, Clock3, Plus, Minus, Truck, CheckCircle2, ChevronRight, PackageCheck, Calendar } from 'lucide-react';
+import { Drawer, DrawerHeader } from '@astryxdesign/core/Drawer';
 import { clockLeft, useFromTab, LiveStatus, Badge, BottomSheet, Button, Chip, CopyButton, DeliveryProgress, Empty, ErrorBox, Field, Header, InfoRow, Modal, Note, ORDER_LABELS, ProductCard, ProductImage, ProductSummary, useLeaveGuard, useToast } from '../components/ui';
 import { CATEGORIES, categoryGroup, activeUser, purchaseBlock, PURCHASE_BLOCK_TEXT, available, stockLeft, stockTotal, beginPayment, DomainError, formatPhone, money, nowOf, orderNo, reserve, resolvePayment, saleState, uid } from '../domain';
 import type { Address, Hold, Product, Order } from '../domain';
@@ -48,10 +49,19 @@ export function HomePage() {
   const showHero = !query && category === '전체' && filter === '전체';
   const urgent = s.products.filter(p => p.published && isUrgent(p));
   const seller = signedIn(s) && !!s.users.find(u => u.id === s.activeUserId)?.seller;
-  const unread = useApi(signal => (!USE_MOCK && signedIn(s) ? fetchUnreadCount(signal) : Promise.resolve(0)), [s.activeUserId]).data ?? 0;
+  const unreadState = useApi(signal => (!USE_MOCK && signedIn(s) ? fetchUnreadCount(signal) : Promise.resolve(0)), [s.activeUserId]), unread = unreadState.data ?? 0;
+  // 알림 목록은 오른쪽에서 밀려 들어와 화면 전체를 덮는 패널. 열림은 주소(?inbox=1)에 남겨, 알림을 눌러 간 화면에서 뒤로 오면 패널로 돌아온다
+  // 로그인 전에는 알림함 주소로 보내 로그인부터 한다
+  const inboxOpen = params.get('inbox') === '1', toast = useToast(), goTo = useNavigate(), homeLoc = useLocation();
+  const openInbox = () => { if (!USE_MOCK && !signedIn(s)) { goTo('/notifications'); return; } const next = new URLSearchParams(params); next.set('inbox', '1'); setParams(next, { state: { inbox: true } }); };
+  const closeInbox = () => {
+    unreadState.reload(); // 패널에서 읽은 만큼 빨간 점을 다시 센다
+    if ((homeLoc.state as { inbox?: boolean } | null)?.inbox) { goTo(-1); return; } // 직접 연 패널은 기록 하나를 되돌려 닫는다(뒤로 가기와 같다)
+    const next = new URLSearchParams(params); next.delete('inbox'); setParams(next, { replace: true });
+  };
   const pushOn = useBackgroundPush(signedIn(s)); // 아이콘을 채우면 이 기기의 백그라운드 알림이 켜진 상태(기준은 알림 설정 화면과 같다)
   return <div className="space-y-4">
-    <header className="flex items-start justify-between pt-1"><div><h1 className="text-heading font-bold tracking-[-.5px]">STOCKDROP</h1><p className="mt-1 text-label text-meta">남은 재고에 새 주인을, 정해진 시간에.</p></div><Link aria-label={`알림 및 주문 확인, 백그라운드 알림 ${pushOn ? '켜짐' : '꺼짐'}`} data-push={pushOn ? 'on' : 'off'} to="/notifications" className="relative grid h-9 w-9 place-items-center"><Bell size={21} strokeWidth={1.6} fill={pushOn ? 'currentColor' : 'none'} aria-hidden/>{unread > 0 && <span aria-label={`안 읽은 알림 ${unread}개`} className="absolute right-0 top-0 h-2 w-2 rounded-full bg-red ring-2 ring-surface"/>}</Link></header>
+    <header className="flex items-start justify-between pt-1"><div><h1 className="text-heading font-bold tracking-[-.5px]">STOCKDROP</h1><p className="mt-1 text-label text-meta">남은 재고에 새 주인을, 정해진 시간에.</p></div><div className="flex items-center"><button type="button" aria-label={`백그라운드 알림 ${pushOn ? '켜짐' : '꺼짐'}`} data-push={pushOn ? 'on' : 'off'} onClick={() => toast(pushOn ? '백그라운드 알림이 켜져 있습니다.' : '백그라운드 알림이 꺼져 있습니다. 마이 > 알림 설정에서 켤 수 있어요.')} className="grid h-9 w-9 place-items-center"><Bell size={21} strokeWidth={1.6} fill={pushOn ? 'currentColor' : 'none'} aria-hidden/></button><button type="button" aria-label="알림 목록" onClick={openInbox} className="relative grid h-9 w-9 place-items-center"><ListIcon size={21} strokeWidth={1.6} aria-hidden/>{unread > 0 && <span aria-label={`안 읽은 알림 ${unread}개`} className="absolute right-0 top-0 h-2 w-2 rounded-full bg-red ring-2 ring-surface"/>}</button></div></header><Drawer isOpen={inboxOpen} onOpenChange={open => { if (!open) closeInbox(); }} label="알림 목록" width="100%" experimental={{ isFullWidthOnMobile: true }} padding={3}>{/* 홈 화면 앱은 상태 표시줄 밑까지 그리므로(black-translucent) 그 높이만큼 비우고 검게 칠한다. 안 비우면 제목이 겹치고 닫기 버튼이 눌리지 않는다 */}<div aria-hidden className="fixed inset-x-0 top-0 z-10 h-[env(safe-area-inset-top)] bg-[#0E0E0F]"/><div className="pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)]"><DrawerHeader title="알림" onOpenChange={open => { if (!open) closeInbox(); }}/>{inboxOpen && <NotificationsPage onClose={closeInbox}/>}</div></Drawer>
     <label className="flex h-12 items-center gap-2.5 rounded-element bg-soft px-4"><Search size={18} className="text-meta"/><CompositionInput aria-label="상품 검색" value={query} onValueChange={value => setParam('q', value)} placeholder="상품명·카테고리·판매처 검색" className="min-w-0 flex-1 bg-transparent text-callout outline-none placeholder:text-placeholder"/></label>
     <div role="group" aria-label="상품 카테고리" className={`-mx-4 flex overflow-x-auto border-b border-line px-4 ${categoryTabs.length <= 5 ? 'justify-between' : 'gap-5'}`}>{categoryTabs.map(c => <button key={c} onClick={() => setParam('category', c)} className={`shrink-0 whitespace-nowrap border-b-2 pb-2.5 text-callout ${category === c ? 'border-ink font-bold' : 'border-transparent text-aux'}`}>{c}</button>)}{cats.loading && <span className="sr-only" role="status">카테고리를 불러오는 중</span>}</div>
     {(cats.error || cats.data?.fallback) && <p className="text-label text-meta">카테고리를 불러오지 못해 대분류만 보여요. <button type="button" className="font-bold underline" onClick={cats.reload}>다시 시도</button></p>}
@@ -527,7 +537,8 @@ export function CalendarPage() {
 interface Notification { id: string; type: '구매' | '상품' | '맞춤 추천' | '판매'; title: string; desc: string; time: string; read?: boolean; path?: string }
 
 const NOTIFICATION_PAGE = 50;
-export function NotificationsPage() {
+/** onClose가 있으면 홈의 오른쪽 패널(Drawer) 안: 제목은 패널이 그린다. 알림을 누르면 그 화면으로 이동하고, 뒤로 오면 패널로 돌아온다 */
+export function NotificationsPage({ onClose }: { onClose?: () => void } = {}) {
   const s = useStore(), now = useClock();
   const [tab, setTab] = useState<'전체' | '구매' | '상품' | '판매'>('전체');
   const tabs = activeUser(s).seller ? (['전체', '구매', '상품', '판매'] as const) : (['전체', '구매', '상품'] as const);
@@ -583,8 +594,8 @@ export function NotificationsPage() {
 
   return (
     <div className="space-y-4">
-      <Header title="알림" back={true}/>
-      <div className="divider flex gap-5 pb-2">
+      {!onClose && <Header title="알림" back={true}/>}
+      <div className={`divider flex pb-2 gap-5`}>
         {tabs.map(t => (
           <button key={t} onClick={() => setTab(t)} className={`border-b-2 py-2 text-label ${tab === t ? 'border-ink font-bold' : 'muted border-transparent'}`}>{t}</button>
         ))}

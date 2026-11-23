@@ -2,14 +2,15 @@ import { createContext, isValidElement, useCallback, useContext, useEffect, useL
 import { Button as AxButton } from '@astryxdesign/core/Button';
 import { BottomSheet as AxBottomSheet } from '@astryxdesign/core/BottomSheet';
 import { Dialog as AxDialog } from '@astryxdesign/core/Dialog';
-import type { ButtonHTMLAttributes, CSSProperties, MouseEvent, ReactNode } from 'react';
+import type { ButtonHTMLAttributes, MouseEvent, ReactNode } from 'react';
 import { Link, NavLink, useBlocker, useHref, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Bell, Timer, X, Home, CalendarDays, Package, UserRound, ChevronRight, Info, Copy } from 'lucide-react';
 import type { Product, Order } from '../domain';
 import { money, saleState, stockTotal } from '../domain';
 import { IMAGE_EXPIRED } from '../config';
-import { FALLBACK_BANNER, FALLBACK_BG, IMAGE_START, imageView, onImageError, onImageLoad } from '../productImage';
+import { IMAGE_START, imageView, onImageError, onImageLoad } from '../productImage';
 import { useStore } from '../store';
+import { TAB_REFRESH } from '../splash';
 import { SHEET_EXIT_MS } from '../theme/stockdrop';
 const ToastContext = createContext<(message: string) => void>(() => {});
 export function ToastProvider({ children }: { children: ReactNode }) {
@@ -43,10 +44,16 @@ export function Button({ children, outline, buy, className = '', disabled, type 
 export function Field({ label, hint, required, error, children }: { label: string; hint?: string; required?: boolean; error?: string; children: ReactNode }) { return <div><span className="label">{label}{required && <span className="muted ml-1 text-caption">· 필수</span>}</span>{children}{error && <p role="alert" className="mt-2 text-label text-red">{error}</p>}{hint && <p className="muted mt-2 text-caption leading-relaxed">{hint}</p>}</div>; }
 export function Note({ title, children, green = false }: { title?: string; children: ReactNode; green?: boolean }) { return <div className={`note ${green ? 'bg-green-soft!' : ''}`}>{title && <h3 className="mb-1 font-bold">{title}</h3>}<div className="muted">{children}</div></div>; }
 export function ErrorBox({ message }: { message: string }) { return message ? <div role="alert" className="rounded-inner bg-red-soft p-3 text-label leading-relaxed text-red">{message}</div> : null; }
-/** 서버 조회 상태(useLive): 불러오는 중 / 실패 + 다시 시도. 둘 다 아니면 아무것도 그리지 않는다 */
+/** iOS식 12선 로딩 표시. 12개 선이 한 칸씩(steps) 돌아 끝으로 갈수록 흐려진다. 색은 부모 글자색(기본 보조색) */
+export function Spinner({ size = 22, className = 'text-muted' }: { size?: number; className?: string }) {
+  return <svg role="progressbar" aria-label="불러오는 중" width={size} height={size} viewBox="0 0 24 24" className={`ios-spinner ${className}`}>
+    {Array.from({ length: 12 }, (_, i) => <line key={i} x1="12" y1="2.5" x2="12" y2="7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" opacity={(i + 1) / 12} transform={`rotate(${i * 30} 12 12)`}/>)}
+  </svg>;
+}
+/** 서버 조회 상태(useLive): 불러오는 중(가운데 로딩 표시, label은 읽기용) / 실패 + 다시 시도. 둘 다 아니면 아무것도 그리지 않는다 */
 export function LiveStatus({ state, label = '불러오는 중이에요…' }: { state: { loading: boolean; error: string; reload: () => void }; label?: string }) {
   if (state.error) return <div className="space-y-2 py-4"><ErrorBox message={state.error}/><Button outline className="w-full" onClick={state.reload}>다시 시도</Button></div>;
-  return state.loading ? <p role="status" className="muted py-8 text-center text-label">{label}</p> : null;
+  return state.loading ? <div role="status" aria-label={label} className="grid place-items-center py-8"><Spinner/></div> : null;
 }
 export function Empty({ title, message, children }: { title: string; message?: string; children?: ReactNode }) { return <div className="flex min-h-[260px] flex-col items-center justify-center gap-4 py-12 text-center"><Package size={32} className="muted" strokeWidth={1}/><h2 className="text-headline font-bold">{title}</h2>{message && <p className="muted max-w-[280px] text-label leading-relaxed">{message}</p>}{children}</div>; }
 /** backTo: 뒤로 가기 버튼이 이전 기록 대신 갈 화면(탭 전환 기록이 쌓이는 화면 등) */
@@ -64,14 +71,16 @@ export function ProductImage({ src, alt, className = '' }: { src: string; alt: s
   const view = imageView(src, st);
   // 서명 주소가 만료됐거나, 이 탭에서 만든 미리보기(blob:)가 새로고침으로 사라졌으면 새 주소를 받도록 알린다
   const report = (url: string) => { if ((signedUrl(url) || url.startsWith('blob:')) && reported.current !== url) { reported.current = url; window.dispatchEvent(new Event(IMAGE_EXPIRED)); } };
-  // 배너까지 못 받으면 예전처럼 빈 자리만 보여 준다(내 상품 대신 다른 상품 사진이 보이지 않게)
-  if (view.kind === 'empty') return <div role="img" aria-label={alt} className={`block rounded-inner bg-soft ${className}`}/>;
-  // 주소가 없거나 받는 중이거나 못 받았으면 STOCKDROP 배너를 칸 크기 그대로 contain으로 보여 준다(바탕색이 배너와 같아 잘리거나 늘지 않는다)
-  const banner = view.kind === 'banner';
-  const style: CSSProperties | undefined = banner ? { objectFit: 'contain', backgroundColor: FALLBACK_BG } : view.loading ? { backgroundColor: FALLBACK_BG, backgroundImage: `url(${FALLBACK_BANNER})`, backgroundSize: 'contain', backgroundPosition: 'center', backgroundRepeat: 'no-repeat' } : undefined;
-  return <img key={view.url} src={view.url} alt={alt} data-fallback={banner ? 'banner' : view.loading ? 'loading' : undefined} style={style}
-    onLoad={() => setSt(x => onImageLoad(x, view.url))} onError={() => { if (!banner) report(view.url); setSt(x => onImageError(x, view.url)); }}
-    className={`block rounded-inner bg-blue-soft object-cover ${className}`} loading={banner ? undefined : 'lazy'}/>;
+  // 받기 전(주소 없음·받는 중)에는 흰 칸 가운데 로딩 표시, 못 받으면 흰 칸만 남긴다
+  const box = `relative block overflow-hidden rounded-inner bg-surface ${className}`;
+  const spinner = view.loading && <span aria-hidden className="absolute inset-0 grid place-items-center"><Spinner/></span>;
+  if (view.kind === 'blank') return <span role="img" aria-label={alt} data-fallback={view.loading ? 'loading' : 'blank'} className={box}>{spinner}</span>;
+  return <span className={box}>
+    <img key={view.url} src={view.url} alt={alt} data-fallback={view.loading ? 'loading' : undefined} loading="lazy"
+      onLoad={() => setSt(x => onImageLoad(x, view.url))} onError={() => { report(view.url); setSt(x => onImageError(x, view.url)); }}
+      className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-200 ${view.loading ? 'opacity-0' : 'opacity-100'}`}/>
+    {spinner}
+  </span>;
 }
 export function ProductSummary({ product, option, amount }: { product: { name: string; brand: string; image: string }; option?: ReactNode; amount?: number }) { return <div className="divider flex items-center gap-3 pb-4"><ProductImage src={product.image} alt={product.name} className="h-21.5 w-19 shrink-0"/><div className="min-w-0 flex-1 space-y-1.5"><p className="muted text-caption">{product.brand}</p><p className="text-callout font-semibold">{product.name}</p>{option && <div className="muted whitespace-pre-line text-footnote leading-relaxed">{option}</div>}{amount !== undefined && <p className="font-number text-callout font-bold">{money(amount)}</p>}</div></div>; }
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -192,8 +201,10 @@ export function Modal({ title, children, onClose, restoreOnUnmount = true }: { t
 /** 하단 탭으로 들어온 화면인지 — 탭으로 열면 Figma대로 뒤로 가기 없음, 마이페이지·결제 완료·알림 등에서 열면 뒤로 가기 */
 export const useFromTab = () => !!(useLocation().state as { tab?: boolean } | null)?.tab;
 export function BottomNav() {
+  const { pathname } = useLocation();
+  // 지금 보고 있는 탭을 다시 누르면 맨 위로 올리고 그 화면을 새로 그려 데이터를 다시 받는다
   const items = [['/', '홈', Home], ['/schedule', '판매 일정', CalendarDays], ['/orders', '주문', Package], ['/my', '마이', UserRound]] as const;
-  return <nav aria-label="하단 메뉴" className="fixed bottom-0 left-1/2 z-30 w-full max-w-[390px] -translate-x-1/2 border-t border-line bg-surface px-1 pb-[max(14px,env(safe-area-inset-bottom))] pt-2"><div className="flex">{items.map(([to, label, Icon]) => <NavLink end key={to} to={to} state={{ tab: true }} className={({ isActive }) => `flex min-h-11 flex-1 flex-col items-center justify-center gap-1 text-[9px] ${isActive ? 'font-bold text-ink' : 'text-muted'}`}><Icon size={20} strokeWidth={1.5}/>{label}</NavLink>)}</div></nav>;
+  return <nav aria-label="하단 메뉴" className="fixed bottom-0 left-1/2 z-30 w-full max-w-[390px] -translate-x-1/2 border-t border-line bg-surface px-1 pb-[max(14px,env(safe-area-inset-bottom))] pt-2"><div className="flex">{items.map(([to, label, Icon]) => <NavLink end key={to} to={to} state={{ tab: true }} onClick={e => { if (pathname === to) { e.preventDefault(); window.scrollTo(0, 0); window.dispatchEvent(new Event(TAB_REFRESH)); } }} className={({ isActive }) => `flex min-h-11 flex-1 flex-col items-center justify-center gap-1 text-[9px] ${isActive ? 'font-bold text-ink' : 'text-muted'}`}><Icon size={20} strokeWidth={1.5}/>{label}</NavLink>)}</div></nav>;
 }
 export async function copyText(text: string) { if (!navigator.clipboard) throw new Error('클립보드를 사용할 수 없습니다. 번호를 길게 눌러 복사해 주세요.'); await navigator.clipboard.writeText(text); }
 export function CopyButton({ value }: { value: string }) { const toast = useToast(); return <button aria-label="복사" className="grid h-8 w-8 place-items-center" onClick={() => copyText(value).then(() => toast('복사했습니다.')).catch(e => toast(e.message))}><Copy size={16} className="muted"/></button>; }

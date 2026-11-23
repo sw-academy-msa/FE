@@ -88,6 +88,10 @@ body { height: auto; min-height: 100%; overflow-x: clip; }
   --color-warning: var(--sd-color-warning);
   --color-gauge-warning: var(--sd-color-gauge-warning);
   --color-warning-soft: var(--sd-color-warning-soft);
+  --color-positive-strong: var(--sd-color-positive-strong);
+  --color-caution: var(--sd-color-caution);
+  --color-caution-soft: var(--sd-color-caution-soft);
+  --color-aux-strong: var(--sd-color-aux-strong);
   --text-caption: var(--sd-text-caption);
   --text-footnote: var(--sd-text-footnote);
   --text-label: var(--sd-text-label);
@@ -237,3 +241,7 @@ main { padding-top: calc(12px + env(safe-area-inset-top, 0px)); }
 
 /* 상태 표시줄 뒤(홈 화면 앱, black-translucent)를 앱 시작 화면과 같은 검정으로 채운다 — 흰 글자 시계가 읽히고 흰 띠가 안 생긴다. 안전 영역이 없는 곳에서는 높이 0 */
 body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: env(safe-area-inset-top, 0px); background: #0E0E0F; z-index: 150; pointer-events: none; }
+
+/* iOS식 12선 로딩 표시(components/ui Spinner): 30도씩 끊어 돌아 선이 차례로 밝아지는 것처럼 보인다 */
+.ios-spinner { animation: ios-spin 1s steps(12) infinite; }
+@keyframes ios-spin { to { transform: rotate(360deg); } }

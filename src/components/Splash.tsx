@@ -4,7 +4,9 @@ import { authReady } from '../splash';
 
 /** 앱을 새로 열거나 새로고침할 때만 한 번(같은 페이지 안의 화면 이동에서는 다시 안 나온다) */
 /** 자동화 브라우저(e2e)에서는 클릭을 가리지 않게 건너뛴다 — 시작 화면 자체를 검사하는 테스트는 navigator.webdriver를 false로 덮어쓴다 */
-let played = typeof navigator !== 'undefined' && navigator.webdriver === true;
+let played = typeof navigator !== 'undefined' && navigator.webdriver === true || fromPayment();
+/** 토스 결제창에서 돌아온 경우(#/payments/toss/success|fail): 앱을 새로 연 게 아니므로 건너뛴다 */
+function fromPayment() { return typeof location !== 'undefined' && location.hash.startsWith('#/payments/toss/'); }
 const MIN_MS = 1200, MAX_MS = 3000, FADE_MS = 300, LETTER_GAP = 70, WORD_GAP = 140;
 const delay = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
 /** 글자별 시작 시각: S·T·O·C·K 70ms 간격, 단어 사이 140ms, 이어서 D·R·O·P */

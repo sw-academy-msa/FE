@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ChevronDown, Info, LocateFixed, MapPin, Search, X } from 'lucide-react';
-import { ErrorBox, Header, Toggle, useLeaveGuard, useToast } from '../components/ui';
+import { ErrorBox, Header, Toggle, useLeaveGuard, useToast, Spinner } from '../components/ui';
 import { activeUser } from '../domain';
 import type { Address } from '../domain';
 import { mutate, useStore } from '../store';
@@ -80,7 +80,7 @@ export function AddressFormPage() {
     <Header title={isNew ? '새 배송지 추가' : '배송지 수정'} bare/>
     {(location.state as { reason?: string } | null)?.reason === 'checkout' && <p className="mb-4 rounded-element bg-blue-soft p-3 text-label leading-relaxed">구매하려면 배송지가 필요해요. 배송지를 저장하면 고른 수량으로 바로 재고 확보를 이어서 진행해요.</p>}
     {ready && loadError && <div className="space-y-2 py-4"><ErrorBox message={loadError}/><button type="button" onClick={() => navigate(0)} className="h-11 w-full rounded-element border border-border text-callout font-bold">다시 시도</button></div>}
-    {!ready && <p role="status" className="muted py-8 text-center text-label">불러오는 중이에요…</p>}
+    {!ready && <div role="status" aria-label="불러오는 중이에요" className="grid place-items-center py-8"><Spinner/></div>}
     {ready && !loadError && <form className="flex flex-1 flex-col" onSubmit={e => { e.preventDefault(); void submit(); }}>
       <div className="space-y-6.5">
         <div>{labelRow('배송지명')}{input('label', '배송지명', '예: 집, 회사')}</div>

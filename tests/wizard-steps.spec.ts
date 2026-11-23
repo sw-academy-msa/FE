@@ -30,7 +30,7 @@ test('1단계 다음은 AI 분석을 요청하고 기다리지 않고 2단계로
   await fillStep1(page);
   await next(page); await expect(page).toHaveURL(/step=2/); await expect(stepGroup(page, 2)).toBeVisible();
   await expect(page.getByRole('heading', { name: 'AI 상품 분석' })).toHaveCount(0);
-  await expect(page.getByText('AI 분석 중이에요. 결과는 4단계에서 확인해요')).toBeVisible();
+  await expect(page.getByRole('status').filter({ hasText: 'AI가 사진을 분석하고 있어요' })).toContainText('결과는 4단계에서 확인해요');
   await page.goto('/#/seller/new?step=4');
   await expect(aiState(page).getByText('AI가 사진을 분석하고 있어요')).toBeVisible();
   // 자동 갱신: 끝나면 다시 열지 않아도 추천 카테고리와 질문이 채워진다
@@ -56,7 +56,7 @@ test('분석이 실패하면 4단계에 사유와 다시 분석, 직접 선택�
   await aiState(page).getByRole('button', { name: '다시 분석' }).click();
   await expect(aiState(page).getByText('AI가 사진을 분석하고 있어요')).toBeVisible();
   await expect(aiState(page).getByRole('alert')).toBeVisible({ timeout: 15000 });
-  await aiState(page).getByRole('button', { name: '직접 선택' }).click();
+  await aiState(page).getByRole('button', { name: '카테고리 직접 선택' }).click();
   await page.getByLabel('카테고리 검색').fill('가방'); await page.getByRole('radio', { name: '패션 › 잡화 › 가방' }).check(); await page.getByRole('button', { name: '카테고리 저장' }).click();
   await expect(page.locator('[data-field="category"]')).toContainText('패션 › 잡화 › 가방');
 });
@@ -142,4 +142,85 @@ test('판매 정보 수정도 같은 5단계이고 수정 안내는 1단계와 �
   await expect(page.getByText('수정하면 판매 심사를 다시 받아요.', { exact: false })).toBeVisible();
   await expect(page.getByRole('button', { name: '수정 심사 요청' })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+});
+
+/* ── AI 분석 상태 상자와 사진 변경 뒤 재분석 ── */
+const aiDraft = (page: Page) => page.evaluate(() => { const a = JSON.parse(localStorage.getItem('stockdrop:v1')!).drafts.seller?.ai; return a ? { status: a.status, signature: a.signature, name: a.input?.name, photos: a.input?.images?.length } : null; });
+const box = (page: Page) => aiState(page).locator('[data-tone]');
+const bg = (page: Page) => box(page).evaluate(el => getComputedStyle(el).backgroundColor);
+const SECOND_PHOTO = path.join(process.cwd(), 'public/images/seller-register-1.jpg');
+
+test('상자 색은 상태별: 진행 중 회색, 완료 초록, 판매 분류 아님·판단 불가·실패 노랑. 2·3단계도 같은 상자다', async ({ page }) => {
+  await fillStep1(page); await next(page); await expect(stepGroup(page, 2)).toBeVisible();
+  const top = page.locator('[data-tone]').first();
+  await expect(top).toHaveAttribute('data-tone', 'progress'); await expect(top).toContainText('AI가 사진을 분석하고 있어요'); await expect(top).toContainText('결과는 4단계에서 확인해요');
+  expect(await top.evaluate(el => getComputedStyle(el).backgroundColor)).toBe('rgb(245, 245, 245)');
+  await expect(top).toHaveAttribute('data-tone', 'done', { timeout: 15000 }); await expect(top).toContainText('AI 분석이 완료됐어요'); await expect(top).toContainText('4단계에서 확인해요');
+  await page.goto('/#/seller/new?step=3'); await expect(stepGroup(page, 3)).toBeVisible(); await expect(page.locator('[data-tone="done"]')).toBeVisible();
+  await page.goto('/#/seller/new?step=4'); await expect(box(page)).toHaveAttribute('data-tone', 'done');
+  expect(await bg(page)).toBe('rgb(238, 248, 243)');
+  for (const [o, text] of [['unsupported', '판매 가능한 분류'], ['uncertain', '사진이 선명하지 않아'], ['failed', 'AI가 사진을 분석하지 못했어요']] as const) {
+    await seller(page, o); await fillStep1(page); await next(page);
+    await page.goto('/#/seller/new?step=4');
+    await expect(box(page)).toHaveAttribute('data-tone', 'warn', { timeout: 15000 });
+    await expect(box(page)).toContainText('AI 분석이 완료되지 않았어요'); await expect(box(page)).toContainText(text);
+    expect(await bg(page)).toBe('rgb(255, 247, 224)');
+    await expect(box(page).getByRole('button', { name: '사진 바꾸기' })).toBeVisible(); await expect(box(page).getByRole('button', { name: '카테고리 직접 선택' })).toBeVisible();
+    for (const b of await box(page).getByRole('button').all()) expect((await b.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  }
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+});
+
+test('판매 분류 아님 뒤 사진 바꾸기 → 1단계 사진 칸으로 바로 가서 사진을 바꾸고 카테고리로 가기 → 한 번 다시 분석하고 4단계에 새 결과', async ({ page }) => {
+  await seller(page, 'unsupported'); await fillStep1(page); await next(page);
+  await page.goto('/#/seller/new?step=4'); await expect(box(page)).toHaveAttribute('data-tone', 'warn', { timeout: 15000 });
+  const first = await aiDraft(page);
+  await box(page).getByRole('button', { name: '사진 바꾸기' }).click();
+  await expect(page).toHaveURL(/step=1/); await expect(page).toHaveURL(/from=ai/); await expect(stepGroup(page, 1)).toBeVisible();
+  await expect(page.locator('[data-field="images"]')).toBeInViewport();
+  await expect(page.getByRole('button', { name: '카테고리로 가기' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '다음', exact: true })).toBeVisible();
+  // 사진을 하나 더 올리고(이번엔 판매 가능한 상품으로 분석되게) 카테고리로 가기
+  await page.evaluate(() => { const s = JSON.parse(localStorage.getItem('stockdrop:v1')!); s.aiOutcome = 'auto'; localStorage.setItem('stockdrop:v1', JSON.stringify(s)); });
+  await page.reload(); await expect(page.getByRole('button', { name: '카테고리로 가기' })).toBeVisible();
+  await page.getByLabel('상품 사진 업로드').setInputFiles([SECOND_PHOTO]); await expect(page.getByText('2/10')).toBeVisible();
+  await page.getByRole('button', { name: '카테고리로 가기' }).click();
+  await expect(page).toHaveURL(/step=4/); await expect(page).not.toHaveURL(/from=ai/); await expect(stepGroup(page, 4)).toBeVisible();
+  await expect(box(page)).toHaveAttribute('data-tone', 'progress');
+  const rerun = await aiDraft(page); expect(rerun?.status).toBe('analyzing'); expect(rerun?.signature).not.toBe(first?.signature);
+  await expect(box(page)).toHaveAttribute('data-tone', 'done', { timeout: 15000 });
+  const done = await aiDraft(page); expect(done?.signature).toBe(rerun?.signature); expect(done?.photos).toBe(2);
+  await expect(page.locator('[data-field="category"]')).not.toContainText('카테고리를 선택해 주세요');
+  // 뒤로 가기는 바로 가기 전의 4단계 기록으로 겹치지 않는다
+  await page.goBack(); await expect(stepGroup(page, 4)).not.toBeVisible();
+});
+
+test('바꾼 것 없이 카테고리로 가기는 다시 분석하지 않고 4단계로 간다', async ({ page }) => {
+  await seller(page, 'uncertain'); await fillStep1(page); await next(page);
+  await page.goto('/#/seller/new?step=4'); await expect(box(page)).toHaveAttribute('data-tone', 'warn', { timeout: 15000 });
+  const before = await aiDraft(page);
+  await box(page).getByRole('button', { name: '사진 바꾸기' }).click(); await expect(page).toHaveURL(/from=ai/);
+  await page.getByRole('button', { name: '카테고리로 가기' }).click(); await expect(stepGroup(page, 4)).toBeVisible();
+  expect(await aiDraft(page)).toEqual(before);
+});
+
+test('판단 불가 뒤 1단계에서 사진을 바꾸고 다음을 누르면 다시 분석하고 옛 안내는 사라진다', async ({ page }) => {
+  await seller(page, 'unsupported'); await fillStep1(page); await next(page);
+  await page.goto('/#/seller/new?step=4'); await expect(box(page)).toContainText('판매 가능한 분류', { timeout: 15000 });
+  await page.goto('/#/seller/new?step=1'); await page.getByLabel('상품 사진 업로드').setInputFiles([SECOND_PHOTO]); await expect(page.getByText('2/10')).toBeVisible();
+  // 다음을 누르기 전 4단계: 정보가 바뀌었다는 노랑 상자, 옛 안내는 숨는다
+  await page.goto('/#/seller/new?step=4'); await expect(box(page)).toContainText('분석한 뒤에 사진이나 상품 정보가 바뀌었어요'); await expect(box(page)).not.toContainText('판매 가능한 분류');
+  await page.goto('/#/seller/new?step=1'); await next(page); await expect(stepGroup(page, 2)).toBeVisible();
+  expect((await aiDraft(page))?.status).toBe('analyzing');
+  await expect(page.locator('[data-tone]').first()).toHaveAttribute('data-tone', 'progress');
+});
+
+test('분석 중에 사진이나 정보를 바꾸면 끝날 때 바뀐 입력으로 한 번 더 분석해 옛 결과를 새 결과로 보이지 않는다', async ({ page }) => {
+  await seller(page, 'unsupported'); await fillStep1(page); await next(page); await expect(stepGroup(page, 2)).toBeVisible();
+  expect((await aiDraft(page))?.status).toBe('analyzing');
+  await page.goto('/#/seller/new?step=1'); await page.getByLabel('상품명').fill('리넨 셔츠 바꿈'); await next(page);
+  // 끝난 첫 분석은 옛 이름(리넨 셔츠) 기준이라 바로 다시 분석하고, 마지막 결과는 바뀐 이름 기준이다
+  await expect.poll(async () => (await aiDraft(page))?.name, { timeout: 20000 }).toBe('리넨 셔츠 바꿈');
+  await expect.poll(async () => (await aiDraft(page))?.status, { timeout: 20000 }).toBe('uncertain');
+  await page.goto('/#/seller/new?step=4'); await expect(box(page)).toContainText('판매 가능한 분류'); await expect(box(page)).not.toContainText('분석한 뒤에');
 });
