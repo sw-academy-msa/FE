@@ -2,7 +2,7 @@ import { deletePushSubscription, getPushConfiguration, registerPushSubscription,
 import { errorMessage } from './api';
 
 const isIos = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-const isStandalone = () => (navigator as Navigator & { standalone?: boolean }).standalone === true || window.matchMedia?.('(display-mode: standalone)').matches === true;
+export const isStandalone = () => (navigator as Navigator & { standalone?: boolean }).standalone === true || window.matchMedia?.('(display-mode: standalone)').matches === true;
 /** 구독 버튼을 보여도 되는지: 서버는 iOS(web.push.apple.com)만 받고, iOS는 홈 화면에 추가한 앱(standalone)에서만 푸시 구독이 된다 */
 export const canSubscribePush = () => supported() && isIos() && isStandalone();
 
