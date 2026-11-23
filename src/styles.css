@@ -214,16 +214,8 @@ input:focus, textarea:focus, select:focus { border-color: var(--ink); }
 
 /* 시작 화면: transform·opacity만 쓴다 */
 .splash { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; background: #0E0E0F; transition: opacity 300ms ease; }
-.splash-logo { position: relative; }
-.splash-letter { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
-.splash-drop { opacity: 0; animation: splash-drop 350ms cubic-bezier(.3, 0, .4, 1) both; will-change: transform, opacity; }
-@keyframes splash-drop {
-  0% { transform: translateY(-70px); opacity: 0; }
-  30% { opacity: 1; }
-  60% { transform: translateY(0); opacity: 1; }
-  80% { transform: translateY(-6px); opacity: 1; }
-  100% { transform: translateY(0); opacity: 1; }
-}
+/* 로고(BrandLogo) 오른쪽 위 빨간 점 뒤의 번진 빛(고정) */
+.logo-halo { opacity: .6; }
 
 /* 아이폰은 입력칸 글자가 16px보다 작으면 포커스 때 화면을 확대한다 — 디자인 글자 크기와 상관없이 입력칸은 16px(레이어 밖이라 유틸리티 클래스보다 우선) */
 input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]), textarea, select { font-size: 16px; }

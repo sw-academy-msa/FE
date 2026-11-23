@@ -40,13 +40,12 @@ test('시작 화면: 처음 켤 때 한 번만 나오고, 화면 이동에서는
   await page.goto('about:blank'); await page.goto('/#/welcome'); // 새로 열기(해시만 바꾸면 같은 페이지라 다시 안 나온다)
   const splash = page.getByRole('img', { name: 'STOCKDROP' }); await expect(splash).toBeVisible();
   expect(await splash.evaluate(el => getComputedStyle(el).backgroundColor)).toBe('rgb(14, 14, 15)');
-  expect(await splash.locator('svg').count()).toBe(9);
-  expect(await splash.locator('svg').first().evaluate(el => getComputedStyle(el).animationName)).toBe('splash-drop');
+  const art = splash.locator('img'); await expect(art).toHaveAttribute('src', /splash\/logo-3x\.png$/); // 받은 시작 화면 그림(정지 화면과 같은 그림)
+  await expect.poll(() => art.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth === 879)).toBe(true);
   await expect(splash).toHaveCount(0, { timeout: 5000 });
   await page.goto('/#/login'); await page.waitForTimeout(400); await expect(page.getByRole('img', { name: 'STOCKDROP' })).toHaveCount(0); // 같은 페이지 안 이동: 다시 안 나온다
   await page.emulateMedia({ reducedMotion: 'reduce' }); await page.reload();
   const calm = page.getByRole('img', { name: 'STOCKDROP' }); await expect(calm).toBeVisible();
-  expect(await calm.locator('svg').first().evaluate(el => getComputedStyle(el).animationName)).toBe('none');
   await expect(calm).toHaveCount(0, { timeout: 4000 });
 });
 
