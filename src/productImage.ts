@@ -5,8 +5,7 @@
  */
 export type ImageState = { loaded: string; failed: string };
 export const IMAGE_START: ImageState = { loaded: '', failed: '' };
-/** kept: 이미 보여 준 적 있는 사진(기억한 주소). 칸별 로딩 표시 대신 화면 가운데 하나로 기다린다(KeptImageGate) */
-export type ImageView = { kind: 'photo' | 'blank'; url: string; loading: boolean; kept: boolean };
+export type ImageView = { kind: 'photo' | 'blank'; url: string; loading: boolean };
 
 export const imageUrl = (src: string | null | undefined) => (typeof src === 'string' && src.startsWith('/images/') ? `.${src}` : src || '');
 
@@ -23,18 +22,8 @@ export const forgetShown = (url: string) => { if (shown.get(fileOf(url)) === url
 
 export function imageView(src: string | null | undefined, st: ImageState): ImageView {
   const fresh = imageUrl(src), kept = fresh ? shown.get(fileOf(fresh)) : undefined, url = kept || fresh;
-  if (url && st.failed !== url) return { kind: 'photo', url, loading: !kept && st.loaded !== url, kept: !!kept };
-  return { kind: 'blank', url: '', loading: !url, kept: false }; // 주소 없음은 받는 중, 실패는 로딩 표시 없이 흰 칸
+  if (url && st.failed !== url) return { kind: 'photo', url, loading: !kept && st.loaded !== url };
+  return { kind: 'blank', url: '', loading: !url }; // 주소 없음은 받는 중, 실패는 로딩 표시 없이 흰 칸
 }
 export const onImageLoad = (st: ImageState, url: string): ImageState => (st.loaded === url ? st : { ...st, loaded: url });
 export const onImageError = (st: ImageState, url: string): ImageState => (st.failed === url ? st : { ...st, failed: url });
-
-/** 화면에 그려지길 기다리는 '이미 본 사진' 수. 0보다 크면 화면 가운데 로딩 표시로 화면을 가린다 */
-let keptWaiting = 0;
-const keptListeners = new Set<() => void>();
-const keptChanged = (d: number) => { keptWaiting += d; keptListeners.forEach(f => f()); };
-export const keptWait = {
-  start: () => { keptChanged(1); return () => keptChanged(-1); },
-  subscribe: (f: () => void) => { keptListeners.add(f); return () => { keptListeners.delete(f); }; },
-  waiting: () => keptWaiting > 0,
-};
