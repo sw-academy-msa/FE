@@ -88,6 +88,10 @@ body { height: auto; min-height: 100%; overflow-x: clip; }
   --color-warning: var(--sd-color-warning);
   --color-gauge-warning: var(--sd-color-gauge-warning);
   --color-warning-soft: var(--sd-color-warning-soft);
+  --color-positive-strong: var(--sd-color-positive-strong);
+  --color-caution: var(--sd-color-caution);
+  --color-caution-soft: var(--sd-color-caution-soft);
+  --color-aux-strong: var(--sd-color-aux-strong);
   --text-caption: var(--sd-text-caption);
   --text-footnote: var(--sd-text-footnote);
   --text-label: var(--sd-text-label);
