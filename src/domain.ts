@@ -142,13 +142,23 @@ export function aiResultPatch(d: Draft, ai: Draft['ai'], prev: AiQuestion[]): Pa
 /** AI 분석 입력. 판매처 URL은 AI가 열어보지 않아 넣지 않는다(서버 분석 입력과 같다). URL만 바꿔도 다시 분석하지 않는다 */
 export interface AnalysisInput { name: string; description: string; brand: string; category: string; reason: string; images: string[] }
 export const analysisInputOf = (d: Pick<Draft, 'name' | 'description' | 'brand' | 'category' | 'reason' | 'images' | 'imageIds'>): AnalysisInput => ({ name: d.name.trim(), description: d.description.trim(), brand: d.brand.trim(), category: d.category, reason: d.reason.trim(), images: d.imageIds ? d.imageIds.filter(Boolean) : d.images });
-/** 분석 뒤에 입력이 바뀌었는지(분석 결과가 있고 당시 입력을 기억할 때만). 카테고리가 분석 때 값이거나 AI 추천값이면 바뀐 게 아니다 */
+/**
+ * 분석 뒤에 입력이 바뀌었는지(분석을 요청한 때의 입력을 기억할 때만). 추천 결과뿐 아니라 판단 불가·실패·지연도 본다 —
+ * 결과가 없다고 넘기면 사진을 바꿔도 다시 분석하지 않고 옛 안내가 새 사진의 결과처럼 남았다.
+ * 카테고리: 추천 결과가 있을 때만 본다(분석 때 값이거나 AI 추천값이면 바뀐 게 아니다). 판단 불가 뒤 직접 고른 카테고리는 다시 분석할 이유가 아니다
+ */
 export function analysisStale(d: Draft): boolean {
-  const a = d.ai.input; if (!a || !d.ai.result) return false;
+  const a = d.ai.input; if (!a || d.ai.status === 'analyzing') return false;
+  if (analysisInputChanged(d)) return true;
+  const now = analysisInputOf(d);
+  return !!d.ai.result && now.category !== a.category && now.category !== d.ai.result.category;
+}
+/** 분석을 요청한 때와 비교해 사진·상품명·설명·브랜드·처분 사유가 바뀌었는지(카테고리 제외). 분석이 끝날 때 자동으로 다시 요청할지 정한다 */
+export function analysisInputChanged(d: Draft): boolean {
+  const a = d.ai.input; if (!a) return false;
   // 예전에 저장된 입력에는 URL이 들어 있을 수 있어 비교할 칸만 골라 본다
   const key = (x: AnalysisInput) => JSON.stringify([x.name, x.description, x.brand, x.reason, x.images]);
-  const now = analysisInputOf(d);
-  return key(a) !== key(now) || (now.category !== a.category && now.category !== d.ai.result.category);
+  return key(a) !== key(analysisInputOf(d));
 }
 /** 사업자 정보 — 사업자등록증 기준. 값이 없으면 화면에서 해당 행을 숨긴다 */
 export interface BusinessInfo { name?: string; representative?: string; registrationNumber?: string; businessType?: string; openedAt?: string; address?: string }

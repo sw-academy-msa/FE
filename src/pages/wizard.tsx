@@ -3,7 +3,7 @@ import { CompositionInput } from '../components/CompositionInput';
 import { ProgressBar } from '@astryxdesign/core/ProgressBar';
 import type { ReactNode } from 'react';
 import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, Calendar, Check, ChevronDown, ChevronRight, Hash, Image as ImageIcon, Info, Link2, Minus, Package, Plus, ShieldCheck, Sparkles, Timer, X } from 'lucide-react';
+import { AlertCircle, AlertTriangle, ArrowLeft, Calendar, Check, CheckCircle2, ChevronDown, ChevronRight, Hash, Image as ImageIcon, Info, Link2, Minus, Package, Plus, ShieldCheck, Sparkles, Timer, X } from 'lucide-react';
 import { activeUser, blankDraft, listingDimensions, listingOptions, localDateTime, lookupReference, mockAiAnalysis, money, nowOf, publishDraft, unsupportedInput, OPTION_DIM_MAX, OPTION_TEXT_MAX, comboKey, comboLabel, optionCombos, optionModel, optionNameProblem } from '../domain';
 import type { AiQuestion, Draft, OptionDim, Product } from '../domain';
 import type { RegistrationMetadataDto } from '../api/types';
@@ -12,7 +12,7 @@ import { imageData } from '../files';
 import { Button, Empty, ErrorBox, Header, LiveStatus, Modal, Note, ProductImage, Unavailable, useLeaveGuard, useToast } from '../components/ui';
 import { useClock } from '../hooks';
 import { categoryTree } from '../categoryTree';
-import { INSPECTION_CHECKS, INSPECTION_PHOTOS, analysisInputOf, analysisStale, aiResultPatch } from '../domain';
+import { INSPECTION_CHECKS, INSPECTION_PHOTOS, analysisInputChanged, analysisInputOf, analysisStale, aiResultPatch } from '../domain';
 import { kstTime } from './checkoutExpired';
 import { IMAGE_EXPIRED, QUICK_SCHEDULE, USE_MOCK } from '../config';
 import { AiDelayedError, saveProductDraft, deleteProductDraft } from '../api/sellerProducts';
@@ -84,16 +84,28 @@ export function aiStateOf(token: string, r: { outcome: string; code: string; cat
   if (r.outcome === 'RECOMMENDED' && r.category) return { ...base, status: 'recommended', result: { code: r.code, category: r.category, photos, questions: r.questions } };
   return { ...base, status: 'uncertain', reason: r.outcome === 'NOT_APPLICABLE' ? AI_MESSAGES.NOT_APPLICABLE : r.outcome === 'UNCLEAR' ? AI_MESSAGES.UNCLEAR : AI_MESSAGES.NO_CATEGORY };
 }
+/**
+ * 끝난 분석을 초안에 반영한다(이 분석이 아직 진행 중일 때 한 번만). 분석 중에 사진이나 정보가 바뀌었으면(요청 당시 입력과 지금 입력이 다르면)
+ * 옛 입력의 결과가 새 입력의 결과처럼 보이지 않게 결과는 바뀐 것(stale)으로 남기고 바로 다시 요청한다
+ */
+function finishAnalysis(userId: string, token: string, ai: Draft['ai'], prev: AiQuestion[]) {
+  const d = getState().drafts[userId]; if (!d || d.ai.status !== 'analyzing' || d.ai.signature !== token) return;
+  patchDraft(userId, aiResultPatch(d, ai, prev));
+  const now = getState().drafts[userId];
+  if (now && !now.ai.fields && analysisInputChanged(now) && !Object.keys(analysisProblems(now)).length) startAnalysis(userId);
+}
 /** 실제 모드 AI 분석: 서버에 기본 정보 저장 → 분석 요청 → 폴링. 결과가 오면(화면을 떠났어도) 초안에 반영 */
 async function analyzeReal(userId: string, token: string, prev: AiQuestion[]) {
   // 결과가 오면 예전 질문에 쓴 답을 같은 점검 항목의 새 질문으로 옮긴다(옮길 곳이 없는 답은 지운다)
   // 실패·지연이면 직전 질문을 계속 보관해 다음 재시도에서도 답을 옮길 수 있게 한다
-  const done = (ai: Draft['ai']) => { const d = getState().drafts[userId]; if (d && d.ai.status === 'analyzing' && d.ai.signature === token) patchDraft(userId, aiResultPatch(d, ai, prev)); }; // 결과는 기다리지 않고 바로 반영(이 분석이 아직 진행 중일 때 한 번만)
+  // input: 요청 당시 입력. 실패·지연도 기억해 두어 그 뒤 사진이나 정보가 바뀌면 다시 분석한다
+  const start = getState().drafts[userId]; let input = start ? analysisInputOf(start) : undefined;
+  const done = (ai: Draft['ai']) => finishAnalysis(userId, token, { ...ai, input }, prev); // 결과는 기다리지 않고 바로 반영
   const failed: Draft['ai'] = { status: 'failed', signature: token, category: '', reason: '' };
   try {
-    const id = await ensureServerDraft(userId), d = getState().drafts[userId];
+    const id = await ensureServerDraft(userId), d = getState().drafts[userId]; input = analysisInputOf(d);
     const track = (r: { status: string; attempts: number; nextAttemptAt: string | null }) => { const cur = getState().drafts[userId]; if (cur && cur.ai.status === 'analyzing' && cur.ai.signature === token) patchDraft(userId, { ai: { ...cur.ai, retry: r.status === 'RETRY' ? { attempts: r.attempts, nextAttemptAt: r.nextAttemptAt } : undefined } }); };
-    done({ ...aiStateOf(token, await analyzeDraft(d, id, { onProgress: track }), d.images.length), input: analysisInputOf(d) });
+    done(aiStateOf(token, await analyzeDraft(d, id, { onProgress: track }), d.images.length));
   } catch (e) {
     // 3분이 지나도 끝나지 않으면 실패가 아니다(서버는 계속 분석한다) — "다시 확인"으로 같은 입력으로 다시 요청하면 기존 결과가 온다
     if (e instanceof AiDelayedError) { done({ status: 'delayed', signature: token, category: '', reason: e.message }); return; }
@@ -102,19 +114,20 @@ async function analyzeReal(userId: string, token: string, prev: AiQuestion[]) {
 /** 화면을 떠나도 계속되는 AI 분석(mock은 목업) */
 const ANALYSIS_MS = 2500;
 function startAnalysis(userId: string) {
-  // 실제 모드: 진행 중인 분석이 있으면 새로 시작하지 않는다(같은 초안에 저장·요청이 겹치면 version만 오른다)
+  // 실제 모드: 진행 중인 분석이 있으면 새로 시작하지 않는다(같은 초안에 저장·요청이 겹치면 version만 오른다). 그사이 바뀐 입력은 끝날 때 finishAnalysis가 다시 요청한다
   if (!USE_MOCK && getState().drafts[userId]?.ai.status === 'analyzing') return;
   const cur = getState().drafts[userId]?.ai, token = Date.now().toString(36), prev = cur?.result?.questions ?? cur?.prev ?? [];
   patchDraft(userId, { ai: { status: 'analyzing', signature: token, category: '', reason: '', prev } });
   if (!USE_MOCK) { void analyzeReal(userId, token, prev); return; }
+  // mock도 실제처럼 요청 당시 입력으로 분석한 것으로 기록한다(분석 중에 바꾼 입력은 끝날 때 다시 분석)
+  const requested = getState().drafts[userId], input = requested ? analysisInputOf(requested) : undefined;
   setTimeout(() => {
     const state = getState(), d = state.drafts[userId];
     if (!d || d.ai.status !== 'analyzing' || d.ai.signature !== token) return;
     // 미리보기 도구의 AI 결과 선택: uncertain = UNCLEAR, unsupported = NOT_APPLICABLE, failed = 요청 실패
-    if (state.aiOutcome === 'failed' || !d.images.length) { patchDraft(userId, { ai: { status: 'failed', signature: token, category: '', reason: '' } }); return; }
+    if (state.aiOutcome === 'failed' || !d.images.length) { finishAnalysis(userId, token, { status: 'failed', signature: token, category: '', reason: '', input }, prev); return; }
     const r = mockAiAnalysis(d), outcome = state.aiOutcome === 'uncertain' ? 'UNCLEAR' : state.aiOutcome === 'unsupported' ? 'NOT_APPLICABLE' : 'RECOMMENDED';
-    const ai = { ...aiStateOf(token, { ...r, outcome }, d.images.length), input: analysisInputOf(d) };
-    patchDraft(userId, aiResultPatch(d, ai, prev));
+    finishAnalysis(userId, token, { ...aiStateOf(token, { ...r, outcome }, d.images.length), input }, prev);
   }, ANALYSIS_MS);
 }
 function useDraft() {
@@ -135,6 +148,21 @@ function useDraft() {
 
 /* ── 공통 조각 ──────────────────────────────────────────────────────────────────── */
 const Label = ({ children, hint }: { children: ReactNode; hint?: string }) => <p className="text-body font-bold">{children}{hint && <span className="ml-1.5 text-footnote font-normal text-meta">{hint}</span>}</p>;
+/** AI 분석 상태 상자. 색에만 기대지 않게 아이콘과 제목이 상태를 말한다: 진행 중 회색(반짝), 완료 초록(체크), 미완료 노랑(주의) */
+type AiTone = 'progress' | 'done' | 'warn';
+const AI_TONE: Record<AiTone, { box: string; head: string; Icon: typeof Sparkles }> = {
+  progress: { box: 'bg-soft', head: 'text-ink', Icon: Sparkles },
+  done: { box: 'bg-positive-soft', head: 'text-positive-strong', Icon: CheckCircle2 },
+  warn: { box: 'border border-gauge-warning bg-caution-soft', head: 'text-caution', Icon: AlertTriangle },
+};
+function AiStatusBox({ tone, title, label, children, actions }: { tone: AiTone; title: string; label?: string; children?: ReactNode; actions?: ReactNode }) {
+  const t = AI_TONE[tone];
+  return <div role={tone === 'warn' ? 'alert' : 'status'} aria-label={label} data-tone={tone} className={`space-y-2 rounded-element p-4 ${t.box}`}>
+    <p className={`flex items-center gap-1.5 text-body font-bold ${t.head}`}><t.Icon size={16} aria-hidden className="shrink-0"/>{title}</p>
+    {children && <div className="space-y-2 text-label leading-relaxed text-aux-strong">{children}</div>}
+    {actions && <div className="flex flex-wrap gap-2 pt-1">{actions}</div>}
+  </div>;
+}
 function Stepper({ value, onChange, label }: { value: number; onChange: (n: number) => void; label: string }) {
   return <div className="flex h-8 items-center rounded-element border border-border"><button type="button" aria-label={`${label} 감소`} disabled={value <= 0} onClick={() => onChange(Math.max(0, value - 1))} className="grid h-8 w-9 place-items-center disabled:opacity-30"><Minus size={14}/></button><input aria-label={`${label} 수량`} inputMode="numeric" value={value} onChange={e => onChange(Math.max(0, Math.floor(Number(e.target.value.replace(/\D/g, '')) || 0)))} className="w-9 bg-transparent text-center text-callout font-bold outline-none"/><button type="button" aria-label={`${label} 증가`} onClick={() => onChange(value + 1)} className="grid h-8 w-9 place-items-center"><Plus size={14}/></button></div>;
 }
@@ -382,7 +410,23 @@ export function WizardPage() {
     setFieldErr({}); startAnalysis(user.id); // 기다리지 않는다: 이 화면(4단계)에서 진행 상태를 보이고 끝나면 바로 반영된다
   }
   /** n단계로 간다(기록을 쌓아 뒤로 가기가 이 단계로 돌아온다) */
-  function goStep(n: number, replace = false) { const next = new URLSearchParams(params); next.set('step', String(n)); next.delete('pick'); setParams(next, { replace, state: { wizardStep: true } }); }
+  function goStep(n: number, replace = false) { const next = new URLSearchParams(params); next.set('step', String(n)); next.delete('pick'); next.delete('from'); setParams(next, { replace, state: { wizardStep: true } }); }
+  /** AI 상자의 사진 바꾸기: 1단계 사진 칸으로 바로 간다(주소에 from=ai를 남겨 1단계 아래에 카테고리로 가기를 보인다) */
+  function jumpToPhotos() {
+    setPickerOpen(false); focusAfterStep.current = 'images';
+    const next = new URLSearchParams(params); next.set('step', '1'); next.set('from', 'ai'); next.delete('pick');
+    setParams(next, { state: { wizardStep: true, aiJumpFrom: step } });
+  }
+  /** 사진 바꾸기로 온 1단계의 카테고리로 가기: 1단계 검사 → 사진이나 정보가 바뀌었으면 분석을 다시 요청 → 4단계로 바로(2·3단계는 건너뛴다. 빠진 칸은 심사 요청 때 그 단계로 옮겨 표시) */
+  function goCategory() {
+    const p = Object.fromEntries(Object.entries(submitProblems()).filter(([k]) => stepOf(k) === 1));
+    if (Object.keys(p).length) { setError('빠진 정보를 확인해 주세요.'); showProblems(p); return; }
+    setError(''); setFieldErr({});
+    if (!revision && !Object.keys(analysisProblems(d, editing?.reviewStatus)).length && (analysisStale(d) || (!editId && d.ai.status === 'before'))) startAnalysis(user.id);
+    // 4단계에서 왔으면 그 기록으로 돌아가고(뒤로 가기가 겹치지 않게), 아니면 지금 기록을 4단계로 바꾼다
+    if ((location.state as { aiJumpFrom?: number } | null)?.aiJumpFrom === 4) { navigate(-1); return; }
+    const next = new URLSearchParams(params); next.set('step', '4'); next.delete('from'); next.delete('pick'); setParams(next, { replace: true, state: { wizardStep: true } });
+  }
   /** 다음: 이 단계 필수 칸만 검사하고 넘어간다 */
   function nextStep() {
     const p = Object.fromEntries(Object.entries(submitProblems()).filter(([k]) => stepOf(k) === step));
@@ -455,6 +499,43 @@ export function WizardPage() {
     [4, '카테고리', d.category || '선택 전'], ...(!revision && questions.length ? [[4, 'AI 질문 답', `${questions.filter(q => aiFaq(q)?.answer?.trim() && aiFaq(q)?.confirmed !== false).length}/${questions.length}개 확인`]] as [number, string, string][] : []),
   ];
   const last = step === STEPS;
+  /** AI 분석 상태 상자(2·3단계는 짧게, 4단계는 진행 막대와 버튼까지). 진행 중 회색, 완료 초록, 미완료(판단 불가·실패·지연·정보 바뀜) 노랑 */
+  // 사진·정보가 바뀌었으면 다시 분석 안내가 먼저다. 카테고리만 AI 추천과 다르게 고른 경우는 완료 안내(직접 고른 카테고리 유지)를 먼저 보이고, 닫으면 다시 분석 안내를 보인다
+  const notice = d.ai.status === 'recommended' && !!d.ai.result && !!d.ai.notice && !d.ai.noticeSeen;
+  const aiView = d.ai.status === 'analyzing' ? 'analyzing' : stale && (analysisInputChanged(d) || !notice) ? 'stale' : notice ? 'done' : d.ai.status === 'uncertain' || d.ai.status === 'failed' || d.ai.status === 'delayed' ? d.ai.status : null;
+  function aiBox(inline: boolean) {
+    if (!aiView || revision) return null;
+    const btn = 'min-h-11 flex-1 basis-[calc(50%-4px)] text-body!';
+    const photoBtn = <Button key="photo" outline className={btn} disabled={uploading} onClick={jumpToPhotos}>사진 바꾸기</Button>;
+    const pickBtn = <Button key="pick" outline className={btn} onClick={() => { setPickerOpen(true); if (inline) goStep(4); }}>카테고리 직접 선택</Button>;
+    const again = (label: string, onClick: () => void) => <Button key="again" outline className="min-h-11 basis-full text-body!" disabled={uploading || d.ai.status === 'analyzing'} onClick={onClick}>{label}</Button>;
+    const later = inline ? ' 4단계에서 카테고리를 직접 고를 수도 있어요.' : '';
+    if (aiView === 'analyzing') return <AiStatusBox tone="progress" title="AI가 사진을 분석하고 있어요">
+      {!inline && <ProgressBar isIndeterminate label="AI 분석 진행" isLabelHidden/>}
+      <p>{d.ai.retry ? `잠시 후 다시 분석해요${d.ai.retry.nextAttemptAt ? ` (다음 시도 ${kstTime(parseServerTime(d.ai.retry.nextAttemptAt)).slice(0, 5)})` : ''}. ` : ''}{inline ? '결과는 4단계에서 확인해요' : '끝나면 추천 카테고리와 구매자 질문이 여기에 바로 채워져요. 기다리지 않고 카테고리를 직접 골라도 돼요'}</p>
+    </AiStatusBox>;
+    if (aiView === 'done') {
+      const r = d.ai.result!, q = r.questions.length ? ` · 구매자가 물어볼 만한 질문 ${r.questions.length}개를 ${inline ? '4단계' : '아래'} AI 질문에 보여 드려요` : '';
+      return <AiStatusBox tone="done" label="AI 분석 반영 안내" title="AI 분석이 완료됐어요" actions={inline ? undefined : <div className="flex gap-4 text-label font-bold">
+        {d.ai.notice === 'kept' && <button type="button" className="min-h-11 underline" onClick={() => patch({ category: r.category, aiCategory: r.category, ai: { ...d.ai, notice: 'applied', noticeSeen: true } })}>AI 추천으로 바꾸기</button>}
+        <button type="button" className="min-h-11 text-aux-strong underline" onClick={() => patch({ ai: { ...d.ai, noticeSeen: true } })}>닫기</button></div>}>
+        <p>{d.ai.notice === 'applied' ? `AI 분석 결과를 반영했어요 · 카테고리 ${r.category}` : `직접 고른 카테고리는 그대로 두었어요 · AI 추천 카테고리는 ${r.category}예요`}{q}{inline ? '. 4단계에서 확인해요' : ''}</p>
+      </AiStatusBox>;
+    }
+    const title = 'AI 분석이 완료되지 않았어요';
+    if (aiView === 'stale') return <AiStatusBox tone="warn" title={title} actions={<>{again('다시 분석', runAnalysis)}{pickBtn}</>}>
+      <p>분석한 뒤에 사진이나 상품 정보가 바뀌었어요. 다시 분석하면 바뀐 내용으로 카테고리와 구매자 질문을 받아요.{later}</p>
+    </AiStatusBox>;
+    if (aiView === 'uncertain') return <AiStatusBox tone="warn" title={title} actions={<>{photoBtn}{pickBtn}</>}><p>{d.ai.reason}{later}</p></AiStatusBox>;
+    if (aiView === 'delayed') return <AiStatusBox tone="warn" title={title} actions={<>{again('다시 확인', runAnalysis)}{pickBtn}</>}>
+      <p>분석이 3분 넘게 걸리고 있어요. 서버는 계속 분석하고 있어서 다시 확인해도 비용은 들지 않아요.{later}</p>
+    </AiStatusBox>;
+    return <AiStatusBox tone="warn" title={title} actions={<>{again(d.ai.fields ? '정보 고치기' : '다시 분석', () => (d.ai.fields ? showProblems(d.ai.fields) : runAnalysis()))}{photoBtn}{pickBtn}</>}>
+      <p>{d.ai.reason || 'AI가 사진을 분석하지 못했어요. 다시 분석하거나 카테고리를 직접 선택해 주세요.'}{later}</p>
+      {d.ai.fields && Object.entries(d.ai.fields).map(([k, v]) => <p key={k}>{FIELD_LABELS[k] ?? k} · {v}</p>)}
+    </AiStatusBox>;
+  }
+  const fromAi = step === 1 && params.get('from') === 'ai';
 
   return <div className="space-y-6 pb-28">
     <Header title={editId ? '판매 정보 수정' : '한정 판매 등록'} bare onBack={prevStep}/>
@@ -462,7 +543,7 @@ export function WizardPage() {
       <div className="flex items-center justify-between gap-3"><p className="text-body font-bold">{STEP_TITLES[step - 1]}</p><p className="shrink-0 text-label text-meta">{step}/{STEPS}</p></div>
       <ProgressBar value={step} max={STEPS} label={`${step}/${STEPS}단계 ${STEP_TITLES[step - 1]}`} isLabelHidden/>
     </div>
-    {(step === 2 || step === 3) && !revision && (d.ai.status === 'analyzing' || (d.ai.status === 'recommended' && d.ai.notice && !d.ai.noticeSeen)) && <p role="status" className="-mt-3 flex items-center gap-1.5 text-label text-meta"><Sparkles size={13} className="shrink-0"/>{d.ai.status === 'analyzing' ? 'AI 분석 중이에요. 결과는 4단계에서 확인해요' : 'AI 분석이 끝났어요. 4단계에서 확인해요'}</p>}
+    {(step === 2 || step === 3) && aiBox(true)}
     {(step === 1 || last) && <>
       {editing && <div className="-mt-4 space-y-3">
         {editing.startsAt > 0 && <p className="flex items-center gap-2 text-label text-meta"><span className="rounded-badge bg-soft px-1.5 py-0.5 text-footnote font-bold text-aux">{rejected ? '반려됨' : '판매 예정'}</span>{`${new Date(editing.startsAt).getMonth() + 1}.${new Date(editing.startsAt).getDate()} (${WEEK[new Date(editing.startsAt).getDay()]}) ${hhmm(new Date(editing.startsAt).getHours(), new Date(editing.startsAt).getMinutes())} 오픈`}{editing.notifySubscribers !== undefined && ` · 알림 신청 ${editing.notifySubscribers}명`}</p>}
@@ -607,32 +688,15 @@ export function WizardPage() {
     {!revision ? <>
       {/* AI 분석 상태: 1단계 다음에서 요청한 분석이 여기서 끝나면(화면을 떠났어도) 카테고리와 상품 정보, 질문이 바로 채워진다 */}
       <section className="space-y-2" data-field="state" aria-label="AI 분석 상태">
-        {d.ai.status === 'analyzing' ? <div role="status" className="space-y-3 rounded-element bg-soft p-4">
-          <p className="flex items-center gap-1.5 text-body font-bold"><Sparkles size={14}/>AI가 사진을 분석하고 있어요</p>
-          <ProgressBar isIndeterminate label="AI 분석 진행" isLabelHidden/>
-          <p className="text-label leading-relaxed text-aux">{d.ai.retry ? `잠시 후 다시 분석해요${d.ai.retry.nextAttemptAt ? ` (다음 시도 ${kstTime(parseServerTime(d.ai.retry.nextAttemptAt)).slice(0, 5)})` : ''}. ` : ''}끝나면 추천 카테고리와 구매자 질문이 여기에 바로 채워져요. 기다리지 않고 카테고리를 직접 골라도 돼요</p>
-        </div>
-        : d.ai.status === 'failed' || d.ai.status === 'delayed' ? <div role="alert" className="space-y-2 rounded-element bg-red-soft p-4">
-          <p className="text-body font-bold text-red">{d.ai.status === 'delayed' ? 'AI 분석이 지연되고 있어요' : 'AI가 사진을 분석하지 못했어요'}</p>
-          <p className="text-label leading-relaxed text-red">{d.ai.status === 'delayed' ? '서버는 계속 분석하고 있어요. 다시 확인해도 비용은 들지 않아요.' : d.ai.reason || '사진이 흐리거나 상품이 잘 보이지 않으면 분석이 어려워요.'}</p>
-          {d.ai.fields && Object.entries(d.ai.fields).map(([k, v]) => <p key={k} className="text-label text-red">{FIELD_LABELS[k] ?? k} · {v}</p>)}
-          <div className="flex gap-2 pt-1"><Button outline className="flex-1 text-body!" disabled={uploading} onClick={() => (d.ai.fields ? showProblems(d.ai.fields) : runAnalysis())}>{d.ai.fields ? '정보 고치기' : d.ai.status === 'delayed' ? '다시 확인' : '다시 분석'}</Button><Button outline className="flex-1 text-body!" onClick={() => setPickerOpen(true)}>직접 선택</Button></div>
-        </div>
-        : d.ai.status === 'before' && !stale ? <div className="space-y-2">
+        {aiView ? aiBox(false)
+        : d.ai.status === 'before' ? <div className="space-y-2">
           <Button outline className="flex w-full items-center justify-center gap-1.5 text-callout!" disabled={uploading} onClick={runAnalysis}><Sparkles size={15}/>AI로 카테고리 분석하기</Button>
           <p className="text-label text-meta">AI가 카테고리와 구매자 질문을 추천해요. 분석은 선택이라 카테고리를 직접 골라도 돼요</p>
         </div> : null}
         <FieldError name="state"/>
       </section>
-      {stale && <section role="status" className="space-y-2 rounded-element bg-red-soft p-4"><p className="text-body font-bold text-red">정보가 바뀌어 AI 질문을 다시 받아야 해요</p><p className="text-label text-red">분석한 뒤에 상품명·설명·브랜드·카테고리·처분 사유·사진 중 하나가 바뀌었어요. 다시 분석하면 입력이 같을 땐 기존 결과, 다르면 새 분석을 받아요.</p><Button outline className="w-full" disabled={d.ai.status === 'analyzing' || uploading} onClick={runAnalysis}>다시 분석</Button></section>}
 
-      {d.ai.status === 'recommended' && d.ai.result && d.ai.notice && !d.ai.noticeSeen && <div role="status" aria-label="AI 분석 반영 안내" className="space-y-2 rounded-element bg-soft p-4">
-        <p className="flex items-center gap-1.5 text-body font-bold"><Sparkles size={14}/>{d.ai.notice === 'applied' ? 'AI 분석 결과를 반영했어요' : '직접 고른 카테고리는 그대로 두었어요'}</p>
-        <p className="text-label leading-relaxed text-aux">{d.ai.notice === 'applied' ? `카테고리 ${d.ai.result.category}` : `AI 추천 카테고리는 ${d.ai.result.category}예요`}{d.ai.result.questions.length ? ` · 구매자가 물어볼 만한 질문 ${d.ai.result.questions.length}개를 아래 AI 질문에 보여 드려요` : ''}</p>
-        <div className="flex gap-3 text-label font-bold">{d.ai.notice === 'kept' && <button type="button" className="underline" onClick={() => patch({ category: d.ai.result!.category, aiCategory: d.ai.result!.category, ai: { ...d.ai, notice: 'applied', noticeSeen: true } })}>AI 추천으로 바꾸기</button>}<button type="button" className="text-aux underline" onClick={() => patch({ ai: { ...d.ai, noticeSeen: true } })}>닫기</button></div>
-      </div>}
       <section data-field="category"><Label hint="· AI 추천 또는 직접 선택">카테고리</Label>
-        {!d.category && d.ai.status === 'uncertain' && d.ai.reason && <p role="status" className="pb-1 text-label text-aux">{d.ai.reason}</p>}
         <button type="button" onClick={openCategory} className="flex h-12 w-full items-center gap-2 border-b border-line text-left">
           <Sparkles size={16} className="shrink-0"/>
           <span className={`min-w-0 flex-1 truncate text-headline ${d.category ? '' : 'text-placeholder'}`}>{d.category || (d.ai.status === 'analyzing' ? '사진을 분석하고 있어요' : '카테고리를 선택해 주세요')}</span>
@@ -690,7 +754,8 @@ export function WizardPage() {
     <ErrorBox message={error}/>
     {last && <p className="text-center text-label text-meta">{editId ? '수정 내용은 판매 심사 후 반영돼요 · 영업일 기준 1일 이내' : '판매 심사(물품 확인 포함)는 영업일 기준 1일 이내에 완료돼요'}</p>}
     <div className="fixed inset-x-0 bottom-0 z-20 mx-auto w-full max-w-[390px] border-t border-line bg-surface px-4 pt-3 safe-bottom">
-      {last ? <Button className="w-full text-subhead!" disabled={busy || uploading || blocked} onClick={submit}>{busy ? '요청 중…' : editId ? (editing?.reviewStatus === 'REJECTED' ? '수정하고 재심사 요청' : '수정 심사 요청') : '판매 심사 요청하기'}</Button> : <Button className="w-full text-subhead!" disabled={uploading} onClick={nextStep}>다음</Button>}
+      {last ? <Button className="w-full text-subhead!" disabled={busy || uploading || blocked} onClick={submit}>{busy ? '요청 중…' : editId ? (editing?.reviewStatus === 'REJECTED' ? '수정하고 재심사 요청' : '수정 심사 요청') : '판매 심사 요청하기'}</Button> : fromAi ? <div className="flex gap-2"><Button outline className="w-28 shrink-0 text-subhead!" disabled={uploading} onClick={nextStep}>다음</Button><Button className="min-w-0 flex-1 text-subhead!" disabled={uploading} onClick={goCategory}>카테고리로 가기</Button></div>
+        : <Button className="w-full text-subhead!" disabled={uploading} onClick={nextStep}>다음</Button>}
     </div>
 
     {!revision && photo !== null && d.images[photo] && <Modal title={`상품 사진 ${photo + 1}`} onClose={() => setPhoto(null)}><div className="space-y-3"><ProductImage src={d.images[photo]} alt="선택한 사진" className="aspect-square w-full"/>{photo > 0 && <Button className="w-full" onClick={() => void coverPhoto(photo)}>대표 사진으로 지정</Button>}<Button outline className="w-full" onClick={() => void removePhoto(photo)}>삭제</Button></div></Modal>}

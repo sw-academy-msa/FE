@@ -42,7 +42,7 @@ test('판매 상품 등록 5단계: 1단계 다음에서 AI 분석을 요청하�
   await next();
   await expect(page).toHaveURL(/step=2/); await expect(stepGroup(2)).toBeVisible();
   await expect(page.getByRole('heading', { name: 'AI 상품 분석' })).toHaveCount(0);
-  await expect(page.getByRole('status').filter({ hasText: 'AI 분석 중이에요' })).toBeVisible();
+  await expect(page.getByRole('status').filter({ hasText: 'AI가 사진을 분석하고 있어요' })).toContainText('결과는 4단계에서 확인해요');
 
   // 2단계: 가격과 수량
   await page.getByLabel('타 플랫폼 판매 URL').fill('coupang.com/vp/products/7348215906');
@@ -80,9 +80,9 @@ test('판매 상품 등록 5단계: 1단계 다음에서 AI 분석을 요청하�
 
   // 분석 뒤에 기본 정보가 바뀌면 4단계에 다시 분석 안내가 뜨고 AI 질문은 숨는다. 되돌리면 답이 그대로다
   await page.goto('/#/seller/new?step=1'); await page.getByLabel('상품명').fill('울 블렌드 오버핏 니트 (차콜) 수정');
-  await page.goto('/#/seller/new?step=4'); await expect(page.getByText('정보가 바뀌어 AI 질문을 다시 받아야 해요')).toBeVisible(); await expect(aiAnswer).toHaveCount(0);
+  await page.goto('/#/seller/new?step=4'); await expect(page.getByText('분석한 뒤에 사진이나 상품 정보가 바뀌었어요', { exact: false })).toBeVisible(); await expect(aiAnswer).toHaveCount(0);
   await page.goto('/#/seller/new?step=1'); await page.getByLabel('상품명').fill('울 블렌드 오버핏 니트 (차콜)');
-  await page.goto('/#/seller/new?step=4'); await expect(page.getByText('정보가 바뀌어 AI 질문을 다시 받아야 해요')).toHaveCount(0); await expect(aiAnswer).toHaveValue('자연광에서 찍어 실제 색과 비슷해요');
+  await page.goto('/#/seller/new?step=4'); await expect(page.getByText('분석한 뒤에 사진이나 상품 정보가 바뀌었어요', { exact: false })).toHaveCount(0); await expect(aiAnswer).toHaveValue('자연광에서 찍어 실제 색과 비슷해요');
   await next(); await expect(stepGroup(5)).toBeVisible();
 
   // 5단계: 결과 확인과 물품 검수. 모두 확인하지 않으면 심사 요청이 막힌다

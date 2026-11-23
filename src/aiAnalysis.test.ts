@@ -40,7 +40,15 @@ describe('분석 뒤 정보가 바뀐 경우', () => {
   });
   it('사진 목록이 바뀌면 다시 분석(순서 포함)', () => { expect(analysisStale({ ...base(), images: ['a'] })).toBe(true); expect(analysisStale({ ...base(), images: ['b', 'a'] })).toBe(true); });
   it('카테고리는 AI 추천값으로 바꾼 것만 예외, 다른 값으로 바꾸면 다시 분석', () => { expect(analysisStale({ ...base(), category: '반팔 티셔츠' })).toBe(false); expect(analysisStale({ ...base(), category: '볼펜' })).toBe(true); });
-  it('분석 결과가 없으면(분석 없이 등록) 바뀐 것으로 보지 않는다', () => { const d = base(); expect(analysisStale({ ...d, ai: { ...d.ai, result: undefined } })).toBe(false); });
+  it('분석 결과가 없으면(분석 없이 등록) 바뀐 것으로 보지 않는다', () => { const d = base(); expect(analysisStale({ ...d, ai: { ...d.ai, result: undefined } })).toBe(false); expect(analysisStale({ ...d, name: '다른 이름', ai: { status: 'before', signature: '', category: '', reason: '' } })).toBe(false); });
+  it.each(['uncertain', 'failed', 'delayed'] as const)('결과가 없는 %s도 분석 뒤 사진이나 정보가 바뀌면 다시 분석', status => {
+    const d = base(), ai = { status, signature: 't', category: '', reason: '사유', input: d.ai.input };
+    expect(analysisStale({ ...d, ai })).toBe(false);
+    expect(analysisStale({ ...d, images: ['c'], ai })).toBe(true);
+    expect(analysisStale({ ...d, name: '다른 이름', ai })).toBe(true);
+  });
+  it('판단 불가 뒤 카테고리를 직접 고른 것은 다시 분석할 이유가 아니다', () => { const d = base(); expect(analysisStale({ ...d, category: '볼펜', ai: { status: 'uncertain', signature: 't', category: '', reason: '', input: d.ai.input } })).toBe(false); });
+  it('분석 중에는 바뀐 것으로 보지 않는다(끝난 뒤 비교한다)', () => { const d = base(); expect(analysisStale({ ...d, images: ['c'], ai: { status: 'analyzing', signature: 't', category: '', reason: '', input: d.ai.input } })).toBe(false); });
 });
 
 describe('AI 질문 답 → FAQ', () => {

@@ -51,6 +51,11 @@ export const stockdropPalette = {
   warning: '#D9730D', // 운영자 판매 심사 배지
   'gauge-warning': '#E7B93F', // 중간 판매율 게이지, 글자에는 사용하지 않는다
   'warning-soft': '#FFF1E5',
+  // 안내 상자(판매 등록 AI 분석 상태). 글자·아이콘은 옅은 면 위에서 대비 4.5:1 이상
+  'positive-strong': '#1D7A53', // positive-soft 위 4.9:1 — 완료 상자 제목·아이콘
+  caution: '#8A5A00', // caution-soft 위 5.5:1 — 미완료 상자 제목·아이콘
+  'caution-soft': '#FFF7E0', // 미완료 상자 면(테두리는 gauge-warning)
+  'aux-strong': '#5C5C5C', // 옅은 면 위 6.1:1 — 안내 상자 본문
 } as const;
 export type PaletteName = keyof typeof stockdropPalette;
 
