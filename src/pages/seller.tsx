@@ -640,7 +640,6 @@ function SellerSettingsFormPage() {
           {form.business.representative && <InfoRow label="대표자" value={form.business.representative}/>}
           {form.business.businessType && <InfoRow label="업태 · 종목" value={form.business.businessType}/>}
         </div>}
-
       </section>
       <div className="-mx-4 h-px bg-line"/>
       <section className="space-y-4">
@@ -658,7 +657,6 @@ function SellerSettingsFormPage() {
   if (section === 'addresses') return (
     <div className="space-y-0">
       <Header title="출고지 · 반품지 관리"/>
-
       <div className="mb-4 flex border-b border-line">
         {(['ship', 'return'] as const).map((t, i) => (
           <button key={t} onClick={() => setAddrTab(t)} className={`flex-1 border-b-2 py-3 text-body font-bold ${addrTab === t ? 'border-ink' : 'border-transparent muted'}`}>
