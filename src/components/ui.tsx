@@ -8,7 +8,7 @@ import { ArrowLeft, Bell, Timer, X, Home, CalendarDays, Package, UserRound, Chev
 import type { Product, Order } from '../domain';
 import { money, saleState, stockTotal } from '../domain';
 import { IMAGE_EXPIRED } from '../config';
-import { IMAGE_START, forgetShown, imageView, onImageError, onImageLoad, rememberShown } from '../productImage';
+import { IMAGE_START, imageView, onImageError, onImageLoad } from '../productImage';
 import { Spinner } from '@astryxdesign/core/Spinner';
 import { useStore } from '../store';
 import { SHEET_EXIT_MS } from '../theme/stockdrop';
@@ -71,7 +71,7 @@ export function ProductImage({ src, alt, className = '' }: { src: string; alt: s
   if (view.kind === 'blank') return <span role="img" aria-label={alt} data-fallback={view.loading ? 'loading' : 'blank'} className={box}>{spinner}</span>;
   return <span className={box}>
     <img key={view.url} src={view.url} alt={alt} data-fallback={view.loading ? 'loading' : undefined} loading="lazy"
-      onLoad={() => { rememberShown(view.url); setSt(x => onImageLoad(x, view.url)); }} onError={() => { forgetShown(view.url); report(view.url); setSt(x => onImageError(x, view.url)); }}
+      onLoad={() => setSt(x => onImageLoad(x, view.url))} onError={() => { report(view.url); setSt(x => onImageError(x, view.url)); }}
       className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-200 ${view.loading ? 'opacity-0' : 'opacity-100'}`}/>
     {spinner}
   </span>;
