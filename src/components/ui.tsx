@@ -11,6 +11,7 @@ import { IMAGE_EXPIRED } from '../config';
 import { IMAGE_START, imageView, onImageError, onImageLoad } from '../productImage';
 import { Spinner } from '@astryxdesign/core/Spinner';
 import { useStore } from '../store';
+import { reloadWithoutSplash } from '../splash';
 import { SHEET_EXIT_MS } from '../theme/stockdrop';
 const ToastContext = createContext<(message: string) => void>(() => {});
 export function ToastProvider({ children }: { children: ReactNode }) {
@@ -195,8 +196,10 @@ export function Modal({ title, children, onClose, restoreOnUnmount = true }: { t
 /** 하단 탭으로 들어온 화면인지 — 탭으로 열면 Figma대로 뒤로 가기 없음, 마이페이지·결제 완료·알림 등에서 열면 뒤로 가기 */
 export const useFromTab = () => !!(useLocation().state as { tab?: boolean } | null)?.tab;
 export function BottomNav() {
+  const { pathname } = useLocation();
+  // 지금 보고 있는 탭을 다시 누르면 그 화면을 새로고침한다(시작 화면 없이)
   const items = [['/', '홈', Home], ['/schedule', '판매 일정', CalendarDays], ['/orders', '주문', Package], ['/my', '마이', UserRound]] as const;
-  return <nav aria-label="하단 메뉴" className="fixed bottom-0 left-1/2 z-30 w-full max-w-[390px] -translate-x-1/2 border-t border-line bg-surface px-1 pb-[max(14px,env(safe-area-inset-bottom))] pt-2"><div className="flex">{items.map(([to, label, Icon]) => <NavLink end key={to} to={to} state={{ tab: true }} className={({ isActive }) => `flex min-h-11 flex-1 flex-col items-center justify-center gap-1 text-[9px] ${isActive ? 'font-bold text-ink' : 'text-muted'}`}><Icon size={20} strokeWidth={1.5}/>{label}</NavLink>)}</div></nav>;
+  return <nav aria-label="하단 메뉴" className="fixed bottom-0 left-1/2 z-30 w-full max-w-[390px] -translate-x-1/2 border-t border-line bg-surface px-1 pb-[max(14px,env(safe-area-inset-bottom))] pt-2"><div className="flex">{items.map(([to, label, Icon]) => <NavLink end key={to} to={to} state={{ tab: true }} onClick={e => { if (pathname === to) { e.preventDefault(); reloadWithoutSplash(); } }} className={({ isActive }) => `flex min-h-11 flex-1 flex-col items-center justify-center gap-1 text-[9px] ${isActive ? 'font-bold text-ink' : 'text-muted'}`}><Icon size={20} strokeWidth={1.5}/>{label}</NavLink>)}</div></nav>;
 }
 export async function copyText(text: string) { if (!navigator.clipboard) throw new Error('클립보드를 사용할 수 없습니다. 번호를 길게 눌러 복사해 주세요.'); await navigator.clipboard.writeText(text); }
 export function CopyButton({ value }: { value: string }) { const toast = useToast(); return <button aria-label="복사" className="grid h-8 w-8 place-items-center" onClick={() => copyText(value).then(() => toast('복사했습니다.')).catch(e => toast(e.message))}><Copy size={16} className="muted"/></button>; }
