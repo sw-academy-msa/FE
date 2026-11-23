@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react';
 import { emptyState, expireHolds, initialAuth, nowOf, seedState } from './domain';
 import type { State } from './domain';
 import { DEMO_ACCOUNT_IDS, DEMO_LOGIN, MOCK_AUTH, STORAGE_TAG, USE_MOCK } from './config';
+import { maskedBankAccount } from './bankAccount';
 /** 첫 방문 상태. 자동 로그인(VITE_MOCK_AUTH)이 꺼져 있으면 로그아웃·온보딩 전 상태로 시작한다 */
 const seed = () => USE_MOCK ? seedState(Date.now(), true, MOCK_AUTH) : emptyState();
 /** mock 모드와 실제 API 모드는 저장소를 나눠, 목업 데이터가 실제 계정 화면에 섞이지 않게 한다 */
@@ -13,9 +14,11 @@ const listeners = new Set<() => void>();
  */
 const LIVE_KEEP = ['version', 'auth', 'activeUserId', 'users', 'drafts', 'sellerSettings', 'clockOffset', 'paymentOutcome', 'aiOutcome'] as const;
 export function persisted(s: State): object {
-  if (USE_MOCK) return s;
+  const sellerSettings = Object.fromEntries(Object.entries(s.sellerSettings).map(([id, settings]) => [id, { ...settings, account: maskedBankAccount(settings.account) }]));
+  if (USE_MOCK) return { ...s, sellerSettings };
   const now = Date.now(), out: Record<string, unknown> = { tag: STORAGE_TAG };
   for (const k of LIVE_KEEP) out[k] = s[k];
+  out.sellerSettings = sellerSettings;
   out.holds = s.holds.filter(h => h.status === 'pending' || h.status === 'reserved' && (h.expiresAt ?? now) > now);
   return out;
 }
