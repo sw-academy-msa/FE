@@ -50,10 +50,15 @@ export function HomePage() {
   const urgent = s.products.filter(p => p.published && isUrgent(p));
   const seller = signedIn(s) && !!s.users.find(u => u.id === s.activeUserId)?.seller;
   const unreadState = useApi(signal => (!USE_MOCK && signedIn(s) ? fetchUnreadCount(signal) : Promise.resolve(0)), [s.activeUserId]), unread = unreadState.data ?? 0;
-  // 알림 목록은 오른쪽에서 밀려 들어와 화면 전체를 덮는 패널. 로그인 전에는 알림함 주소로 보내 로그인부터 한다
-  const [inboxOpen, setInboxOpen] = useState(false), toast = useToast(), goTo = useNavigate();
-  const openInbox = () => (USE_MOCK || signedIn(s) ? setInboxOpen(true) : goTo('/notifications'));
-  const closeInbox = () => { setInboxOpen(false); unreadState.reload(); }; // 패널에서 읽은 만큼 빨간 점을 다시 센다
+  // 알림 목록은 오른쪽에서 밀려 들어와 화면 전체를 덮는 패널. 열림은 주소(?inbox=1)에 남겨, 알림을 눌러 간 화면에서 뒤로 오면 패널로 돌아온다
+  // 로그인 전에는 알림함 주소로 보내 로그인부터 한다
+  const inboxOpen = params.get('inbox') === '1', toast = useToast(), goTo = useNavigate(), homeLoc = useLocation();
+  const openInbox = () => { if (!USE_MOCK && !signedIn(s)) { goTo('/notifications'); return; } const next = new URLSearchParams(params); next.set('inbox', '1'); setParams(next, { state: { inbox: true } }); };
+  const closeInbox = () => {
+    unreadState.reload(); // 패널에서 읽은 만큼 빨간 점을 다시 센다
+    if ((homeLoc.state as { inbox?: boolean } | null)?.inbox) { goTo(-1); return; } // 직접 연 패널은 기록 하나를 되돌려 닫는다(뒤로 가기와 같다)
+    const next = new URLSearchParams(params); next.delete('inbox'); setParams(next, { replace: true });
+  };
   const pushOn = useBackgroundPush(signedIn(s)); // 아이콘을 채우면 이 기기의 백그라운드 알림이 켜진 상태(기준은 알림 설정 화면과 같다)
   return <div className="space-y-4">
     <header className="flex items-start justify-between pt-1"><div><h1 className="text-heading font-bold tracking-[-.5px]">STOCKDROP</h1><p className="mt-1 text-label text-meta">남은 재고에 새 주인을, 정해진 시간에.</p></div><div className="flex items-center"><button type="button" aria-label={`백그라운드 알림 ${pushOn ? '켜짐' : '꺼짐'}`} data-push={pushOn ? 'on' : 'off'} onClick={() => toast(pushOn ? '백그라운드 알림이 켜져 있습니다.' : '백그라운드 알림이 꺼져 있습니다. 마이 > 알림 설정에서 켤 수 있어요.')} className="grid h-9 w-9 place-items-center"><Bell size={21} strokeWidth={1.6} fill={pushOn ? 'currentColor' : 'none'} aria-hidden/></button><button type="button" aria-label="알림 목록" onClick={openInbox} className="relative grid h-9 w-9 place-items-center"><ListIcon size={21} strokeWidth={1.6} aria-hidden/>{unread > 0 && <span aria-label={`안 읽은 알림 ${unread}개`} className="absolute right-0 top-0 h-2 w-2 rounded-full bg-red ring-2 ring-surface"/>}</button></div></header><Drawer isOpen={inboxOpen} onOpenChange={open => { if (!open) closeInbox(); }} label="알림 목록" width="100%" experimental={{ isFullWidthOnMobile: true }} padding={3}>{/* 홈 화면 앱은 상태 표시줄 밑까지 그리므로(black-translucent) 그 높이만큼 비우고 검게 칠한다. 안 비우면 제목이 겹치고 닫기 버튼이 눌리지 않는다 */}<div aria-hidden className="fixed inset-x-0 top-0 z-10 h-[env(safe-area-inset-top)] bg-[#0E0E0F]"/><div className="pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)]"><DrawerHeader title="알림" onOpenChange={open => { if (!open) closeInbox(); }}/>{inboxOpen && <NotificationsPage onClose={closeInbox}/>}</div></Drawer>
@@ -532,7 +537,7 @@ export function CalendarPage() {
 interface Notification { id: string; type: '구매' | '상품' | '맞춤 추천' | '판매'; title: string; desc: string; time: string; read?: boolean; path?: string }
 
 const NOTIFICATION_PAGE = 50;
-/** onClose가 있으면 홈의 오른쪽 패널(Drawer) 안: 제목은 패널이 그리고, 알림을 누르면 이동하며 패널을 닫는다 */
+/** onClose가 있으면 홈의 오른쪽 패널(Drawer) 안: 제목은 패널이 그린다. 알림을 누르면 그 화면으로 이동하고, 뒤로 오면 패널로 돌아온다 */
 export function NotificationsPage({ onClose }: { onClose?: () => void } = {}) {
   const s = useStore(), now = useClock();
   const [tab, setTab] = useState<'전체' | '구매' | '상품' | '판매'>('전체');
@@ -553,7 +558,7 @@ export function NotificationsPage({ onClose }: { onClose?: () => void } = {}) {
     } catch (e) { setMore(m => ({ ...m, busy: false })); toast(errorMessage(e)); }
   }
   const [readIds, setReadIds] = useState<string[]>([]);
-  const open = (n: Notification) => { if (!n.read) { setReadIds(r => [...r, n.id]); markNotificationRead(n.id).catch(() => {}); } if (n.path) { navigate(n.path); onClose?.(); } };
+  const open = (n: Notification) => { if (!n.read) { setReadIds(r => [...r, n.id]); markNotificationRead(n.id).catch(() => {}); } if (n.path) navigate(n.path); };
   const readAll = () => markAllNotificationsRead().then(() => setReadIds(loaded.map(n => n.id))).catch(e => toast(errorMessage(e)));
 
   const userOrders = s.orders.filter(o => o.userId === s.activeUserId);
