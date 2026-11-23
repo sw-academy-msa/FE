@@ -45,10 +45,10 @@ export function Button({ children, outline, buy, className = '', disabled, type 
 export function Field({ label, hint, required, error, children }: { label: string; hint?: string; required?: boolean; error?: string; children: ReactNode }) { return <div><span className="label">{label}{required && <span className="muted ml-1 text-caption">· 필수</span>}</span>{children}{error && <p role="alert" className="mt-2 text-label text-red">{error}</p>}{hint && <p className="muted mt-2 text-caption leading-relaxed">{hint}</p>}</div>; }
 export function Note({ title, children, green = false }: { title?: string; children: ReactNode; green?: boolean }) { return <div className={`note ${green ? 'bg-green-soft!' : ''}`}>{title && <h3 className="mb-1 font-bold">{title}</h3>}<div className="muted">{children}</div></div>; }
 export function ErrorBox({ message }: { message: string }) { return message ? <div role="alert" className="rounded-inner bg-red-soft p-3 text-label leading-relaxed text-red">{message}</div> : null; }
-/** 서버 조회 상태(useLive): 불러오는 중 / 실패 + 다시 시도. 둘 다 아니면 아무것도 그리지 않는다 */
+/** 서버 조회 상태(useLive): 불러오는 중(가운데 로딩 표시, label은 읽기용) / 실패 + 다시 시도. 둘 다 아니면 아무것도 그리지 않는다 */
 export function LiveStatus({ state, label = '불러오는 중이에요…' }: { state: { loading: boolean; error: string; reload: () => void }; label?: string }) {
   if (state.error) return <div className="space-y-2 py-4"><ErrorBox message={state.error}/><Button outline className="w-full" onClick={state.reload}>다시 시도</Button></div>;
-  return state.loading ? <p role="status" className="muted py-8 text-center text-label">{label}</p> : null;
+  return state.loading ? <div role="status" aria-label={label} className="grid place-items-center py-8"><Spinner size="lg" shade="subtle"/></div> : null;
 }
 export function Empty({ title, message, children }: { title: string; message?: string; children?: ReactNode }) { return <div className="flex min-h-[260px] flex-col items-center justify-center gap-4 py-12 text-center"><Package size={32} className="muted" strokeWidth={1}/><h2 className="text-headline font-bold">{title}</h2>{message && <p className="muted max-w-[280px] text-label leading-relaxed">{message}</p>}{children}</div>; }
 /** backTo: 뒤로 가기 버튼이 이전 기록 대신 갈 화면(탭 전환 기록이 쌓이는 화면 등) */
