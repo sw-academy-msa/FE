@@ -3,7 +3,7 @@ import { signInDemo } from './session';
 
 test.beforeEach(async ({ page }) => { await signInDemo(page); });
 
-test('홈의 알림 목록 아이콘은 오른쪽 패널로 알림을 열고, 알림 아이콘은 백그라운드 알림 상태를 문구로 알려 준다', async ({ page }) => {
+test('홈의 알림 목록 아이콘은 오른쪽에서 들어오는 전체 화면 패널로 알림을 열고, 알림 아이콘은 백그라운드 알림 상태를 문구로 알려 준다', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/#/');
   await page.getByRole('button', { name: /^백그라운드 알림 (켜짐|꺼짐)$/ }).click();
@@ -12,8 +12,7 @@ test('홈의 알림 목록 아이콘은 오른쪽 패널로 알림을 열고, �
   const panel = page.getByRole('dialog', { name: '알림 목록' });
   await expect(panel).toBeVisible();
   await expect(page).toHaveURL(/#\/$/); // 페이지 이동 없이 패널
-  const box = (await panel.boundingBox())!;
-  expect(box.x).toBeGreaterThan(150); expect(box.x + box.width).toBeGreaterThan(385); // 오른쪽에서 절반 정도
+  await expect.poll(async () => { const b = (await panel.boundingBox())!; return Math.round(b.x) <= 1 && b.width >= 389; }).toBe(true); // 오른쪽에서 들어와 전체 화면
   await page.keyboard.press('Escape');
   await expect(panel).toBeHidden();
 });
