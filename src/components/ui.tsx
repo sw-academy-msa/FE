@@ -1,4 +1,4 @@
-import { createContext, isValidElement, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { createContext, isValidElement, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Button as AxButton } from '@astryxdesign/core/Button';
 import { BottomSheet as AxBottomSheet } from '@astryxdesign/core/BottomSheet';
 import { Dialog as AxDialog } from '@astryxdesign/core/Dialog';
@@ -8,7 +8,7 @@ import { ArrowLeft, Bell, Timer, X, Home, CalendarDays, Package, UserRound, Chev
 import type { Product, Order } from '../domain';
 import { money, saleState, stockTotal } from '../domain';
 import { IMAGE_EXPIRED } from '../config';
-import { IMAGE_START, forgetShown, imageView, keptWait, onImageError, onImageLoad, rememberShown } from '../productImage';
+import { IMAGE_START, imageView, onImageError, onImageLoad } from '../productImage';
 import { Spinner } from '@astryxdesign/core/Spinner';
 import { useStore } from '../store';
 import { SHEET_EXIT_MS } from '../theme/stockdrop';
@@ -65,28 +65,16 @@ export function ProductImage({ src, alt, className = '' }: { src: string; alt: s
   const view = imageView(src, st);
   // 서명 주소가 만료됐거나, 이 탭에서 만든 미리보기(blob:)가 새로고침으로 사라졌으면 새 주소를 받도록 알린다
   const report = (url: string) => { if ((signedUrl(url) || url.startsWith('blob:')) && reported.current !== url) { reported.current = url; window.dispatchEvent(new Event(IMAGE_EXPIRED)); } };
-  // 이미 본 사진은 그려질 때까지 화면 가운데 로딩 표시(KeptImageGate)를 띄운다. 첫 화면부터 보이게 layout effect
-  const waitKept = view.kind === 'photo' && view.kept && st.loaded !== view.url;
-  useLayoutEffect(() => (waitKept ? keptWait.start() : undefined), [waitKept]);
   // 받기 전(주소 없음·받는 중)에는 흰 칸 가운데 로딩 표시, 못 받으면 흰 칸만 남긴다
   const box = `relative block overflow-hidden rounded-inner bg-surface ${className}`;
   const spinner = view.loading && <span aria-hidden className="absolute inset-0 grid place-items-center"><Spinner size="lg" shade="subtle"/></span>;
   if (view.kind === 'blank') return <span role="img" aria-label={alt} data-fallback={view.loading ? 'loading' : 'blank'} className={box}>{spinner}</span>;
   return <span className={box}>
-    <img key={view.url} src={view.url} alt={alt} data-fallback={view.loading ? 'loading' : undefined} loading={view.kept ? 'eager' : 'lazy'}
-      onLoad={() => { rememberShown(view.url); setSt(x => onImageLoad(x, view.url)); }} onError={() => { forgetShown(view.url); report(view.url); setSt(x => onImageError(x, view.url)); }}
+    <img key={view.url} src={view.url} alt={alt} data-fallback={view.loading ? 'loading' : undefined} loading="lazy"
+      onLoad={() => setSt(x => onImageLoad(x, view.url))} onError={() => { report(view.url); setSt(x => onImageError(x, view.url)); }}
       className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-200 ${view.loading ? 'opacity-0' : 'opacity-100'}`}/>
     {spinner}
   </span>;
-}
-const KEPT_WAIT_MAX_MS = 2000;
-/** 이미 본 사진이 다시 그려지는 동안 화면 가운데 로딩 표시 하나(화면은 가리지 않는다). 늦어져도 2초 뒤에는 없앤다 */
-export function KeptImageGate() {
-  const waiting = useSyncExternalStore(keptWait.subscribe, keptWait.waiting);
-  const [timedOut, setTimedOut] = useState(false);
-  useEffect(() => { if (!waiting) return; const t = setTimeout(() => setTimedOut(true), KEPT_WAIT_MAX_MS); return () => { clearTimeout(t); setTimedOut(false); }; }, [waiting]);
-  if (!waiting || timedOut) return null;
-  return <div role="status" aria-label="화면을 불러오고 있어요" className="pointer-events-none fixed inset-0 z-40 grid place-items-center"><Spinner size="xl" shade="subtle"/></div>;
 }
 export function ProductSummary({ product, option, amount }: { product: { name: string; brand: string; image: string }; option?: ReactNode; amount?: number }) { return <div className="divider flex items-center gap-3 pb-4"><ProductImage src={product.image} alt={product.name} className="h-21.5 w-19 shrink-0"/><div className="min-w-0 flex-1 space-y-1.5"><p className="muted text-caption">{product.brand}</p><p className="text-callout font-semibold">{product.name}</p>{option && <div className="muted whitespace-pre-line text-footnote leading-relaxed">{option}</div>}{amount !== undefined && <p className="font-number text-callout font-bold">{money(amount)}</p>}</div></div>; }
 const pad = (n: number) => String(n).padStart(2, '0');
