@@ -155,11 +155,11 @@ const AI_TONE: Record<AiTone, { box: string; head: string; Icon: typeof Sparkles
   done: { box: 'bg-positive-soft', head: 'text-positive-strong', Icon: CheckCircle2 },
   warn: { box: 'border border-gauge-warning bg-caution-soft', head: 'text-caution', Icon: AlertTriangle },
 };
-function AiStatusBox({ tone, title, label, children, actions }: { tone: AiTone; title: string; label?: string; children?: ReactNode; actions?: ReactNode }) {
+function AiStatusBox({ tone, title, label, actions }: { tone: AiTone; title: string; label?: string; actions?: ReactNode }) {
   const t = AI_TONE[tone];
+  // 상자 안 글은 아이콘과 상태를 말하는 한 줄뿐이다(설명 줄 없음). 미완료 상자만 아래에 버튼
   return <div role={tone === 'warn' ? 'alert' : 'status'} aria-label={label} data-tone={tone} className={`space-y-2 rounded-element p-4 ${t.box}`}>
-    <p className={`flex items-center gap-1.5 text-body font-bold ${t.head}`}><t.Icon size={16} aria-hidden className="shrink-0"/>{title}</p>
-    {children && <div className="space-y-2 text-label leading-relaxed text-aux-strong">{children}</div>}
+    <p className={`flex items-start gap-1.5 text-body font-bold ${t.head}`}><t.Icon size={16} aria-hidden className="mt-[3px] shrink-0"/>{title}</p>
     {actions && <div className="flex flex-wrap gap-2 pt-1">{actions}</div>}
   </div>;
 }
@@ -196,6 +196,12 @@ const STEPS = STEP_TITLES.length;
 /** 검사 칸 → 그 칸이 있는 단계. 목록에 없는 칸은 마지막(확인) 단계 */
 const FIELD_STEP: Record<string, number> = { images: 1, name: 1, description: 1, disposalReason: 1, state: 1, brandOrStore: 1, sourceUrl: 2, price: 2, options: 2, maxPerAccount: 2, startsAt: 3, dispatchDays: 3, shipping: 3, shippingNotice: 3, addresses: 3, category: 4, attributes: 4, aiQuestions: 4, inspection: 5 };
 const stepOf = (field: string) => FIELD_STEP[field] ?? STEPS;
+/** AI 분석 입력 칸(1단계: 사진, 상품명, 짧은 설명, 처분 사유, 브랜드). AI 다시 시도는 이 칸만 본다. 2·3단계 칸이 비어도 분석은 다시 요청한다 */
+const ANALYSIS_FIELDS = ['images', 'name', 'description', 'disposalReason', 'brandOrStore'];
+const analysisFieldsOf = (f?: Record<string, string>) => { const x = Object.fromEntries(Object.entries(f ?? {}).filter(([k]) => ANALYSIS_FIELDS.includes(k))); return Object.keys(x).length ? x : undefined; };
+/** 1단계로 바로 가기(사진 바꾸기 등)의 기록: 출발한 단계와 그때의 분석 입력(돌아갈 때 바뀌었는지 비교) */
+type JumpState = { wizardStep: true; aiJumpFrom: number; aiJumpInput: string };
+const inputKey = (d: Draft) => { const a = analysisInputOf(d); return JSON.stringify([a.name, a.description, a.brand, a.reason, a.images]); };
 /** 등록 화면의 n단계 주소(AI 분석 화면에서 돌아올 때) */
 /** 예전 AI 분석 화면(주소로 바로 연 경우)에서 등록 4단계(카테고리와 AI 확인)로 돌아갈 때 쓰는 기록 표시 */
 const WIZARD_STATE = { wizardStep: true };
@@ -225,7 +231,7 @@ export function WizardPage() {
     window.addEventListener(IMAGE_EXPIRED, on); return () => window.removeEventListener(IMAGE_EXPIRED, on);
   }, [imgOwner, imgIds]);
   // AI 분석이 저장·조건 단계에서 막혔으면 해당 칸 아래에 표시한다
-  const aiFields = d?.ai.status === 'failed' ? d.ai.fields : undefined;
+  const aiFields = d?.ai.status === 'failed' ? analysisFieldsOf(d.ai.fields) : undefined;
   useEffect(() => { if (aiFields) setFieldErr(aiFields); }, [aiFields && JSON.stringify(aiFields)]);
   // 칸 아래 오류는 그 칸을 고치면 바로 지운다(아래 render에서 recheck를 채운다)
   const recheck = useRef<(() => void) | null>(null);
@@ -283,6 +289,29 @@ export function WizardPage() {
   const location = useLocation();
   const stepParam = Number(params.get('step')), step = Number.isInteger(stepParam) && stepParam >= 1 && stepParam <= STEPS ? stepParam : 1;
   const resumed = useRef(false), focusAfterStep = useRef<string | null>(null);
+  // 단계 기록: 브라우저 기록을 언제나 [판매 등록 전 화면, 1단계, 2단계, …, 지금 단계]로 맞춘다(기록 state의 wizardDepth = 그 기록의 단계).
+  // 그래서 헤더 뒤로와 휴대폰 뒤로 가기가 모두 '지금 단계 - 1'로 가고, 1단계에서 뒤로는 판매 등록을 떠나며 나가기 확인창이 뜬다.
+  // 앞 단계로 갈 때는 기록을 되돌리고(navigate(-k)), 뒤 단계로 갈 때는 사이 단계까지 하나씩 쌓는다. 예전처럼 이동마다 쌓으면 3 → 사진 바꾸기 → 1 → 2 → 3 뒤 뒤로 가기가 2, 1, 3, 2, 1로 오갔다
+  const navBusy = useRef(false), pendingStep = useRef<{ n: number; search: string; state: object } | null>(null);
+  useEffect(() => {
+    const want = pendingStep.current;
+    if (want) { if (want.n === step) { pendingStep.current = null; setParams(new URLSearchParams(want.search), { replace: true, state: want.state }); } return; }
+    if (!ready || navBusy.current || !resumed.current || !params.get('step')) return;
+    const keep = (location.state ?? {}) as object;
+    if ((keep as { wizardDepth?: number }).wizardDepth === step) return;
+    // 기록이 단계 순서와 다르면(주소로 바로 열기, 이어 쓰기, AI 분석 화면에서 돌아오기) 1단계부터 지금 단계까지 다시 쌓는다
+    navBusy.current = true; const path = location.pathname, cur = location.search, base = new URLSearchParams(params);
+    const at = (k: number) => { const x = new URLSearchParams(base); x.set('step', String(k)); for (const q of ['pick', 'from', 'back']) x.delete(q); return `?${x}`; };
+    void (async () => {
+      try {
+        if (step > 1) {
+          await navigate({ pathname: path, search: at(1) }, { replace: true, state: { wizardStep: true, wizardDepth: 1 } });
+          for (let k = 2; k < step; k++) await navigate({ pathname: path, search: at(k) }, { state: { wizardStep: true, wizardDepth: k } });
+        }
+        await navigate({ pathname: path, search: cur }, { replace: step === 1, state: { ...keep, wizardStep: true, wizardDepth: step } });
+      } finally { navBusy.current = false; }
+    })();
+  }, [ready, location.key, step]);
   // 카테고리 시트: 주소의 ?pick=category(분석 화면의 직접 입력 등)는 먼저 주소에서 지운 뒤 시트를 연다. 시트는 자기 기록을 따로 쌓아 뒤로 가기로 닫히고, 단계 기록은 그대로 남는다
   const [pickerOpen, setPickerOpen] = useState(false), pendingPick = useRef(false);
   useEffect(() => {
@@ -378,10 +407,10 @@ export function WizardPage() {
     setPickerOpen(true);
   }
   /** 제출 전 검사(서버 규칙과 같다). 칸 이름 → 안내 문구 */
-  function submitProblems() {
+  function submitProblems(dd: Draft = d) {
     const settings = s.sellerSettings[user.id];
-    const problems = listingProblems(d, { categories: meta.data?.categories ?? [], now, dispatch: USE_MOCK ? !!settings?.shippingAddress : !!book.data?.[0].length, return: USE_MOCK ? !!settings?.returnAddress : !!book.data?.[1].length });
-    if (!editId && (d.inspection?.length ?? 0) < INSPECTION_CHECKS.length) problems.inspection = '물품 검수 항목을 모두 확인해 주세요.';
+    const problems = listingProblems(dd, { categories: meta.data?.categories ?? [], now, dispatch: USE_MOCK ? !!settings?.shippingAddress : !!book.data?.[0].length, return: USE_MOCK ? !!settings?.returnAddress : !!book.data?.[1].length });
+    if (!editId && (dd.inspection?.length ?? 0) < INSPECTION_CHECKS.length) problems.inspection = '물품 검수 항목을 모두 확인해 주세요.';
     if (revision) for (const k of Object.keys(problems)) if (!(REVISION_FIELDS as readonly string[]).includes(k)) delete problems[k];
     return problems;
   }
@@ -403,29 +432,62 @@ export function WizardPage() {
     const first = target, el = first && document.querySelector<HTMLElement>(`[data-field="${first}"]`);
     if (el) { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); el.querySelector<HTMLElement>('input, textarea, select, button')?.focus({ preventScroll: true }); }
   }
-  /** AI 분석 버튼: 조건이 빠졌으면 빠진 칸을 표시하고, 갖춰졌으면 분석을 시작한다 */
+  /** AI 분석 버튼(상자의 다시 분석, 다시 확인, 정보 고치기와 4단계 분석하기): 분석 입력(1단계 사진, 상품명, 설명, 처분 사유)만 본다.
+   * 지금 단계(2·3단계 등)의 빈 칸은 분석과 상관없어 막지 않는다. 분석 입력이 비었으면 사진 바꾸기처럼 1단계 그 칸으로 바로 간다 */
   function runAnalysis() {
     const f = analysisProblems(d, editing?.reviewStatus);
-    if (Object.keys(f).length) { showProblems(f); return; }
-    setFieldErr({}); startAnalysis(user.id); // 기다리지 않는다: 이 화면(4단계)에서 진행 상태를 보이고 끝나면 바로 반영된다
+    if (f.state) { showProblems({ state: f.state }); return; }
+    const need = analysisFieldsOf(f);
+    if (need) { jumpToStep1(Object.keys(need)[0], need); return; }
+    setFieldErr({}); startAnalysis(user.id); // 기다리지 않는다: 상자에서 진행 상태를 보이고 끝나면 바로 반영된다
   }
-  /** n단계로 간다(기록을 쌓아 뒤로 가기가 이 단계로 돌아온다) */
-  function goStep(n: number, replace = false) { const next = new URLSearchParams(params); next.set('step', String(n)); next.delete('pick'); next.delete('from'); setParams(next, { replace, state: { wizardStep: true } }); }
-  /** AI 상자의 사진 바꾸기: 1단계 사진 칸으로 바로 간다(주소에 from=ai를 남겨 1단계 아래에 카테고리로 가기를 보인다) */
-  function jumpToPhotos() {
-    setPickerOpen(false); focusAfterStep.current = 'images';
-    const next = new URLSearchParams(params); next.set('step', '1'); next.set('from', 'ai'); next.delete('pick');
-    setParams(next, { state: { wizardStep: true, aiJumpFrom: step } });
+  /** 입력 중인 칸을 끝내(한글 조합 중인 글자 포함) 값을 초안에 넘기고, 초안 저장(이 기기)을 확인한다. 실패하면 문구를 돌려준다 */
+  function flushInput(): string | null {
+    const el = document.activeElement as HTMLElement | null;
+    if (el && el !== document.body && el.matches('input, textarea, select')) el.blur(); // blur가 조합을 끝내고 CompositionInput이 값을 넘긴다
+    try { mutate(st => { const x = st.drafts[user.id]; if (x) x.wizardStep = step; }); return null; }
+    catch (e) { return errorMessage(e); }
   }
-  /** 사진 바꾸기로 온 1단계의 카테고리로 가기: 1단계 검사 → 사진이나 정보가 바뀌었으면 분석을 다시 요청 → 4단계로 바로(2·3단계는 건너뛴다. 빠진 칸은 심사 요청 때 그 단계로 옮겨 표시) */
-  function goCategory() {
-    const p = Object.fromEntries(Object.entries(submitProblems()).filter(([k]) => stepOf(k) === 1));
+  /** AI 상자의 사진 바꾸기(또는 빠진 분석 입력): 지금 단계 입력을 먼저 초안에 반영하고 1단계 그 칸으로 바로 간다.
+   * 주소의 from=ai와 back=출발 단계로 1단계 아래에 '진행 중이던 단계로 돌아가기' 하나만 보인다. 저장에 실패하면 옮기지 않고 알린다 */
+  function jumpToStep1(field = 'images', errs?: Record<string, string>) {
+    const fail = flushInput();
+    if (fail) { setError(`입력한 내용을 저장하지 못해 1단계로 옮기지 않았어요. ${fail}`); return; }
+    const cur = getState().drafts[user.id]; if (!cur) return;
+    setError(''); setPickerOpen(false); focusAfterStep.current = field; setFieldErr(errs ?? {});
+    const next = new URLSearchParams(params); next.set('step', '1'); next.set('from', 'ai'); next.set('back', String(step)); next.delete('pick');
+    const state: JumpState = { wizardStep: true, aiJumpFrom: step, aiJumpInput: inputKey(cur) };
+    void moveTo(1, next, state);
+  }
+  const jumpToPhotos = () => jumpToStep1('images');
+  /** n단계로 간다. 앞 단계는 기록을 되돌리고(그 단계 기록에 search, state를 다시 쓴다), 뒤 단계는 사이 단계까지 쌓는다(위 단계 기록 설명) */
+  const stepSearch = (n: number) => { const next = new URLSearchParams(params); next.set('step', String(n)); for (const q of ['pick', 'from', 'back']) next.delete(q); return next; };
+  async function moveTo(n: number, search = stepSearch(n), state: object = {}) {
+    const st = { wizardStep: true, ...state, wizardDepth: n }, depth = (location.state as { wizardDepth?: number } | null)?.wizardDepth;
+    if (n < step && depth === step) { pendingStep.current = { n, search: search.toString(), state: st }; navigate(n - step); return; }
+    if (n <= step) { setParams(search, { replace: true, state: st }); return; }
+    navBusy.current = true;
+    try { for (let k = step + 1; k <= n; k++) await navigate({ pathname: location.pathname, search: `?${k === n ? search : stepSearch(k)}` }, { state: k === n ? st : { wizardStep: true, wizardDepth: k } }); }
+    finally { navBusy.current = false; }
+  }
+  const goStep = (n: number) => { void moveTo(n); };
+  /** 바로 가기로 온 1단계의 '진행 중이던 단계로 돌아가기': 1단계 입력 반영과 검사 → 사진이나 분석 입력이 바뀌었으면 AI 분석을 다시 요청 → 출발한 단계로.
+   * 바뀐 게 없으면 분석을 요청하지 않는다 */
+  function returnToStep() {
+    const fail = flushInput();
+    if (fail) { setError(`입력한 내용을 저장하지 못했어요. ${fail}`); return; }
+    const cur = getState().drafts[user.id]; if (!cur) return;
+    const p = Object.fromEntries(Object.entries(submitProblems(cur)).filter(([k]) => stepOf(k) === 1));
     if (Object.keys(p).length) { setError('빠진 정보를 확인해 주세요.'); showProblems(p); return; }
     setError(''); setFieldErr({});
-    if (!revision && !Object.keys(analysisProblems(d, editing?.reviewStatus)).length && (analysisStale(d) || (!editId && d.ai.status === 'before'))) startAnalysis(user.id);
-    // 4단계에서 왔으면 그 기록으로 돌아가고(뒤로 가기가 겹치지 않게), 아니면 지금 기록을 4단계로 바꾼다
-    if ((location.state as { aiJumpFrom?: number } | null)?.aiJumpFrom === 4) { navigate(-1); return; }
-    const next = new URLSearchParams(params); next.set('step', '4'); next.delete('from'); next.delete('pick'); setParams(next, { replace: true, state: { wizardStep: true } });
+    const st = location.state as Partial<JumpState> | null, back = backStep;
+    const changed = st?.aiJumpInput ? st.aiJumpInput !== inputKey(cur) : analysisInputChanged(cur);
+    if (changed && !revision && !Object.keys(analysisProblems(cur, editing?.reviewStatus)).length) startAnalysis(user.id);
+    // 1단계 기록은 보통 1단계로 되돌리고(뒤로 가기로 와도 돌아가기 버튼이 다시 보이지 않게) 출발 단계까지 2단계부터 쌓는다
+    navBusy.current = true;
+    void Promise.resolve(navigate({ pathname: location.pathname, search: `?${stepSearch(1)}` }, { replace: true, state: { wizardStep: true, wizardDepth: 1 } }))
+      .then(async () => { for (let k = 2; k <= back; k++) await navigate({ pathname: location.pathname, search: `?${stepSearch(k)}` }, { state: { wizardStep: true, wizardDepth: k } }); })
+      .finally(() => { navBusy.current = false; });
   }
   /** 다음: 이 단계 필수 칸만 검사하고 넘어간다 */
   function nextStep() {
@@ -437,7 +499,9 @@ export function WizardPage() {
     goStep(step + 1);
   }
   /** 헤더 뒤로: 이전 단계(이 화면에서 넘어왔으면 기록을 되돌리고, 이어 쓰기로 바로 열었으면 이전 단계로 바꾼다). 1단계는 화면을 나간다 */
-  const prevStep = step > 1 ? () => { if ((location.state as { wizardStep?: boolean } | null)?.wizardStep) navigate(-1); else goStep(step - 1, true); } : undefined;
+  // 사진 바꾸기로 바로 온 1단계(from=ai): 하단은 '진행 중이던 단계로 돌아가기' 하나, 헤더 뒤로도 같은 동작
+  const fromAi = step === 1 && params.get('from') === 'ai', backParam = Number(params.get('back')), backStep = backParam >= 2 && backParam <= 4 ? backParam : 4;
+  const prevStep = fromAi ? returnToStep : step > 1 ? () => goStep(step - 1) : undefined;
   const closePicker = () => setPickerOpen(false);
   async function submit() {
     setError(''); setFieldErr({});
@@ -503,39 +567,29 @@ export function WizardPage() {
   // 사진·정보가 바뀌었으면 다시 분석 안내가 먼저다. 카테고리만 AI 추천과 다르게 고른 경우는 완료 안내(직접 고른 카테고리 유지)를 먼저 보이고, 닫으면 다시 분석 안내를 보인다
   const notice = d.ai.status === 'recommended' && !!d.ai.result && !!d.ai.notice && !d.ai.noticeSeen;
   const aiView = d.ai.status === 'analyzing' ? 'analyzing' : stale && (analysisInputChanged(d) || !notice) ? 'stale' : notice ? 'done' : d.ai.status === 'uncertain' || d.ai.status === 'failed' || d.ai.status === 'delayed' ? d.ai.status : null;
+  /** 상자 한 줄 문구(판단 불가 사유는 짧게) */
+  const UNCERTAIN_LINE: Record<string, string> = { [AI_MESSAGES.NOT_APPLICABLE]: '판매 가능한 분류가 아닌 사진으로 보여요', [AI_MESSAGES.UNCLEAR]: '사진이 선명하지 않아 판단하지 못했어요', [AI_MESSAGES.NO_CATEGORY]: 'AI가 추천한 분류를 찾지 못했어요' };
   function aiBox(inline: boolean) {
     if (!aiView || revision) return null;
     const btn = 'min-h-11 flex-1 basis-[calc(50%-4px)] text-body!';
     const photoBtn = <Button key="photo" outline className={btn} disabled={uploading} onClick={jumpToPhotos}>사진 바꾸기</Button>;
     const pickBtn = <Button key="pick" outline className={btn} onClick={() => { setPickerOpen(true); if (inline) goStep(4); }}>카테고리 직접 선택</Button>;
     const again = (label: string, onClick: () => void) => <Button key="again" outline className="min-h-11 basis-full text-body!" disabled={uploading || d.ai.status === 'analyzing'} onClick={onClick}>{label}</Button>;
-    const later = inline ? ' 4단계에서 카테고리를 직접 고를 수도 있어요.' : '';
-    if (aiView === 'analyzing') return <AiStatusBox tone="progress" title="AI가 사진을 분석하고 있어요">
-      {!inline && <ProgressBar isIndeterminate label="AI 분석 진행" isLabelHidden/>}
-      <p>{d.ai.retry ? `잠시 후 다시 분석해요${d.ai.retry.nextAttemptAt ? ` (다음 시도 ${kstTime(parseServerTime(d.ai.retry.nextAttemptAt)).slice(0, 5)})` : ''}. ` : ''}{inline ? '결과는 4단계에서 확인해요' : '끝나면 추천 카테고리와 구매자 질문이 여기에 바로 채워져요. 기다리지 않고 카테고리를 직접 골라도 돼요'}</p>
-    </AiStatusBox>;
+    if (aiView === 'analyzing') return <AiStatusBox tone="progress" title={d.ai.retry ? 'AI가 잠시 후 다시 분석해요' : 'AI가 사진을 분석하고 있어요'}/>;
     if (aiView === 'done') {
-      const r = d.ai.result!, q = r.questions.length ? ` · 구매자가 물어볼 만한 질문 ${r.questions.length}개를 ${inline ? '4단계' : '아래'} AI 질문에 보여 드려요` : '';
-      return <AiStatusBox tone="done" label="AI 분석 반영 안내" title="AI 분석이 완료됐어요" actions={inline ? undefined : <div className="flex gap-4 text-label font-bold">
+      const r = d.ai.result!;
+      return <AiStatusBox tone="done" label="AI 분석 반영 안내" title={d.ai.notice === 'applied' ? 'AI 분석 결과를 반영했어요' : '직접 고른 카테고리를 그대로 두었어요'} actions={inline ? undefined : <div className="flex gap-4 text-label font-bold">
         {d.ai.notice === 'kept' && <button type="button" className="min-h-11 underline" onClick={() => patch({ category: r.category, aiCategory: r.category, ai: { ...d.ai, notice: 'applied', noticeSeen: true } })}>AI 추천으로 바꾸기</button>}
-        <button type="button" className="min-h-11 text-aux-strong underline" onClick={() => patch({ ai: { ...d.ai, noticeSeen: true } })}>닫기</button></div>}>
-        <p>{d.ai.notice === 'applied' ? `AI 분석 결과를 반영했어요 · 카테고리 ${r.category}` : `직접 고른 카테고리는 그대로 두었어요 · AI 추천 카테고리는 ${r.category}예요`}{q}{inline ? '. 4단계에서 확인해요' : ''}</p>
-      </AiStatusBox>;
+        <button type="button" className="min-h-11 text-aux-strong underline" onClick={() => patch({ ai: { ...d.ai, noticeSeen: true } })}>닫기</button></div>}/>;
     }
-    const title = 'AI 분석이 완료되지 않았어요';
-    if (aiView === 'stale') return <AiStatusBox tone="warn" title={title} actions={<>{again('다시 분석', runAnalysis)}{pickBtn}</>}>
-      <p>분석한 뒤에 사진이나 상품 정보가 바뀌었어요. 다시 분석하면 바뀐 내용으로 카테고리와 구매자 질문을 받아요.{later}</p>
-    </AiStatusBox>;
-    if (aiView === 'uncertain') return <AiStatusBox tone="warn" title={title} actions={<>{photoBtn}{pickBtn}</>}><p>{d.ai.reason}{later}</p></AiStatusBox>;
-    if (aiView === 'delayed') return <AiStatusBox tone="warn" title={title} actions={<>{again('다시 확인', runAnalysis)}{pickBtn}</>}>
-      <p>분석이 3분 넘게 걸리고 있어요. 서버는 계속 분석하고 있어서 다시 확인해도 비용은 들지 않아요.{later}</p>
-    </AiStatusBox>;
-    return <AiStatusBox tone="warn" title={title} actions={<>{again(d.ai.fields ? '정보 고치기' : '다시 분석', () => (d.ai.fields ? showProblems(d.ai.fields) : runAnalysis()))}{photoBtn}{pickBtn}</>}>
-      <p>{d.ai.reason || 'AI가 사진을 분석하지 못했어요. 다시 분석하거나 카테고리를 직접 선택해 주세요.'}{later}</p>
-      {d.ai.fields && Object.entries(d.ai.fields).map(([k, v]) => <p key={k}>{FIELD_LABELS[k] ?? k} · {v}</p>)}
-    </AiStatusBox>;
+    if (aiView === 'stale') return <AiStatusBox tone="warn" title="사진이나 정보가 바뀌어 다시 분석이 필요해요" actions={<>{again('다시 분석', runAnalysis)}{pickBtn}</>}/>;
+    if (aiView === 'uncertain') return <AiStatusBox tone="warn" title={UNCERTAIN_LINE[d.ai.reason] ?? 'AI가 카테고리를 판단하지 못했어요'} actions={<>{photoBtn}{pickBtn}</>}/>;
+    if (aiView === 'delayed') return <AiStatusBox tone="warn" title="AI 분석이 3분 넘게 걸리고 있어요" actions={<>{again('다시 확인', runAnalysis)}{pickBtn}</>}/>;
+    // 실패: 분석 입력(1단계 칸) 문제면 정보 고치기(1단계 그 칸으로 바로 가기), 아니면 다시 분석. 2·3단계 칸 문제로는 막지 않는다
+    const need = analysisFieldsOf(d.ai.fields);
+    return <AiStatusBox tone="warn" title={need ? 'AI 분석에 필요한 정보가 비어 있어요' : d.ai.reason === PRODUCT_STATE_MESSAGE ? '지금은 AI 분석을 요청할 수 없어요' : 'AI가 사진을 분석하지 못했어요'}
+      actions={<>{again(need ? '정보 고치기' : '다시 분석', () => (need ? jumpToStep1(Object.keys(need)[0], need) : runAnalysis()))}{photoBtn}{pickBtn}</>}/>;
   }
-  const fromAi = step === 1 && params.get('from') === 'ai';
 
   return <div className="space-y-6 pb-28">
     <Header title={editId ? '판매 정보 수정' : '한정 판매 등록'} bare onBack={prevStep}/>
@@ -754,7 +808,7 @@ export function WizardPage() {
     <ErrorBox message={error}/>
     {last && <p className="text-center text-label text-meta">{editId ? '수정 내용은 판매 심사 후 반영돼요 · 영업일 기준 1일 이내' : '판매 심사(물품 확인 포함)는 영업일 기준 1일 이내에 완료돼요'}</p>}
     <div className="fixed inset-x-0 bottom-0 z-20 mx-auto w-full max-w-[390px] border-t border-line bg-surface px-4 pt-3 safe-bottom">
-      {last ? <Button className="w-full text-subhead!" disabled={busy || uploading || blocked} onClick={submit}>{busy ? '요청 중…' : editId ? (editing?.reviewStatus === 'REJECTED' ? '수정하고 재심사 요청' : '수정 심사 요청') : '판매 심사 요청하기'}</Button> : fromAi ? <div className="flex gap-2"><Button outline className="w-28 shrink-0 text-subhead!" disabled={uploading} onClick={nextStep}>다음</Button><Button className="min-w-0 flex-1 text-subhead!" disabled={uploading} onClick={goCategory}>카테고리로 가기</Button></div>
+      {last ? <Button className="w-full text-subhead!" disabled={busy || uploading || blocked} onClick={submit}>{busy ? '요청 중…' : editId ? (editing?.reviewStatus === 'REJECTED' ? '수정하고 재심사 요청' : '수정 심사 요청') : '판매 심사 요청하기'}</Button> : fromAi ? <Button className="w-full text-subhead!" disabled={uploading} onClick={returnToStep}>진행 중이던 단계로 돌아가기</Button>
         : <Button className="w-full text-subhead!" disabled={uploading} onClick={nextStep}>다음</Button>}
     </div>
 

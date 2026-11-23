@@ -56,7 +56,7 @@ test('AI 분석이 성공하면 결과 보기 없이 카테고리와 구매자 �
   await expect(page).toHaveURL(/step=2/); await expect(page.getByRole('heading', { name: /분석하고 있어요|AI 상품 분석/ })).toHaveCount(0);
   await page.goto('/#/seller/new?step=4'); // 카테고리와 AI 확인 단계
   await expect(notice(page)).toContainText('AI 분석 결과를 반영했어요', { timeout: 15000 });
-  await expect(notice(page)).toContainText('구매자가 물어볼 만한 질문 1개');
+  await expect(notice(page)).toHaveText(/^AI 분석 결과를 반영했어요/); // 상자 글은 한 줄(설명 줄 없음)
   await expect(page.getByText('니트', { exact: true })).toBeVisible(); // 분석 결과와 AI 질문은 4단계에 반영된다
   await expect(page.getByRole('textbox', { name: /AI 질문 답/ })).toHaveValue('사진상 큰 구김은 보이지 않아요');
   await expect(page.getByText('AI 예상 답변 · 확인 전')).toBeVisible();
@@ -79,8 +79,7 @@ test('판매자가 이미 고른 카테고리는 덮지 않고 알린 뒤 원하
   await setup(page, { category: '노트' });
   await page.getByRole('button', { name: '다음', exact: true }).click(); await expect(page).toHaveURL(/step=2/);
   await page.goto('/#/seller/new?step=4');
-  await expect(notice(page)).toContainText('직접 고른 카테고리는 그대로 두었어요', { timeout: 15000 });
-  await expect(notice(page)).toContainText('AI 추천 카테고리는 니트예요');
+  await expect(notice(page)).toContainText('직접 고른 카테고리를 그대로 두었어요', { timeout: 15000 });
   await expect(page.getByText('노트', { exact: true })).toBeVisible();
   await notice(page).getByRole('button', { name: 'AI 추천으로 바꾸기' }).click();
   await expect(page.getByText('니트', { exact: true })).toBeVisible();
