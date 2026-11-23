@@ -1,5 +1,4 @@
 import { useEffect, useLayoutEffect, useState } from 'react';
-import { LOGO_LETTERS, LOGO_VIEWBOX } from '../splashLogo';
 import { authReady } from '../splash';
 
 /** 앱을 새로 열거나 새로고침할 때만 한 번(같은 페이지 안의 화면 이동에서는 다시 안 나온다) */
@@ -7,10 +6,13 @@ import { authReady } from '../splash';
 let played = typeof navigator !== 'undefined' && navigator.webdriver === true || fromPayment();
 /** 토스 결제창에서 돌아온 경우(#/payments/toss/success|fail): 앱을 새로 연 게 아니므로 건너뛴다 */
 function fromPayment() { return typeof location !== 'undefined' && location.hash.startsWith('#/payments/toss/'); }
-const MIN_MS = 1200, MAX_MS = 3000, FADE_MS = 300, LETTER_GAP = 70, WORD_GAP = 140;
+const MIN_MS = 1200, MAX_MS = 3000, FADE_MS = 300;
+/**
+ * 시작 화면 그림: 받은 시작 화면 이미지(1179x2556)에서 로고·빛·문구 부분만 자른 3배 이미지(879x690).
+ * 아이폰 정지 화면(public/splash/splash-*.png)도 같은 그림을 같은 크기(1pt = 3px)와 위치(가운데에서 9pt 아래)로 그려, 넘어갈 때 튀지 않는다
+ */
+const ART = { src: './splash/logo-3x.png', width: 293, height: 230, offsetY: 9 } as const;
 const delay = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
-/** 글자별 시작 시각: S·T·O·C·K 70ms 간격, 단어 사이 140ms, 이어서 D·R·O·P */
-const startAt = (i: number) => (i < 5 ? i * LETTER_GAP : 4 * LETTER_GAP + WORD_GAP + (i - 5) * LETTER_GAP);
 
 /** index.html의 검은 첫 프레임(#boot)과 html·body 인라인 배경을 넘겨받는다: 스플래시가 같은 검정으로 덮은 뒤에 걷어 깜빡임이 없다 */
 const releaseBoot = () => { document.getElementById('boot')?.remove(); };
@@ -33,10 +35,7 @@ export function Splash() {
     return () => { alive = false; };
   }, []);
   if (phase === 'gone') return null;
-  const [vx, vy, vw, vh] = LOGO_VIEWBOX;
   return <div role="img" aria-label="STOCKDROP" className="splash" style={{ opacity: phase === 'out' ? 0 : 1, pointerEvents: phase === 'out' ? 'none' : 'auto' }}>
-    <div className="splash-logo" style={{ width: 300, height: Math.round(300 * vh / vw) }}>
-      {LOGO_LETTERS.map((l, i) => <svg key={i} viewBox={`${vx} ${vy} ${vw} ${vh}`} aria-hidden="true" className={reduced ? 'splash-letter' : 'splash-letter splash-drop'} style={reduced ? undefined : { animationDelay: `${startAt(i)}ms` }}><path d={l.d} fill="#FFFFFF"/></svg>)}
-    </div>
+    <img src={ART.src} alt="" width={ART.width} height={ART.height} style={{ transform: `translateY(${ART.offsetY}px)` }}/>
   </div>;
 }
