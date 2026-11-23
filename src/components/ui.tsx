@@ -2,13 +2,14 @@ import { createContext, isValidElement, useCallback, useContext, useEffect, useL
 import { Button as AxButton } from '@astryxdesign/core/Button';
 import { BottomSheet as AxBottomSheet } from '@astryxdesign/core/BottomSheet';
 import { Dialog as AxDialog } from '@astryxdesign/core/Dialog';
-import type { ButtonHTMLAttributes, CSSProperties, MouseEvent, ReactNode } from 'react';
+import type { ButtonHTMLAttributes, MouseEvent, ReactNode } from 'react';
 import { Link, NavLink, useBlocker, useHref, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Bell, Timer, X, Home, CalendarDays, Package, UserRound, ChevronRight, Info, Copy } from 'lucide-react';
 import type { Product, Order } from '../domain';
 import { money, saleState, stockTotal } from '../domain';
 import { IMAGE_EXPIRED } from '../config';
-import { FALLBACK_BANNER, FALLBACK_BG, IMAGE_START, imageView, onImageError, onImageLoad } from '../productImage';
+import { IMAGE_START, imageView, onImageError, onImageLoad } from '../productImage';
+import { Spinner } from '@astryxdesign/core/Spinner';
 import { useStore } from '../store';
 import { SHEET_EXIT_MS } from '../theme/stockdrop';
 const ToastContext = createContext<(message: string) => void>(() => {});
@@ -64,14 +65,16 @@ export function ProductImage({ src, alt, className = '' }: { src: string; alt: s
   const view = imageView(src, st);
   // 서명 주소가 만료됐거나, 이 탭에서 만든 미리보기(blob:)가 새로고침으로 사라졌으면 새 주소를 받도록 알린다
   const report = (url: string) => { if ((signedUrl(url) || url.startsWith('blob:')) && reported.current !== url) { reported.current = url; window.dispatchEvent(new Event(IMAGE_EXPIRED)); } };
-  // 배너까지 못 받으면 예전처럼 빈 자리만 보여 준다(내 상품 대신 다른 상품 사진이 보이지 않게)
-  if (view.kind === 'empty') return <div role="img" aria-label={alt} className={`block rounded-inner bg-soft ${className}`}/>;
-  // 주소가 없거나 받는 중이거나 못 받았으면 STOCKDROP 배너를 칸 크기 그대로 contain으로 보여 준다(바탕색이 배너와 같아 잘리거나 늘지 않는다)
-  const banner = view.kind === 'banner';
-  const style: CSSProperties | undefined = banner ? { objectFit: 'contain', backgroundColor: FALLBACK_BG } : view.loading ? { backgroundColor: FALLBACK_BG, backgroundImage: `url(${FALLBACK_BANNER})`, backgroundSize: 'contain', backgroundPosition: 'center', backgroundRepeat: 'no-repeat' } : undefined;
-  return <img key={view.url} src={view.url} alt={alt} data-fallback={banner ? 'banner' : view.loading ? 'loading' : undefined} style={style}
-    onLoad={() => setSt(x => onImageLoad(x, view.url))} onError={() => { if (!banner) report(view.url); setSt(x => onImageError(x, view.url)); }}
-    className={`block rounded-inner bg-blue-soft object-cover ${className}`} loading={banner ? undefined : 'lazy'}/>;
+  // 받기 전(주소 없음·받는 중)에는 흰 칸 가운데 로딩 표시, 못 받으면 흰 칸만 남긴다
+  const box = `relative block overflow-hidden rounded-inner bg-surface ${className}`;
+  const spinner = view.loading && <span aria-hidden className="absolute inset-0 grid place-items-center"><Spinner size="lg" shade="subtle"/></span>;
+  if (view.kind === 'blank') return <span role="img" aria-label={alt} data-fallback={view.loading ? 'loading' : 'blank'} className={box}>{spinner}</span>;
+  return <span className={box}>
+    <img key={view.url} src={view.url} alt={alt} data-fallback={view.loading ? 'loading' : undefined} loading="lazy"
+      onLoad={() => setSt(x => onImageLoad(x, view.url))} onError={() => { report(view.url); setSt(x => onImageError(x, view.url)); }}
+      className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-200 ${view.loading ? 'opacity-0' : 'opacity-100'}`}/>
+    {spinner}
+  </span>;
 }
 export function ProductSummary({ product, option, amount }: { product: { name: string; brand: string; image: string }; option?: ReactNode; amount?: number }) { return <div className="divider flex items-center gap-3 pb-4"><ProductImage src={product.image} alt={product.name} className="h-21.5 w-19 shrink-0"/><div className="min-w-0 flex-1 space-y-1.5"><p className="muted text-caption">{product.brand}</p><p className="text-callout font-semibold">{product.name}</p>{option && <div className="muted whitespace-pre-line text-footnote leading-relaxed">{option}</div>}{amount !== undefined && <p className="font-number text-callout font-bold">{money(amount)}</p>}</div></div>; }
 const pad = (n: number) => String(n).padStart(2, '0');
