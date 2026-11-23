@@ -38,20 +38,21 @@ async function signIn(page: Page) {
   await page.getByLabel('비밀번호', { exact: true }).fill('password');
   await page.getByRole('button', { name: '로그인', exact: true }).click();
 }
-const bell = (page: Page) => page.getByRole('link', { name: /^알림 및 주문 확인/ });
+const bell = (page: Page) => page.getByRole('button', { name: /^백그라운드 알림 (켜짐|꺼짐)$/ });
 const setPush = (page: Page, p: Partial<Push>) => page.evaluate(next => { const w = window as unknown as { __push: Record<string, unknown> }; Object.assign(w.__push, next); localStorage.setItem('test:push', JSON.stringify(w.__push)); }, p);
 
 test('백그라운드 알림이 켜져 있으면 알림 아이콘을 채우고, 권한을 끄고 앱으로 돌아오면 바로 선 모양으로 바뀐다', async ({ page }) => {
   await fakeDevice(page, { permission: 'granted', subscribed: true, standalone: true });
   await signIn(page);
-  await expect(bell(page)).toHaveAttribute('aria-label', '알림 및 주문 확인, 백그라운드 알림 켜짐');
+  await expect(bell(page)).toHaveAttribute('aria-label', '백그라운드 알림 켜짐');
   await expect(bell(page)).toHaveAttribute('data-push', 'on');
   await expect(bell(page).locator('svg')).toHaveAttribute('fill', 'currentColor');
-  await expect(page.getByLabel('안 읽은 알림 2개')).toBeVisible(); // 빨간 점은 따로 유지
+  await expect(page.getByRole('button', { name: '알림 목록' }).getByLabel('안 읽은 알림 2개')).toBeVisible(); // 빨간 점은 알림 목록 아이콘에
+  await bell(page).click(); await expect(page.getByText('백그라운드 알림이 켜져 있습니다.')).toBeVisible();
   // 아이폰 설정에서 알림을 끄고 앱으로 돌아온다
   await setPush(page, { permission: 'denied' });
   await page.evaluate(() => { window.dispatchEvent(new Event('focus')); });
-  await expect(bell(page)).toHaveAttribute('aria-label', '알림 및 주문 확인, 백그라운드 알림 꺼짐');
+  await expect(bell(page)).toHaveAttribute('aria-label', '백그라운드 알림 꺼짐');
   await expect(bell(page).locator('svg')).toHaveAttribute('fill', 'none');
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
 });
@@ -80,5 +81,5 @@ test('다른 탭에서 서버 등록이 실패하면 이 탭의 아이콘도 꺼
 test('Safari 탭(홈 화면 앱 아님)은 백그라운드 알림을 받을 수 없어 권한과 구독이 있어도 꺼짐이다', async ({ page }) => {
   await fakeDevice(page, { permission: 'granted', subscribed: true, standalone: false });
   await signIn(page);
-  await expect(bell(page)).toHaveAttribute('aria-label', '알림 및 주문 확인, 백그라운드 알림 꺼짐');
+  await expect(bell(page)).toHaveAttribute('aria-label', '백그라운드 알림 꺼짐');
 });
