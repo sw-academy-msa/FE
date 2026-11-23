@@ -8,6 +8,17 @@ vi.stubGlobal('window', { addEventListener: () => {} });
 vi.stubGlobal('localStorage', { getItem: (k: string) => mem.get(k) ?? null, setItem: (k: string, v: string) => void mem.set(k, v), removeItem: (k: string) => void mem.delete(k) });
 const { persisted, restoreLive } = await import('./store');
 
+it('계좌 원문은 저장소에 남기지 않고 서버 마스킹 형식을 유지한다', () => {
+  const settings = { displayName: '스토어', bank: '합성 은행', account: '123456789012', holder: '합성 이름', shippingAddress: '', returnAddress: '' };
+  const state = { ...emptyState(), sellerSettings: { u: settings } };
+  const out = persisted(state) as typeof state;
+  expect(out.sellerSettings.u.account).toBe('********9012');
+  expect(JSON.stringify(out)).not.toContain('123456789012');
+  expect(state.sellerSettings.u.account).toBe('123456789012');
+  state.sellerSettings.u.account = '********5678';
+  expect((persisted(state) as typeof state).sellerSettings.u.account).toBe('********5678');
+});
+
 describe.runIf(!USE_MOCK)('실제 모드 저장소', () => {
   const s = { ...emptyState(), activeUserId: 'u1', products: [{ id: 'p1', images: ['https://old-tunnel.example/img.png'] } as never], orders: [{ id: 'o1' } as never],
     holds: [{ id: 'h1', userId: 'u1', productId: 'p1', lines: [], status: 'reserved' as const, expiresAt: Date.now() + 60_000 }, { id: 'h2', userId: 'u1', productId: 'p1', lines: [], status: 'released' as const, expiresAt: 0 }] };

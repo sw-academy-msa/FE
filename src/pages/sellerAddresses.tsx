@@ -26,7 +26,6 @@ export function AddressBookPage() {
   const items = [...(list.data ?? [])].sort((a, b) => Number(b.defaultAddress) - Number(a.defaultAddress));
   return <div>
     <Header title="출고지 · 반품지 관리"/>
-    <p className="muted mb-4 text-label leading-relaxed">기본 출고지·반품지는 새로 등록하는 상품에 자동으로 지정돼요.<br/>상품 등록 화면에서 다른 주소를 고를 수도 있어요.</p>
     <div className="mb-4 flex border-b border-line">
       {(['DISPATCH', 'RETURN'] as const).map(t => <button key={t} type="button" onClick={() => setParams({ tab: t }, { replace: true })} className={`flex-1 border-b-2 py-3 text-body font-bold ${tab === t ? 'border-ink' : 'muted border-transparent'}`}>{LABEL[t]}{tab === t && list.data ? ` ${list.data.length}` : ''}</button>)}
     </div>

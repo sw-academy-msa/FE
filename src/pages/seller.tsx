@@ -1,3 +1,4 @@
+import { SellerBankSettingsPage } from './sellerBank';
 import { Card as AxCard } from '@astryxdesign/core/Card';
 import { SellerStatusTabs } from '../components/SellerStatusTabs';
 import { SellerMonthlySales } from '../components/SellerMonthlySales';
@@ -18,7 +19,7 @@ import { PdfField } from '../components/PdfField';
 import { AddressBookFormPage, AddressBookPage } from './sellerAddresses';
 import { SalesRestrictionBanner } from './sellerReview';
 import type { ProductRevisionDto } from '../api';
-import { getSellerSettlement, settlementNet, getProductDispatchAddress, answerOrderInquiry, listSellerOrderInquiries, answerProductInquiry, deleteSellerLogo, deliverOrder, errorMessage, getSalesSummary, getSellerOrder, getSellerInquiryImageUrl, getSellerOrderInquiry, getSellerOrderSummary, getSellerProduct, getSellerProductWithImages, listRevisions, listSellerOrderInquiryInbox, listSellerOrders, listSellerProductInquiries, listSellerProducts, mergeInquiries, mergeOrders, mergeProducts, shipOrder, useLive, fetchSellerLogo, fetchSellerMe, fetchSellerStore, fetchWithdrawalEligibility, updateSellerAddresses, updateSellerBank, updateSellerContact, updateSellerStore, uploadSellerLogo, useApi, withdrawAccount } from '../api';
+import { getSellerSettlement, settlementNet, getProductDispatchAddress, answerOrderInquiry, listSellerOrderInquiries, answerProductInquiry, deleteSellerLogo, deliverOrder, errorMessage, getSalesSummary, getSellerOrder, getSellerInquiryImageUrl, getSellerOrderInquiry, getSellerOrderSummary, getSellerProduct, getSellerProductWithImages, listRevisions, listSellerOrderInquiryInbox, listSellerOrders, listSellerProductInquiries, listSellerProducts, mergeInquiries, mergeOrders, mergeProducts, shipOrder, useLive, fetchSellerLogo, fetchSellerMe, fetchSellerStore, fetchWithdrawalEligibility, updateSellerAddresses, updateSellerContact, updateSellerStore, uploadSellerLogo, useApi, withdrawAccount } from '../api';
 import { api, deleteProductDraft } from '../api';
 import { productSettlement } from '../api/sellerOrders';
 import { USE_MOCK } from '../config';
@@ -549,11 +550,16 @@ export function SellerMyPage() {
 }
 export function SellerSettingsPage() {
   const { section } = useParams();
+  return section === 'bank' ? <SellerBankSettingsPage/> : <SellerSettingsFormPage/>;
+}
+function SellerSettingsFormPage() {
+  const { section } = useParams();
   const s = useStore(), user = activeUser(s), toast = useToast(), navigate = useNavigate();
   const original = s.sellerSettings[user.id];
   const [form, setForm] = useState<SellerSettings>(original ?? { displayName: user.name, bank: '', account: '', holder: user.name, shippingAddress: '', returnAddress: '' });
   const [phone, setPhone] = useState(user.phone), [email, setEmail] = useState(user.email), [error, setError] = useState(''), [busy, setBusy] = useState(false);
   const app = s.applications.find(a => a.userId === user.id && a.status === 'approved');
+  const saving = useRef(false);
   const [addrTab, setAddrTab] = useState<'ship' | 'return'>('ship');
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [sameAsShip, setSameAsShip] = useState(false), [defaultReturn, setDefaultReturn] = useState(false);
@@ -596,23 +602,20 @@ export function SellerSettingsPage() {
     <Field label={label} hint={extra?.hint} required={extra?.required}><input aria-label={label} value={(form[key] as string) ?? ''} onChange={e => change(key, e.target.value)} className="field"/></Field>;
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault(); setError(''); setBusy(true);
+    e.preventDefault(); if (saving.current || section === 'business' && (core === baseCore || !USE_MOCK && (!me.data || me.loading || !!me.error))) return; saving.current = true; setError(''); setBusy(true);
     try {
-      if (section === 'bank' && (!form.bank.trim() || !form.account.trim() || !form.holder.trim())) throw new Error('은행·계좌번호·예금주를 확인해 주세요.');
       if (section === 'addresses' && (!form.shippingAddress.trim() || !form.returnAddress.trim())) throw new Error('출고지와 반품지 주소를 입력해 주세요.');
       if (section === 'returns' && !form.returnAddress.trim()) throw new Error('반품지 주소를 입력해 주세요.');
       if (section === 'account' || section === 'business') { if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('올바른 이메일을 입력해 주세요.'); }
-      if (section === 'bank' && !USE_MOCK && !/^\d{6,30}$/.test(form.account.replace(/-/g, ''))) throw new Error('계좌번호는 숫자만 6~30자리로 입력해 주세요.');
       if (!USE_MOCK) {
         if (section === 'business') await updateSellerContact({ sellerDisplayName: form.displayName, contactName: user.name, contactEmail: email, contactPhone: phone });
-        else if (section === 'bank') await updateSellerBank(form);
         else if (section === 'addresses' || section === 'returns') await updateSellerAddresses(form);
         else if (section === 'account') { await updateSellerContact({ sellerDisplayName: form.displayName, contactName: user.name, contactEmail: email, contactPhone: phone }); if (store.data) await updateSellerStore(intro); }
       }
       mutate(state => { state.sellerSettings[user.id] = form; const member = state.users.find(u => u.id === user.id)!; member.phone = phone; member.email = email; });
       setBaseCore(core); setBaseIntro(intro);
       toast('변경 내용을 저장했습니다.');
-    } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
+    } catch (e) { setError((e as Error).message); } finally { saving.current = false; setBusy(false); }
   };
 
   // ── 사업자 서류 · 담당자 정보 ──────────────────────────────
@@ -637,7 +640,7 @@ export function SellerSettingsPage() {
           {form.business.representative && <InfoRow label="대표자" value={form.business.representative}/>}
           {form.business.businessType && <InfoRow label="업태 · 종목" value={form.business.businessType}/>}
         </div>}
-        <p className="muted px-1 text-label">사업자 정보 변경은 고객지원으로 요청해 주세요.</p>
+
       </section>
       <div className="-mx-4 h-px bg-line"/>
       <section className="space-y-4">
@@ -647,37 +650,7 @@ export function SellerSettingsPage() {
         <Field label="업무 이메일" required><input aria-label="업무 이메일" className="field-line" value={email} onChange={e => setEmail(e.target.value)} type="email"/></Field>
       </section>
       <ErrorBox message={error}/>
-      <Button type="submit" className="w-full" disabled={busy}>{busy ? '저장 중…' : '저장하기'}</Button>
-    </form>
-  );
-
-  // ── 정산 계좌 관리 ──────────────────────────────────────────
-  if (section === 'bank') return (
-    <form className="space-y-5" onSubmit={handleSubmit}>
-      <Header title="정산 계좌 관리"/>
-      <h2 className="text-body font-bold text-muted">현재 정산 계좌</h2>
-      {loadFail}
-      <section className="rounded-dialog bg-canvas p-5">
-        <div>
-          <div className="flex items-center justify-between"><p className="muted text-body">{USE_MOCK ? form.bank || 'KB국민은행' : me.data?.settings.bank || '-'}</p>{USE_MOCK && <span className="flex items-center gap-1 rounded-badge bg-surface px-2 py-0.5 text-caption font-bold text-green"><Check size={11}/>인증 완료</span>}</div>
-          <p className="font-number text-heading font-bold mt-1">{USE_MOCK ? '123456-04-***024' : me.data?.settings.account || '-'}</p>
-          {USE_MOCK ? <p className="muted text-footnote mt-1">예금주 로엠필드(김서윤) · 2026.05.08 등록</p> : me.data?.settings.holder ? <p className="muted text-footnote mt-1">예금주 {me.data.settings.holder}</p> : null}
-        </div>
-      </section>
-      {USE_MOCK && <div className="space-y-2">
-        <InfoRow label="정산 주기" value="구매 확정 후 D+7 영업일"/>
-        <InfoRow label="다음 정산 예정일" value="2026.11.11 (수)"/>
-        <InfoRow label="정산 예정 금액" value={<span className="font-bold">1,284,000원</span>}/>
-        <button type="button" className="flex items-center pt-1 text-body font-bold">정산 내역 보기<ChevronRight size={15}/></button>
-      </div>}
-      <div className="-mx-4 h-px bg-line"/>
-      <h2 className="text-body font-bold text-muted">계좌 변경</h2>
-      <Field label="은행" required><BankField label="은행" value={form.bank || ''} onChange={v => change('bank', v)}/></Field>
-      <Field label="계좌번호" required><input aria-label="계좌번호" className="field-line" inputMode="numeric" value={form.account ?? ''} onChange={e => change('account', e.target.value)} placeholder="'-' 없이 숫자만 입력"/></Field>
-      <Field label="예금주" hint="사업자등록증의 상호 또는 대표자명과 같아야 해요"><input aria-label="예금주" className="field-line" value={form.holder ?? ''} onChange={e => change('holder', e.target.value)}/></Field>
-      <div className="flex gap-2 rounded-element bg-canvas p-4 text-label text-aux"><Info size={15} className="mt-px shrink-0"/><p>변경한 계좌는 다음 정산부터 적용돼요.</p></div>
-      <ErrorBox message={error}/>
-      <Button type="submit" className="w-full" disabled={busy}>{busy ? '저장 중…' : '계좌 변경하기'}</Button>
+      {(core !== baseCore) && <div className="seller-action-enter"><Button type="submit" className="w-full" disabled={busy || !USE_MOCK && (!me.data || me.loading || !!me.error)}>{busy ? '저장 중…' : '저장하기'}</Button></div>}
     </form>
   );
 
@@ -685,7 +658,7 @@ export function SellerSettingsPage() {
   if (section === 'addresses') return (
     <div className="space-y-0">
       <Header title="출고지 · 반품지 관리"/>
-      <p className="muted mb-4 text-label leading-relaxed">드롭 상품은 기본 출고지에서 발송돼요. 상품별로 다른<br/>출고지를 지정할 수도 있어요.</p>
+
       <div className="mb-4 flex border-b border-line">
         {(['ship', 'return'] as const).map((t, i) => (
           <button key={t} onClick={() => setAddrTab(t)} className={`flex-1 border-b-2 py-3 text-body font-bold ${addrTab === t ? 'border-ink' : 'border-transparent muted'}`}>
