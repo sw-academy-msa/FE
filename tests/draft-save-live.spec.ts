@@ -41,6 +41,8 @@ test('기기 초안 없이도 서버 주소 스냅샷과 맞는 주소록을 선
 test('서버 초안 저장은 실제 수정 API 여섯 단계를 호출하고 다른 기기에서는 서버 값을 읽는다', async ({ page }) => {
   const { product, sent } = await setup(page); await page.getByLabel('상품명', { exact: true }).fill('저장한 서버 상품');
   await page.evaluate(() => { const s = JSON.parse(localStorage.getItem('stockdrop:v1:live')!); Object.assign(s.drafts['test-seller'], { price: 15000, shipping: 3500, optionDims: [], stock: { '[]': 8 }, wizardStep: 3, wizardOrder: 2 }); localStorage.setItem('stockdrop:v1:live', JSON.stringify(s)); }); await page.reload(); await expect(page.getByRole('group', { name: /판매 등록 3\/5단계/ })).toBeVisible();
+  // 뒤로 가기는 지금 단계 - 1(3 → 2 → 1), 1단계에서 뒤로 가면 나가기 확인창
+  for (const n of [2, 1]) { await page.goBack(); await expect(page.getByRole('group', { name: new RegExp(`판매 등록 ${n}/5단계`) })).toBeVisible(); await expect(dialog(page)).toHaveCount(0); }
   await page.goBack(); await expect(dialog(page)).toBeVisible(); await dialog(page).getByRole('button', { name: '임시 저장하고 나가기' }).click(); await expect(dialog(page)).toHaveCount(0);
   expect(sent.filter(x => x.method === 'PUT')).toHaveLength(6); expect(product.price).toBe(15000); expect(product.shippingFee).toBe(3500); expect(product.options[0].initialQuantity).toBe(8);
   await page.evaluate(() => { const s = JSON.parse(localStorage.getItem('stockdrop:v1:live')!); delete s.drafts['test-seller']; localStorage.setItem('stockdrop:v1:live', JSON.stringify(s)); }); await page.goto('/#/seller/products'); await page.reload(); await page.getByRole('link', { name: /이어서 등록$/ }).click(); await expect(page.getByLabel('상품명', { exact: true })).toHaveValue('저장한 서버 상품');

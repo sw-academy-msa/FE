@@ -23,5 +23,7 @@ export function CompositionInput({ value, onValueChange, ...props }: Props) {
   return <input {...props} value={text}
     onCompositionStart={() => { composing.current = true; }}
     onCompositionEnd={event => { composing.current = false; const next = event.currentTarget.value; setText(next); commit(next); }}
-    onChange={event => { const next = event.currentTarget.value; setText(next); if (!composing.current && !(event.nativeEvent as InputEvent).isComposing) commit(next); }}/>;
+    onChange={event => { const next = event.currentTarget.value; setText(next); if (!composing.current && !(event.nativeEvent as InputEvent).isComposing) commit(next); }}
+    // 칸을 벗어나면(다른 화면으로 바로 가기 전 등) 조합 중이던 글자까지 반영한다
+    onBlur={event => { composing.current = false; commit(event.currentTarget.value); props.onBlur?.(event); }}/>;
 }
