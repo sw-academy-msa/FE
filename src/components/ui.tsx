@@ -9,7 +9,6 @@ import type { Product, Order } from '../domain';
 import { money, saleState, stockTotal } from '../domain';
 import { IMAGE_EXPIRED } from '../config';
 import { IMAGE_START, imageView, onImageError, onImageLoad } from '../productImage';
-import { Spinner } from '@astryxdesign/core/Spinner';
 import { useStore } from '../store';
 import { TAB_REFRESH } from '../splash';
 import { SHEET_EXIT_MS } from '../theme/stockdrop';
@@ -45,10 +44,16 @@ export function Button({ children, outline, buy, className = '', disabled, type 
 export function Field({ label, hint, required, error, children }: { label: string; hint?: string; required?: boolean; error?: string; children: ReactNode }) { return <div><span className="label">{label}{required && <span className="muted ml-1 text-caption">· 필수</span>}</span>{children}{error && <p role="alert" className="mt-2 text-label text-red">{error}</p>}{hint && <p className="muted mt-2 text-caption leading-relaxed">{hint}</p>}</div>; }
 export function Note({ title, children, green = false }: { title?: string; children: ReactNode; green?: boolean }) { return <div className={`note ${green ? 'bg-green-soft!' : ''}`}>{title && <h3 className="mb-1 font-bold">{title}</h3>}<div className="muted">{children}</div></div>; }
 export function ErrorBox({ message }: { message: string }) { return message ? <div role="alert" className="rounded-inner bg-red-soft p-3 text-label leading-relaxed text-red">{message}</div> : null; }
+/** iOS식 12선 로딩 표시. 12개 선이 한 칸씩(steps) 돌아 끝으로 갈수록 흐려진다. 색은 부모 글자색(기본 보조색) */
+export function Spinner({ size = 22, className = 'text-muted' }: { size?: number; className?: string }) {
+  return <svg role="progressbar" aria-label="불러오는 중" width={size} height={size} viewBox="0 0 24 24" className={`ios-spinner ${className}`}>
+    {Array.from({ length: 12 }, (_, i) => <line key={i} x1="12" y1="2.5" x2="12" y2="7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" opacity={(i + 1) / 12} transform={`rotate(${i * 30} 12 12)`}/>)}
+  </svg>;
+}
 /** 서버 조회 상태(useLive): 불러오는 중(가운데 로딩 표시, label은 읽기용) / 실패 + 다시 시도. 둘 다 아니면 아무것도 그리지 않는다 */
 export function LiveStatus({ state, label = '불러오는 중이에요…' }: { state: { loading: boolean; error: string; reload: () => void }; label?: string }) {
   if (state.error) return <div className="space-y-2 py-4"><ErrorBox message={state.error}/><Button outline className="w-full" onClick={state.reload}>다시 시도</Button></div>;
-  return state.loading ? <div role="status" aria-label={label} className="grid place-items-center py-8"><Spinner size="lg" shade="subtle"/></div> : null;
+  return state.loading ? <div role="status" aria-label={label} className="grid place-items-center py-8"><Spinner/></div> : null;
 }
 export function Empty({ title, message, children }: { title: string; message?: string; children?: ReactNode }) { return <div className="flex min-h-[260px] flex-col items-center justify-center gap-4 py-12 text-center"><Package size={32} className="muted" strokeWidth={1}/><h2 className="text-headline font-bold">{title}</h2>{message && <p className="muted max-w-[280px] text-label leading-relaxed">{message}</p>}{children}</div>; }
 /** backTo: 뒤로 가기 버튼이 이전 기록 대신 갈 화면(탭 전환 기록이 쌓이는 화면 등) */
@@ -68,7 +73,7 @@ export function ProductImage({ src, alt, className = '' }: { src: string; alt: s
   const report = (url: string) => { if ((signedUrl(url) || url.startsWith('blob:')) && reported.current !== url) { reported.current = url; window.dispatchEvent(new Event(IMAGE_EXPIRED)); } };
   // 받기 전(주소 없음·받는 중)에는 흰 칸 가운데 로딩 표시, 못 받으면 흰 칸만 남긴다
   const box = `relative block overflow-hidden rounded-inner bg-surface ${className}`;
-  const spinner = view.loading && <span aria-hidden className="absolute inset-0 grid place-items-center"><Spinner size="lg" shade="subtle"/></span>;
+  const spinner = view.loading && <span aria-hidden className="absolute inset-0 grid place-items-center"><Spinner/></span>;
   if (view.kind === 'blank') return <span role="img" aria-label={alt} data-fallback={view.loading ? 'loading' : 'blank'} className={box}>{spinner}</span>;
   return <span className={box}>
     <img key={view.url} src={view.url} alt={alt} data-fallback={view.loading ? 'loading' : undefined} loading="lazy"
