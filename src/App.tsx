@@ -1,6 +1,7 @@
 import { Component, useEffect, useState } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
 import { Navigate, Route, Routes, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Spinner } from '@astryxdesign/core/Spinner';
 import { BottomNav, Button, LeaveGuardHost, Note, ProductImage, ToastProvider } from './components/ui';
 import { mutate, sweep, useStore } from './store';
 import { HomePage, SchedulePage, ProductPage, CheckoutPage, OrdersPage, OrderDetailPage, CalendarPage, NotificationsPage, OrderInquiryPage } from './pages/buyer';
@@ -38,7 +39,7 @@ function AppContent() {
   }, []);
   useEffect(() => { const timer = setInterval(() => { try { sweep(); } catch { /* Storage errors are reported by user operations. */ } }, 1000); return () => clearInterval(timer); }, []);
   useEffect(() => { window.scrollTo(0, 0); }, [location.pathname]);
-  if (restoring) return <div role="status" aria-live="polite" className="mx-auto grid min-h-[100dvh] max-w-[390px] place-items-center bg-surface text-body text-muted">로그인 정보를 확인하고 있어요…</div>;
+  if (restoring) return <div role="status" aria-label="로그인 정보를 확인하고 있어요" className="mx-auto grid min-h-[100dvh] max-w-[390px] place-items-center bg-surface"><Spinner size="lg" shade="subtle"/></div>;
   if (!s.auth?.onboarded && location.pathname === '/') return <><PreviewTools/><Navigate to="/onboarding" replace/></>;
   if (s.auth?.onboarded && !signedIn(s) && location.pathname === '/' && sessionStorage.getItem('stockdrop:guest-session') !== '1') return <><PreviewTools/><Navigate to="/welcome?next=%2F" replace/></>;
   if (protectedRoute && !signedIn(s)) return <><PreviewTools/><Navigate to={loginHref(location.pathname + location.search)} replace/></>;
