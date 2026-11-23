@@ -357,7 +357,7 @@ export function analysisProblems(d: AnalysisInput, status?: Product['reviewStatu
   if (!d.name.trim()) f.name = '상품명을 입력해 주세요.';
   if (!d.description.trim()) f.description = '짧은 설명을 입력해 주세요.';
   if (!d.reason.trim()) f.disposalReason = '처분 사유를 입력해 주세요.';
-  const url = 'originalUrl' in d ? sourceUrlProblem(String(d.originalUrl ?? '')) : null; if (url) f.sourceUrl = url; // 기본 정보 저장에 같이 보내므로 미리 검사
+  // 2단계 판매 URL은 분석 입력이 아니다: 비었거나 고치는 중이어도 분석을 막지 않는다(analyzeDraft는 올바른 URL만 같이 저장한다)
   return f;
 }
 /** 첫 번째로 빠진 조건 문구(null = 시작 가능) */
@@ -422,7 +422,9 @@ export async function analyzeDraft(d: Draft, id: string, o?: Parameters<typeof p
   // 매 단계의 응답 version을 다음 요청에 쓴다(낙관적 잠금)
   // 서버 값과 같으면 저장하지 않는다(재분석마다 version이 2씩 오르던 문제). 명세: AI 점검은 현재 이미지·기본정보·처분 사유 기준
   let p = await at_('상품 조회 실패', () => getSellerProduct(id));
+  // 판매 URL이 아직 올바르지 않으면(2단계에서 입력 중) 서버에 있던 값을 그대로 두어 기본 정보 저장이 URL 때문에 실패하지 않게 한다
   const basic = basicInfoOf(d, meta.categories), details = detailsOf(d);
+  if (basic.sourceUrl && sourceUrlProblem(basic.sourceUrl)) basic.sourceUrl = p.originalUrl || undefined;
   if (!sameBasic(basic, p)) p = await at_('기본 정보 저장 실패', () => saveBasicInfo(id, p.version ?? 0, basic));
   if (!sameDetails(details, p)) p = await at_('상세 정보 저장 실패', () => saveDetails(id, p.version ?? 0, details));
   // 요청 직전에 서버 값을 다시 받아 조건을 확인한다(저장된 상품명·설명·처분 사유, 완료된 사진 1장 이상·30MB 이하, 최신 version, DRAFT·REJECTED). 안 맞으면 요청하지 않는다

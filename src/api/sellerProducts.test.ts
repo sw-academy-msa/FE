@@ -209,6 +209,8 @@ describe('AI 분석 시작 조건', () => {
     expect(analysisProblems({ ...ok, name: ' ', description: '', reason: '' })).toEqual({ name: expect.any(String), description: expect.any(String), disposalReason: expect.any(String) });
     expect(analysisProblems(ok, 'IN_REVIEW').state).toBe(PRODUCT_STATE_MESSAGE);
     expect(analysisProblems(ok, 'APPROVED')).toHaveProperty('state');
+    // 2단계 판매 URL은 분석 입력이 아니다: 고치는 중인 값이어도 AI 분석(다시 분석)을 막지 않는다
+    expect(analysisProblems({ ...ok, originalUrl: 'coupang' } as typeof ok)).toEqual({});
   });
 });
 
