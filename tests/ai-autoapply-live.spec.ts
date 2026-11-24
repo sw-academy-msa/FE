@@ -64,14 +64,13 @@ test('AI 분석이 성공하면 결과 보기 없이 카테고리와 구매자 �
   expect(calls.analyses).toBe(1);
   const polls = calls.polls;
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
-  // 다시 들어와도 같은 결과를 또 반영하거나 다시 분석하지 않는다. 안내를 닫으면 다시 보이지 않는다
+  // 다시 들어와도 같은 결과를 또 반영하거나 다시 분석하지 않는다. 완료 안내는 닫기 버튼 없이 계속 보인다
   await page.goto('/#/seller/new?step=4'); await page.reload();
   await expect(notice(page)).toBeVisible();
-  await notice(page).getByRole('button', { name: '닫기' }).click();
-  await expect(notice(page)).toHaveCount(0);
-  await page.goto('/#/seller/products'); await page.goto('/#/seller/new'); await page.reload();
+  await expect(notice(page).getByRole('button')).toHaveCount(0);
+  await page.goto('/#/seller/products'); await page.goto('/#/seller/new?step=4'); await page.reload();
   await expect(page.getByText('니트', { exact: true })).toBeVisible();
-  await expect(notice(page)).toHaveCount(0);
+  await expect(notice(page)).toHaveText(/^AI 분석 결과를 반영했어요/);
   expect(calls.analyses).toBe(1); expect(calls.polls).toBe(polls);
 });
 
@@ -81,7 +80,8 @@ test('판매자가 이미 고른 카테고리는 덮지 않고 알린 뒤 원하
   await page.goto('/#/seller/new?step=4');
   await expect(notice(page)).toContainText('직접 고른 카테고리를 그대로 두었어요', { timeout: 15000 });
   await expect(page.getByText('노트', { exact: true })).toBeVisible();
+  await expect(notice(page).getByRole('button', { name: '닫기' })).toHaveCount(0);
   await notice(page).getByRole('button', { name: 'AI 추천으로 바꾸기' }).click();
   await expect(page.getByText('니트', { exact: true })).toBeVisible();
-  await expect(notice(page)).toHaveCount(0);
+  await expect(notice(page)).toHaveText(/^AI 분석 결과를 반영했어요/); await expect(notice(page).getByRole('button')).toHaveCount(0);
 });

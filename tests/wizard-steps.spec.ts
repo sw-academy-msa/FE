@@ -35,6 +35,7 @@ test('1단계 다음은 AI 분석을 요청하고 기다리지 않고 2단계로
   await expect(aiState(page).getByText('AI가 사진을 분석하고 있어요')).toBeVisible();
   // 자동 갱신: 끝나면 다시 열지 않아도 추천 카테고리와 질문이 채워진다
   await expect(page.getByRole('status', { name: 'AI 분석 반영 안내' })).toContainText('AI 분석 결과를 반영했어요', { timeout: 15000 });
+  await expect(page.getByRole('status', { name: 'AI 분석 반영 안내' }).getByRole('button')).toHaveCount(0); // 완료 상자는 닫기 없이 한 줄
   await expect(aiState(page).getByText('AI가 사진을 분석하고 있어요')).toHaveCount(0);
   await expect(page.locator('[data-field="category"]')).not.toContainText('카테고리를 선택해 주세요');
   await expect(page.locator('[data-field="aiQuestions"]')).toBeVisible();
@@ -44,8 +45,13 @@ test('분석이 끝나기 전에도 4단계에서 카테고리를 직접 골라 
   await fillStep1(page); await next(page); await expect(stepGroup(page, 2)).toBeVisible();
   await page.goto('/#/seller/new?step=4'); await expect(aiState(page).getByText('AI가 사진을 분석하고 있어요')).toBeVisible();
   await pickCategory(page);
-  await expect(page.getByRole('status', { name: 'AI 분석 반영 안내' })).toContainText('직접 고른 카테고리를 그대로 두었어요', { timeout: 15000 });
+  const kept = page.getByRole('status', { name: 'AI 분석 반영 안내' });
+  await expect(kept).toContainText('직접 고른 카테고리를 그대로 두었어요', { timeout: 15000 });
   await expect(page.locator('[data-field="category"]')).toContainText('패션 › 잡화 › 가방');
+  await expect(kept.getByRole('button', { name: '닫기' })).toHaveCount(0); await expect(kept.getByRole('button', { name: 'AI 추천으로 바꾸기' })).toBeVisible();
+  // 글자 버튼은 누르는 영역 44px이지만 상자는 크게 늘지 않는다
+  expect((await kept.getByRole('button', { name: 'AI 추천으로 바꾸기' }).boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  expect((await kept.boundingBox())!.height).toBeLessThan(90);
 });
 
 test('분석이 실패하면 4단계에 사유와 다시 분석, 직접 선택이 보이고 직접 골라 진행할 수 있다', async ({ page }) => {
