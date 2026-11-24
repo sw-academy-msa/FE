@@ -155,11 +155,12 @@ const AI_TONE: Record<AiTone, { box: string; head: string; Icon: typeof Sparkles
   done: { box: 'bg-positive-soft', head: 'text-positive-strong', Icon: CheckCircle2 },
   warn: { box: 'border border-gauge-warning bg-caution-soft', head: 'text-caution', Icon: AlertTriangle },
 };
-function AiStatusBox({ tone, title, label, actions }: { tone: AiTone; title: string; label?: string; actions?: ReactNode }) {
+function AiStatusBox({ tone, title, label, actions, links }: { tone: AiTone; title: string; label?: string; actions?: ReactNode; links?: ReactNode }) {
   const t = AI_TONE[tone];
-  // 상자 안 글은 아이콘과 상태를 말하는 한 줄뿐이다(설명 줄 없음). 미완료 상자만 아래에 버튼
+  // 상자 안 글은 아이콘과 상태를 말하는 한 줄뿐이다(설명 줄 없음). 미완료 상자만 아래에 버튼, 완료 상자는 필요할 때 제목 밑에 글자 버튼(links)
   return <div role={tone === 'warn' ? 'alert' : 'status'} aria-label={label} data-tone={tone} className={`space-y-2 rounded-element p-4 ${t.box}`}>
     <p className={`flex items-start gap-1.5 text-body font-bold ${t.head}`}><t.Icon size={16} aria-hidden className="mt-[3px] shrink-0"/>{title}</p>
+    {links && <div className="flex gap-4 pl-[22px] text-label font-bold text-positive-strong">{links}</div>}
     {actions && <div className="flex flex-wrap gap-2 pt-1">{actions}</div>}
   </div>;
 }
@@ -564,8 +565,9 @@ export function WizardPage() {
   ];
   const last = step === STEPS;
   /** AI 분석 상태 상자(2·3단계는 짧게, 4단계는 진행 막대와 버튼까지). 진행 중 회색, 완료 초록, 미완료(판단 불가·실패·지연·정보 바뀜) 노랑 */
-  // 사진·정보가 바뀌었으면 다시 분석 안내가 먼저다. 카테고리만 AI 추천과 다르게 고른 경우는 완료 안내(직접 고른 카테고리 유지)를 먼저 보이고, 닫으면 다시 분석 안내를 보인다
-  const notice = d.ai.status === 'recommended' && !!d.ai.result && !!d.ai.notice && !d.ai.noticeSeen;
+  // 완료 상자는 닫지 않고 계속 보인다. 사진·정보가 바뀌었으면 다시 분석 안내가 먼저다.
+  // 반영한 AI 카테고리를 판매자가 다른 것으로 바꾸면 반영 안내 대신 다시 분석 안내를 보인다. 직접 고른 카테고리를 유지한 안내는 그대로 두고 그 안에서 다시 분석할 수 있다
+  const notice = d.ai.status === 'recommended' && !!d.ai.result && (d.ai.notice === 'kept' || (d.ai.notice === 'applied' && !stale));
   const aiView = d.ai.status === 'analyzing' ? 'analyzing' : stale && (analysisInputChanged(d) || !notice) ? 'stale' : notice ? 'done' : d.ai.status === 'uncertain' || d.ai.status === 'failed' || d.ai.status === 'delayed' ? d.ai.status : null;
   /** 상자 한 줄 문구(판단 불가 사유는 짧게) */
   const UNCERTAIN_LINE: Record<string, string> = { [AI_MESSAGES.NOT_APPLICABLE]: '판매 가능한 분류가 아닌 사진으로 보여요', [AI_MESSAGES.UNCLEAR]: '사진이 선명하지 않아 판단하지 못했어요', [AI_MESSAGES.NO_CATEGORY]: 'AI가 추천한 분류를 찾지 못했어요' };
@@ -578,9 +580,11 @@ export function WizardPage() {
     if (aiView === 'analyzing') return <AiStatusBox tone="progress" title={d.ai.retry ? 'AI가 잠시 후 다시 분석해요' : 'AI가 사진을 분석하고 있어요'}/>;
     if (aiView === 'done') {
       const r = d.ai.result!;
-      return <AiStatusBox tone="done" label="AI 분석 반영 안내" title={d.ai.notice === 'applied' ? 'AI 분석 결과를 반영했어요' : '직접 고른 카테고리를 그대로 두었어요'} actions={inline ? undefined : <div className="flex gap-4 text-label font-bold">
-        {d.ai.notice === 'kept' && <button type="button" className="min-h-11 underline" onClick={() => patch({ category: r.category, aiCategory: r.category, ai: { ...d.ai, notice: 'applied', noticeSeen: true } })}>AI 추천으로 바꾸기</button>}
-        <button type="button" className="min-h-11 text-aux-strong underline" onClick={() => patch({ ai: { ...d.ai, noticeSeen: true } })}>닫기</button></div>}/>;
+      // 닫기 없음. 직접 고른 카테고리 안내만 제목 밑에 작은 글자 버튼(누르는 영역 44px, 상자 높이는 늘리지 않음)
+      const link = 'inline-flex min-h-11 -my-3 items-center underline';
+      return <AiStatusBox tone="done" label="AI 분석 반영 안내" title={d.ai.notice === 'applied' ? 'AI 분석 결과를 반영했어요' : '직접 고른 카테고리를 그대로 두었어요'} links={inline || d.ai.notice !== 'kept' ? undefined : <>
+        <button type="button" className={link} onClick={() => patch({ category: r.category, aiCategory: r.category, ai: { ...d.ai, notice: 'applied' } })}>AI 추천으로 바꾸기</button>
+        {stale && <button type="button" className={link} disabled={uploading} onClick={runAnalysis}>다시 분석</button>}</>}/>;
     }
     if (aiView === 'stale') return <AiStatusBox tone="warn" title="사진이나 정보가 바뀌어 다시 분석이 필요해요" actions={<>{again('다시 분석', runAnalysis)}{pickBtn}</>}/>;
     if (aiView === 'uncertain') return <AiStatusBox tone="warn" title={UNCERTAIN_LINE[d.ai.reason] ?? 'AI가 카테고리를 판단하지 못했어요'} actions={<>{photoBtn}{pickBtn}</>}/>;
