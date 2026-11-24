@@ -78,6 +78,26 @@ test('다음으로 단계를 넘기면 주소에 남고, 휴대폰 뒤로 가기
   await page.getByRole('button', { name: '이전 화면' }).click(); await expect(stepGroup(page, 1)).toBeVisible(); await expect(confirmDialog(page)).toHaveCount(0);
 });
 
+test('뒤로(헤더 뒤로와 휴대폰 뒤로)로 이전 단계에 가면 그 단계의 예전 스크롤 위치가 아니라 맨 위에서 시작한다', async ({ page }) => {
+  for (const how of ['header', 'phone'] as const) {
+    await seller(page); await fillStep1(page); await next(page); await expect(stepGroup(page, 2)).toBeVisible();
+    await fillStep2(page);
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight)); expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+    await next(page); await expect(stepGroup(page, 3)).toBeVisible(); expect(await page.evaluate(() => window.scrollY)).toBe(0);
+    await (how === 'header' ? page.getByRole('button', { name: '이전 화면' }).click() : page.goBack());
+    await expect(stepGroup(page, 2)).toBeVisible(); await page.waitForTimeout(600); // 브라우저 스크롤 복원이 늦게 와도 맨 위인지 본다
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  }
+});
+
+test('1인 구매 한도와 기본 수량은 새 등록 초안에서 1개로 시작하고, 이미 저장된 초안의 값은 그대로다', async ({ page }) => {
+  await fillStep1(page); await next(page); await expect(stepGroup(page, 2)).toBeVisible();
+  await expect(page.getByLabel('1인 구매 한도 수량')).toHaveValue('1'); await expect(page.getByLabel('기본 수량 수량', { exact: true })).toHaveValue('1');
+  await page.evaluate(() => { const s = JSON.parse(localStorage.getItem('stockdrop:v1')!); s.drafts.seller.maxPerAccount = 2; s.drafts.seller.stock = { '[]': 0 }; localStorage.setItem('stockdrop:v1', JSON.stringify(s)); });
+  await page.reload(); await expect(stepGroup(page, 2)).toBeVisible();
+  await expect(page.getByLabel('1인 구매 한도 수량')).toHaveValue('2'); await expect(page.getByLabel('기본 수량 수량', { exact: true })).toHaveValue('0');
+});
+
 test('다음은 그 단계 필수 칸만 검사해 오류를 보이고 머문다', async ({ page }) => {
   await fillStep1(page); await page.getByLabel('상품명').fill('');
   await next(page);

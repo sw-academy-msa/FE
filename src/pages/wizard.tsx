@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { CompositionInput } from '../components/CompositionInput';
 import { ProgressBar } from '@astryxdesign/core/ProgressBar';
-import type { ReactNode } from 'react';
+import type { ReactNode, TextareaHTMLAttributes } from 'react';
 import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { AlertCircle, AlertTriangle, ArrowLeft, Calendar, Check, CheckCircle2, ChevronDown, ChevronRight, Hash, Image as ImageIcon, Info, Link2, Minus, Package, Plus, ShieldCheck, Sparkles, Timer, X } from 'lucide-react';
 import { activeUser, blankDraft, listingDimensions, listingOptions, localDateTime, lookupReference, mockAiAnalysis, money, nowOf, publishDraft, unsupportedInput, OPTION_DIM_MAX, OPTION_TEXT_MAX, comboKey, comboLabel, optionCombos, optionModel, optionNameProblem } from '../domain';
@@ -33,7 +33,7 @@ function fromProduct(p: Product): Draft {
   for (const o of p.options) stock[comboKey(basic ? [] : optionDims.length === 1 ? [parts(o.name).join(' / ')] : parts(o.name))] = o.stock;
   return { ...blankDraft(), draftAddresses: p.draftAddresses, editingId: p.id, editingVersion: p.version, name: p.name, brand: p.brand, description: p.description, images: [...p.images], imageIds: p.imageIds && [...p.imageIds], imageSizes: p.imageSizes && [...p.imageSizes], category: p.category, originalUrl: p.originalUrl, extras: structuredClone(p.extras), reason: p.reason, dimensions: structuredClone(p.dimensions), noOptions: basic, options: p.options.map(o => ({ ...o, name: basic ? o.name : parts(o.name).join(' / ') })), price: p.price, shipping: p.shipping, shippingNotice: p.shippingNotice ?? '', dispatchDays: p.dispatchDays, maxPerAccount: p.maxPerAccount, startsAt: p.startsAt ? localDateTime(p.startsAt) : blankDraft().startsAt, faqs: structuredClone(p.faqs), optionDims, stock, reference: p.reference ?? lookupReference(p.originalUrl) };
 }
-function freshDraft(now: number): Draft { const start = new Date(now + 3_600_000); start.setMinutes(0, 0, 0); return { ...blankDraft(now), startsAt: localDateTime(start.getTime()), optionDims: [], stock: {} }; }
+function freshDraft(now: number): Draft { const start = new Date(now + 3_600_000); start.setMinutes(0, 0, 0); return { ...blankDraft(now), startsAt: localDateTime(start.getTime()), optionDims: [], stock: { [comboKey([])]: 1 } }; } // 새 등록: 옵션 없음의 기본 수량 1개
 /** 초안 변경 — options·dimensions를 항상 옵션 단계와 수량에서 다시 계산. 예전 구조(색상 x 사이즈) 초안은 처음 고칠 때 같은 이름과 수량의 새 구조로 바꾼다 */
 function patchDraft(userId: string, value: Partial<Draft>) {
   mutate(state => {
@@ -206,6 +206,12 @@ const inputKey = (d: Draft) => { const a = analysisInputOf(d); return JSON.strin
 /** 등록 화면의 n단계 주소(AI 분석 화면에서 돌아올 때) */
 /** 예전 AI 분석 화면(주소로 바로 연 경우)에서 등록 4단계(카테고리와 AI 확인)로 돌아갈 때 쓰는 기록 표시 */
 const WIZARD_STATE = { wizardStep: true };
+/** 짧은 설명 칸: 한 줄(높이 48px, 글자 위아래 12px)로 시작해 줄이 늘면 함께 늘어난다. 상품명 같은 한 줄 칸과 글자와 밑줄 사이 간격이 같다 */
+function GrowTextarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => { const el = ref.current; if (!el) return; el.style.height = 'auto'; el.style.height = `${el.scrollHeight + el.offsetHeight - el.clientHeight}px`; }, [props.value]);
+  return <textarea ref={ref} rows={1} {...props}/>;
+}
 const stepUrl = (suffix: string, n: number, extra = '') => `/seller/new${suffix}${suffix ? '&' : '?'}step=${n}${extra}`;
 const TIME_SLOTS = Array.from({ length: 48 }, (_, i) => hhmm(Math.floor(i / 2), i % 2 * 30));
 
@@ -251,7 +257,7 @@ export function WizardPage() {
   // 확인창의 나가기를 고르면 이 기기의 초안을 지워 다시 열면 빈 화면(수정은 서버 원본)부터 시작한다(단계 이동, 새로고침, 앱 종료는 초안을 남겨 이어 쓴다).
   // DRAFT는 서버 저장 또는 삭제를 먼저 마치고 이동한다. 삭제 뒤 늦게 온 분석 결과는 사라진 초안에 반영하지 않는다.
   // 새 등록은 이어 쓰던 초안이라도 내용이 있으면 작성 중이다(나가기를 고르면 초안을 지우므로 묻는다). 수정은 연 뒤 바뀐 것만 본다
-  const hasContent = !!d && !!(d.images.length || d.name.trim() || d.description.trim() || d.reason.trim() || d.category || d.originalUrl.trim() || d.price || d.optionDims?.length || Object.values(d.stock ?? {}).some(n => n > 0) || d.extras.some(e => e.value.trim()) || d.faqs.length || d.carrier || d.returnFee);
+  const hasContent = !!d && !!(d.images.length || d.name.trim() || d.description.trim() || d.reason.trim() || d.category || d.originalUrl.trim() || d.price || d.optionDims?.length || Object.entries(d.stock ?? {}).some(([k, n]) => n > 0 && !(k === comboKey([]) && n === 1)) || d.extras.some(e => e.value.trim()) || d.faqs.length || d.carrier || d.returnFee);
   const draftProduct = s.products.find(p => p.id === (editId ?? d?.serverId));
   const isDraft = !editId || draftProduct?.reviewStatus === 'DRAFT';
   useEffect(() => {
@@ -328,8 +334,14 @@ export function WizardPage() {
     }
     if (d.wizardStep !== step || d.wizardOrder !== WIZARD_ORDER) patchDraft(user.id, { wizardStep: step, wizardOrder: WIZARD_ORDER });
   }, [ready, step]);
-  // 단계가 바뀌면 맨 위에서 시작한다. 오류 칸으로 옮겨 온 경우는 그 칸으로 스크롤한다
+  // 브라우저 스크롤 복원 끄기: 단계 사이 뒤로(헤더 뒤로의 navigate(-k), 휴대폰 뒤로)는 기록 이동이라 브라우저가 그 단계를 떠날 때의 스크롤 위치를
+  // 아래 scrollTo(0, 0) 뒤에 다시 적용했다(이전 단계의 아래쪽에 머묾). 판매 등록 화면에 있는 동안만 끄고 나가면 원래 값으로 되돌린다
   useEffect(() => {
+    const prev = history.scrollRestoration; history.scrollRestoration = 'manual';
+    return () => { history.scrollRestoration = prev; };
+  }, []);
+  // 단계가 바뀌면 맨 위에서 시작한다(그리기 전에 옮겨 이전 위치가 잠깐 보이지 않게 한다). 오류 칸으로 옮겨 온 경우는 그 칸으로 스크롤한다
+  useLayoutEffect(() => {
     const field = focusAfterStep.current; focusAfterStep.current = null;
     if (!field) { window.scrollTo(0, 0); return; }
     const t = setTimeout(() => { const el = document.querySelector<HTMLElement>(`[data-field="${field}"]`); if (el) { el.scrollIntoView({ block: 'center' }); el.querySelector<HTMLElement>('input, textarea, select, button')?.focus({ preventScroll: true }); } });
@@ -545,13 +557,15 @@ export function WizardPage() {
   const dimsWith = (i: number, f: (x: OptionDim) => OptionDim) => dims.map((x, j) => (j === i ? f(x) : x));
   // i단계 값을 바꾸거나(문자열) 지운(null) 조합의 수량을 옮긴다. 단계 수가 다른 예전 수량은 그대로 둔다
   const remapStock = (i: number, f: (v: string) => string | null) => Object.fromEntries(Object.entries(stock).flatMap(([k, n]) => { const vals = JSON.parse(k) as string[]; if (vals.length !== dims.length) return [[k, n]]; const nv = f(vals[i]); return nv === null ? [] : [[comboKey(vals.map((x, j) => (j === i ? nv : x))), n]]; }));
+  // 새로 생긴 조합(옵션 값 추가, 단계 지우기로 조합이 바뀜)은 수량 1개로 시작한다. 전에 있던 조합과 이미 수량이 있는 조합(0 포함)은 그대로 둔다
+  const seedStock = (next: OptionDim[], base: Record<string, number> = stock) => { const had = new Set(optionCombos(dims).map(comboKey)), out = { ...base }; for (const c of optionCombos(next)) { const k = comboKey(c); if (!had.has(k) && !(k in out)) out[k] = 1; } return out; };
   const addDim = (v: string) => { if (dims.length < OPTION_DIM_MAX && optCheck(v, dims.map(x => x.name), '옵션 이름')) patch({ optionDims: [...dims, { name: v.trim(), values: [] }] }); };
   const renameDim = (i: number, v: string) => { if (!optCheck(v, dims.filter((_, j) => j !== i).map(x => x.name), '옵션 이름')) return false; patch({ optionDims: dimsWith(i, x => ({ ...x, name: v.trim() })) }); return true; };
-  const addValue = (i: number, v: string) => { if (optCheck(v, dims[i].values, '옵션 값')) patch({ optionDims: dimsWith(i, x => ({ ...x, values: [...x.values, v.trim()] })) }); };
+  const addValue = (i: number, v: string) => { if (!optCheck(v, dims[i].values, '옵션 값')) return; const next = dimsWith(i, x => ({ ...x, values: [...x.values, v.trim()] })); patch({ optionDims: next, stock: seedStock(next) }); };
   const renameValue = (i: number, old: string, v: string) => { if (!optCheck(v, dims[i].values.filter(x => x !== old), '옵션 값')) return false; const nv = v.trim(); patch({ optionDims: dimsWith(i, x => ({ ...x, values: x.values.map(y => (y === old ? nv : y)) })), stock: remapStock(i, y => (y === old ? nv : y)) }); return true; };
   const deleteValue = (i: number, v: string) => { setOptErr(''); patch({ optionDims: dimsWith(i, x => ({ ...x, values: x.values.filter(y => y !== v) })), stock: remapStock(i, y => (y === v ? null : y)) }); };
   // 단계를 지우면 그 값과 조합 수량도 지운다. 값이 있으면 먼저 확인한다(값이 없는 단계는 수량에 영향이 없어 바로 지운다)
-  const removeDims = (i: number | 'all') => { const gone = i === 'all' ? dims : [dims[i]]; setDropDim(null); setOptErr(''); patch({ optionDims: i === 'all' ? [] : dims.filter((_, j) => j !== i), ...(gone.some(x => x.values.length) ? { stock: {} } : {}) }); };
+  const removeDims = (i: number | 'all') => { const gone = i === 'all' ? dims : [dims[i]]; setDropDim(null); setOptErr(''); const next = i === 'all' ? [] : dims.filter((_, j) => j !== i); patch({ optionDims: next, stock: seedStock(next, gone.some(x => x.values.length) ? {} : stock) }); };
   const askRemove = (i: number | 'all') => { if ((i === 'all' ? dims : [dims[i]]).some(x => x.values.length)) setDropDim(i); else removeDims(i); };
   const chip = (on: boolean, label: string, onClick: () => void) => <button type="button" aria-pressed={on} onClick={onClick} className={`inline-flex h-8 items-center gap-1 rounded-full px-3.5 text-body ${on ? 'bg-ink font-bold text-white' : 'border border-border text-aux'}`}>{on && <Check size={13} strokeWidth={2.5}/>}{label}</button>;
   const qtyRow = (label: string, key: string, last: boolean) => <div key={key} className={`flex min-h-13 items-center justify-between gap-3 py-2 ${last ? '' : 'border-b border-line'}`}><span className="min-w-0 break-all text-subhead">{label}</span><Stepper label={label} value={stock[key] ?? 0} onChange={n => setStock(key, n)}/></div>;
@@ -634,7 +648,7 @@ export function WizardPage() {
       <section data-field="name"><Label hint={revision ? '· 승인 후 변경 불가' : '· 필수'}>상품명</Label><CompositionInput aria-label="상품명" className="field-line" readOnly={revision} value={d.name} maxLength={50} onValueChange={value => patch({ name: value })} placeholder="상품명을 입력해 주세요"/><FieldError name="name"/></section>
 
       {/* AI 분석·심사 제출에 필요한 값(단계 저장 땐 선택). 비워 두면 보내지 않는다 — 임의 문구로 채우지 않는다. Figma에 추가할 칸 */}
-      <section data-field="description"><Label hint="· 필수 · 한두 줄이면 돼요">짧은 설명</Label><textarea aria-label="짧은 설명" rows={2} className="field-line min-h-16 resize-y" value={d.description} maxLength={20000} onChange={e => patch({ description: e.target.value })} placeholder="예: 새 상품, 택 그대로, 박스 없음"/><FieldError name="description"/></section>
+      <section data-field="description"><Label hint="· 필수 · 한두 줄이면 돼요">짧은 설명</Label><GrowTextarea aria-label="짧은 설명" className="field-line h-auto min-h-12 resize-none overflow-hidden pt-3 pb-[11px]" value={d.description} maxLength={20000} onChange={e => patch({ description: e.target.value })} placeholder="예: 새 상품, 택 그대로, 박스 없음"/><FieldError name="description"/></section>
     {!revision && <>
       <section data-field="disposalReason"><Label hint="· 필수 · 한두 줄이면 돼요">처분 사유</Label><input aria-label="처분 사유" className="field-line" value={d.reason} maxLength={500} onChange={e => patch({ reason: e.target.value })} placeholder="예: 시즌 종료 후 남은 미판매 새 상품"/><FieldError name="disposalReason"/></section>
 

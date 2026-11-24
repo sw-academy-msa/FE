@@ -195,7 +195,7 @@ export function parseRejection(reason: string | undefined): { field: string; rea
 export const PURCHASE_BLOCK_TEXT = { admin: '운영자 계정은 구매할 수 없어요', own: '내가 판매하는 상품이에요' } as const;
 export const defaultAddress: Address = { name: '김서윤', phone: '010-1234-5678', address: '서울시 성동구 연무장길 00', detail: '501호', request: '문 앞에 놓아 주세요.' };
 export function blankDraft(now = Date.now()): Draft {
-  return { step: 1, name: '', brand: '', description: '', images: [], category: '', originalUrl: '', extras: [{ key: '', value: '' }], reason: '', dimensions: [], noOptions: false, options: [], price: 0, shipping: 3000, dispatchDays: 2, maxPerAccount: 2, startsAt: localDateTime(now + 3_600_000), faqs: [], ai: { status: 'before', signature: '', category: '', reason: '' } };
+  return { step: 1, name: '', brand: '', description: '', images: [], category: '', originalUrl: '', extras: [{ key: '', value: '' }], reason: '', dimensions: [], noOptions: false, options: [], price: 0, shipping: 3000, dispatchDays: 2, maxPerAccount: 1, startsAt: localDateTime(now + 3_600_000), faqs: [], ai: { status: 'before', signature: '', category: '', reason: '' } };
 }
 export function inputSignature(d: Pick<Draft, 'name' | 'description' | 'images'>) { return JSON.stringify([d.name.trim(), d.description.trim(), d.images]); }
 export function unsupportedInput(name: string, description: string): boolean {
