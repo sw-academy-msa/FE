@@ -566,8 +566,9 @@ export function WizardPage() {
   const last = step === STEPS;
   /** AI 분석 상태 상자(2·3단계는 짧게, 4단계는 진행 막대와 버튼까지). 진행 중 회색, 완료 초록, 미완료(판단 불가·실패·지연·정보 바뀜) 노랑 */
   // 완료 상자는 닫지 않고 계속 보인다. 사진·정보가 바뀌었으면 다시 분석 안내가 먼저다.
-  // 반영한 AI 카테고리를 판매자가 다른 것으로 바꾸면 반영 안내 대신 다시 분석 안내를 보인다. 직접 고른 카테고리를 유지한 안내는 그대로 두고 그 안에서 다시 분석할 수 있다
-  const notice = d.ai.status === 'recommended' && !!d.ai.result && (d.ai.notice === 'kept' || (d.ai.notice === 'applied' && !stale));
+  // 안내 문구는 지금 카테고리로 정한다: AI 추천과 같으면 반영, 다르면 직접 고른 카테고리 유지(AI 추천으로 바꾸기, 분석 뒤 카테고리를 또 바꿨으면 다시 분석도 함께)
+  const shownNotice = d.ai.status === 'recommended' && d.ai.result && d.ai.notice ? (d.category === d.ai.result.category ? 'applied' : 'kept') : null;
+  const notice = !!shownNotice;
   const aiView = d.ai.status === 'analyzing' ? 'analyzing' : stale && (analysisInputChanged(d) || !notice) ? 'stale' : notice ? 'done' : d.ai.status === 'uncertain' || d.ai.status === 'failed' || d.ai.status === 'delayed' ? d.ai.status : null;
   /** 상자 한 줄 문구(판단 불가 사유는 짧게) */
   const UNCERTAIN_LINE: Record<string, string> = { [AI_MESSAGES.NOT_APPLICABLE]: '판매 가능한 분류가 아닌 사진으로 보여요', [AI_MESSAGES.UNCLEAR]: '사진이 선명하지 않아 판단하지 못했어요', [AI_MESSAGES.NO_CATEGORY]: 'AI가 추천한 분류를 찾지 못했어요' };
@@ -582,7 +583,7 @@ export function WizardPage() {
       const r = d.ai.result!;
       // 닫기 없음. 직접 고른 카테고리 안내만 제목 밑에 작은 글자 버튼(누르는 영역 44px, 상자 높이는 늘리지 않음)
       const link = 'inline-flex min-h-11 -my-3 items-center underline';
-      return <AiStatusBox tone="done" label="AI 분석 반영 안내" title={d.ai.notice === 'applied' ? 'AI 분석 결과를 반영했어요' : '직접 고른 카테고리를 그대로 두었어요'} links={inline || d.ai.notice !== 'kept' ? undefined : <>
+      return <AiStatusBox tone="done" label="AI 분석 반영 안내" title={shownNotice === 'applied' ? 'AI 분석 결과를 반영했어요' : '직접 고른 카테고리를 그대로 두었어요'} links={inline || shownNotice !== 'kept' ? undefined : <>
         <button type="button" className={link} onClick={() => patch({ category: r.category, aiCategory: r.category, ai: { ...d.ai, notice: 'applied' } })}>AI 추천으로 바꾸기</button>
         {stale && <button type="button" className={link} disabled={uploading} onClick={runAnalysis}>다시 분석</button>}</>}/>;
     }
