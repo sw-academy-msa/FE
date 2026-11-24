@@ -69,6 +69,12 @@ describe('판매자 완판 판단', () => {
     expect(salesSoldOut(undefined)).toBe(false);
   });
 });
+describe('새 등록 초안 기본값', () => {
+  it('1인 구매 한도는 1개로 시작한다(배송비 3000원, 출고 2일은 그대로)', () => {
+    expect(blankDraft(NOW)).toMatchObject({ maxPerAccount: 1, shipping: 3000, dispatchDays: 2 });
+  });
+});
+
 describe('AI 분석 결과 자동 반영', () => {
   const result = (category: string, questions: AiQuestion[] = []) => ({ status: 'recommended' as const, signature: 't2', category: '', reason: '', result: { code: 'CLOTHING', category, photos: 1, questions } });
   it('카테고리가 비어 있으면 추천 카테고리를 채우고 반영 안내를 남긴다', () => {

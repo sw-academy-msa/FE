@@ -54,8 +54,8 @@ test('판매 상품 등록 5단계: 1단계 다음에서 AI 분석을 요청하�
   // 옵션은 옵션 없음으로 시작하고 판매자가 이름을 정해 직접 추가한다
   await addOption(page, '색상'); await addValue(page, '색상', '차콜');
   await addOption(page, '사이즈'); await addValue(page, '사이즈', 'S');
-  await next(); await expect(stepGroup(2)).toBeVisible(); await expect(page.locator('[data-field="options"]').getByRole('alert')).toBeVisible();
-  for (let i = 0; i < 5; i++) await page.getByLabel('차콜 / S 증가').click();
+  await expect(qty(page, '차콜 / S')).toHaveValue('1'); // 새 조합은 1개로 시작한다
+  for (let i = 0; i < 4; i++) await page.getByLabel('차콜 / S 증가').click();
   await expect(page.getByText('차콜 5')).toBeVisible();
   await next(); await expect(stepGroup(3)).toBeVisible();
 
@@ -113,7 +113,7 @@ test('옵션은 옵션 없음과 직접 추가만으로 시작하고, 이름 세
   for (const n of ['색상', '사이즈', '사이즈(mm)', '규격', '묶음 수량', '크기', '용량']) await expect(options.getByRole('button', { name: n, exact: true })).toHaveCount(0);
   await expect(options.getByText('빠른 선택')).toHaveCount(0);
   await expect(options.getByRole('group')).toHaveCount(0);
-  await expect(page.getByText('기본 수량')).toBeVisible();
+  await expect(page.getByText('기본 수량')).toBeVisible(); await expect(qty(page, '기본 수량')).toHaveValue('1'); // 새 등록은 기본 수량 1개
 
   // 이름은 판매자가 정한다. 같은 이름은 막는다
   await addOption(page, '맛'); await expect(group(page, 1, '맛')).toBeVisible();
@@ -122,9 +122,11 @@ test('옵션은 옵션 없음과 직접 추가만으로 시작하고, 이름 세
   await addValue(page, '맛', '딸기'); await addValue(page, '맛', '초코'); await addValue(page, '용량', '250ml');
   await addValue(page, '맛', '딸기'); await expect(page.getByRole('alert')).toHaveText('이미 있는 옵션 값이에요.');
   await expect(page.getByText('맛 × 용량별 수량')).toBeVisible();
+  // 새로 생긴 조합은 수량 1개로 시작한다
+  await expect(qty(page, '딸기 / 250ml')).toHaveValue('1'); await expect(qty(page, '초코 / 250ml')).toHaveValue('1');
   // 수량은 직접 입력하거나 버튼으로 고친다
   await qty(page, '딸기 / 250ml').fill('12');
-  await page.getByLabel('초코 / 250ml 증가').click(); await page.getByLabel('초코 / 250ml 증가').click();
+  await page.getByLabel('초코 / 250ml 증가').click();
   await expect(page.getByText('딸기 12 · 초코 2')).toBeVisible();
   await expect(page.getByText('14개').first()).toBeVisible();
 
@@ -161,15 +163,15 @@ test('옵션은 옵션 없음과 직접 추가만으로 시작하고, 이름 세
   // 값이 없는 단계는 바로 지워지고 앞 단계 수량은 그대로다
   await page.getByRole('button', { name: '포장 방식 옵션 삭제' }).click();
   await expect(qty(page, '바나나 / 250ml')).toHaveValue('12');
-  // 값이 있는 단계를 지우면 확인한 뒤 값과 수량을 함께 지운다
+  // 값이 있는 단계를 지우면 확인한 뒤 값과 수량을 함께 지우고, 새로 생긴 조합은 1개로 시작한다
   await page.getByRole('button', { name: '맛 옵션 삭제' }).click();
   await expect(page.getByRole('dialog', { name: "'맛' 옵션을 지울까요?" })).toBeVisible();
   await page.getByRole('button', { name: '취소', exact: true }).click(); await expect(group(page, 1, '맛')).toBeVisible();
   await page.getByRole('button', { name: '맛 옵션 삭제' }).click(); await page.getByRole('button', { name: '삭제', exact: true }).click();
-  await expect(group(page, 1, '사이즈')).toBeVisible(); await expect(qty(page, '250ml')).toHaveValue('0');
+  await expect(group(page, 1, '사이즈')).toBeVisible(); await expect(qty(page, '250ml')).toHaveValue('1');
   // 옵션 없음을 누르면 확인 뒤 모두 지운다
   await options.getByRole('button', { name: '옵션 없음', exact: true }).click(); await page.getByRole('button', { name: '삭제', exact: true }).click();
-  await expect(options.getByRole('group')).toHaveCount(0); await expect(page.getByText('기본 수량')).toBeVisible();
+  await expect(options.getByRole('group')).toHaveCount(0); await expect(page.getByText('기본 수량')).toBeVisible(); await expect(qty(page, '기본 수량')).toHaveValue('1');
   await expect(options.getByRole('button', { name: '옵션 없음', exact: true })).toHaveAttribute('aria-pressed', 'true');
 });
 
