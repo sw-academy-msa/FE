@@ -29,7 +29,7 @@
 |---|---|
 | 주문 **취소·환불·반품·교환** (`OrderStatus` `cancelled`·`refunded`, 문의 목업의 "반품 신청하기") | 취소·환불·반품 API 전혀 없음. 명세는 "문의 등록은 취소·반품 접수를 만들지 않는다"고 명시 |
 | 판매자 **배송 완료 입력**: 일시·수령 장소·메모·확인 체크 (`markDelivered`) | `delivery-completion`은 `expectedVersion`만 받는다. 일시·장소·메모는 보낼 곳이 없다 |
-| 판매자 **정산·수수료** (`feeFor`: 상품별 한정 수량 90% 초과 판매 시 판매 금액의 10% 수수료(배송비 제외), 그 외 0%, 순매출) | 정산 조회 API 없음. 판매 집계는 "매출·수수료·정산 금액은 계산하지 않는다"고 명시 |
+| 판매자 **정산 및 수수료** | 월별 구매 확정 정산 API를 사용한다. 수수료는 월 판매액(구매 확정 기준)의 10%이며 배송비 제외, 쿠폰 할인 전 상품 금액에 적용하고 원 미만은 버린다. |
 | **운영(고객센터) 1:1 문의**, FAQ·공지 (`/inquiries`, `/inquiries/compose`, `/faq`, `/support`, `/seller/support`) | 운영 문의·사이트 FAQ API 없음. 있는 문의는 상품 문의와 주문 문의 두 종류뿐이다. 상품 `faqs`는 판매자가 확인한 상품별 FAQ다 |
 | **찜(북마크)** (`State.bookmarks`) | API 없음 |
 | 알림 종류 — 구매자 `price_change`(관심 상품 가격 변동), `low_stock`(한정 수량 임박), 판매자 신규주문·문의·판매일정 (`NotificationSettingsPage`, `SellerSettings.notifications`) | 계정 알림 설정은 `saleStart`, `personalizedRecommendation`, `marketingConsent` 세 가지뿐이다 |
