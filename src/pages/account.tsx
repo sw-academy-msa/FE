@@ -25,6 +25,7 @@ import { getProductInquiry } from '../api/inquiries';
 import { BankField } from '../components/BankField';
 import { retryable } from '../api/live';
 import { MembershipCouponSection } from './membershipCoupon';
+import { AdminCouponSection } from './adminCoupon';
 function ProfileEditModal({ userId, name: initialName, phone: initialPhone, onClose }: { userId: string; name: string; phone: string; onClose: () => void }) {
   const [name, setName] = useState(initialName), [phone, setPhone] = useState(initialPhone), [error, setError] = useState(''), [busy, setBusy] = useState(false); const toast = useToast();
   return <Modal title="내 정보 수정" onClose={onClose}><form className="space-y-4" onSubmit={async e => { e.preventDefault(); if (!name.trim()) { setError('이름을 입력해 주세요.'); return; } setBusy(true); setError(''); try { if (!USE_MOCK) await updateMyName(name.trim()); /* TODO(api-gap): 연락처 수정 API 없음 — 연락처는 이 기기에만 저장 */ mutate(s => { const u = s.users.find(u => u.id === userId); if (u) { u.name = name.trim(); u.phone = phone.trim(); } }); toast('정보를 수정했습니다.'); onClose(); } catch (e) { setError((e as Error).message); } finally { setBusy(false); } }}><Field label="이름" required><input aria-label="이름" className="field" value={name} onChange={e => setName(e.target.value)} required/></Field><Field label="연락처"><input aria-label="연락처" className="field" value={phone} onChange={e => setPhone(e.target.value)} type="tel"/></Field><p className="muted text-footnote">이메일은 변경할 수 없습니다.</p><ErrorBox message={error}/><Button type="submit" className="w-full" disabled={busy}>{busy ? '저장 중…' : '저장하기'}</Button></form></Modal>;
@@ -271,6 +272,7 @@ export function AdminMyPage() {
       <MenuRow to="/admin/products" label="판매 심사">{count(saleWaiting, 'sale')}</MenuRow>
       <MenuRow to="/admin/sellers" label="판매자 목록"/>
       <MenuRow to="/admin/inquiries" label="문의 관리"/>
+      <AdminCouponSection/>
     </div>
     <div className="text-center"><LogoutButton/></div>
   </div>;
