@@ -56,8 +56,8 @@ describe('운영자 상품 심사', () => {
   });
   it('merge: 상세로 채운 값은 목록이 0으로 덮지 않는다', () => {
     const s = { products: [{ id: 'p1', name: 'a', price: 1000, published: false }] } as unknown as State;
-    mergeAdminProductList(s, [{ id: 'p1', name: 'b', price: 0, published: true, startsAt: 1, endsAt: 2, version: 5, reviewStatus: 'APPROVED' } as never]);
-    expect(s.products[0]).toMatchObject({ name: 'b', price: 1000, published: true, version: 5 });
+    mergeAdminProductList(s, [{ id: 'p1', name: 'b', price: 0, published: true, startsAt: 1, endsAt: 2, version: 5, reviewStatus: 'APPROVED', advertising: { requested: true, paymentStatus: 'PAID' } } as never]);
+    expect(s.products[0]).toMatchObject({ name: 'b', price: 1000, published: true, version: 5, advertising: { requested: true, paymentStatus: 'PAID' } });
   });
   it('수정 심사: data가 배열, expectedVersion=회차 version', async () => {
     let calls = fake(() => [{ id: 'r1', productId: 'p1', version: 2 }]);

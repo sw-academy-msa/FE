@@ -1,0 +1,28 @@
+name: CI
+on:
+  pull_request:
+    branches: [develop]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Lint, TypeScript and Vite
+        run: npm run build
+      - name: Unit tests
+        run: npm test
+      - name: Install isolated browser
+        run: npx playwright install --with-deps chromium
+      - name: Advertising fixture E2E
+        run: npx playwright test tests/advertising-live.spec.ts --project=chromium
+        env:
+          STOCKDROP_REAL_TEST: 'true'
+          VITE_FEATURE_ADVERTISING: 'true'

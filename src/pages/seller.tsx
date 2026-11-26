@@ -1,3 +1,4 @@
+import { AdvertisingBadge } from '../components/AdvertisingBadge';
 import { SellerBankSettingsPage } from './sellerBank';
 import { Card as AxCard } from '@astryxdesign/core/Card';
 import { SellerStatusTabs } from '../components/SellerStatusTabs';
@@ -72,10 +73,10 @@ export function SellerProductsPage() {
       const gauge = salesGauge(sold, total), soldOut = total > 0 && sold >= total;
       const onSale = status === '판매 중', ended = status === '판매 종료' || soldOut;
       const label = draft ? '작성 중' : review ? '판매심사중' : rejected ? '판매 심사 반려' : soldOut ? '완판' : status;
-      const to = draft || status === '판매 예정' ? `/seller/new?edit=${p.id}` : review || rejected ? `/seller/published/${p.id}` : `/seller/product/${p.id}`;
+      const to = draft && p.advertising?.applicationId && ['PENDING', 'PAID'].includes(p.advertising.paymentStatus ?? '') ? `/seller/advertising/checkout/${p.id}/${p.advertising.applicationId}` : draft || status === '판매 예정' ? `/seller/new?edit=${p.id}` : review || rejected ? `/seller/published/${p.id}` : `/seller/product/${p.id}`;
       return <AxCard key={p.id} padding={2} variant="default" className="seller-product-card rounded-dialog">
         <Link to={to} aria-label={`${p.name} ${draft ? '이어서 등록' : review ? '심사 상태 보기' : rejected ? '반려 사유와 수정' : status === '판매 예정' ? '판매 정보 수정' : '판매 결과 보기'}`} className="block min-h-11 space-y-2 rounded-inner outline-offset-2 focus-visible:outline-2 focus-visible:outline-green">
-          <div className="flex items-center gap-2"><ProductImage src={p.images[0]} alt={p.name} className="h-16 w-14 shrink-0"/><div className="min-w-0 flex-1 space-y-1"><div className="flex flex-wrap items-center gap-1"><span className={`w-fit rounded-badge px-2 py-1 text-footnote font-bold ${review ? 'bg-warning-soft text-warning' : rejected ? 'bg-red-soft text-red' : onSale && !soldOut ? 'bg-positive-soft text-positive' : 'bg-soft text-muted'}`}>{label}</span>{revStatus.data?.[p.id]?.status === 'IN_REVIEW' && <span className="text-footnote text-warning">수정 심사 중</span>}{revStatus.data?.[p.id]?.status === 'REJECTED' && <span className="text-footnote text-red">수정 반려</span>}</div><p className="break-words text-callout font-semibold">{p.name}</p><p className="font-number text-subhead font-bold">{money(p.price)} <span className="muted text-label font-normal">{total}개 한정</span></p></div><ChevronRight className="h-4 w-4 shrink-0 text-muted"/></div>
+          <div className="flex items-center gap-2"><ProductImage src={p.images[0]} alt={p.name} className="h-16 w-14 shrink-0"/><div className="min-w-0 flex-1 space-y-1"><div className="flex flex-wrap items-center gap-1"><span className={`w-fit rounded-badge px-2 py-1 text-footnote font-bold ${review ? 'bg-warning-soft text-warning' : rejected ? 'bg-red-soft text-red' : onSale && !soldOut ? 'bg-positive-soft text-positive' : 'bg-soft text-muted'}`}>{label}</span><AdvertisingBadge advertising={p.advertising}/>{revStatus.data?.[p.id]?.status === 'IN_REVIEW' && <span className="text-footnote text-warning">수정 심사 중</span>}{revStatus.data?.[p.id]?.status === 'REJECTED' && <span className="text-footnote text-red">수정 반려</span>}</div><p className="break-words text-callout font-semibold">{p.name}</p><p className="font-number text-subhead font-bold">{money(p.price)} <span className="muted text-label font-normal">{total}개 한정</span></p></div><ChevronRight className="h-4 w-4 shrink-0 text-muted"/></div>
           {(onSale || ended) && !draft && !review && !rejected && <><p className="text-label font-bold">{sold} / {total}개 판매</p><div aria-label="판매율" role="progressbar" aria-valuenow={Math.round(gauge.ratio * 100)} aria-valuemin={0} aria-valuemax={100} aria-valuetext={total > 0 ? `${sold} / ${total}개 판매` : '한정 수량 미집계'} className="h-1 rounded-full bg-line"><div className={`h-full rounded-full ${gauge.color}`} style={{ width: `${gauge.ratio * 100}%` }}/></div></>}
           {onSale && !soldOut && <p className="muted text-footnote">{clockLeft(p.endsAt - now)} 남음</p>}
           {status === '판매 예정' && <p className="muted text-label">{openDay(p.startsAt, now)}</p>}
@@ -131,7 +132,7 @@ export function SellerProductPage() {
       const card = (r: { field: string; reason: string }, i: number) => <div key={i} className="rounded-element border border-line p-4 space-y-3"><div className="flex items-center gap-3"><span className="muted text-body font-bold">{String(i + 1).padStart(2, '0')}</span><span className="text-subhead font-bold">{r.field}</span></div><p className="text-body text-aux whitespace-pre-line">{r.reason}</p></div>;
       return <div className="space-y-5">
         <div className="flex items-center justify-between pt-1">
-          <h1 className="text-title font-bold">판매 심사 결과</h1>
+          <h1 className="text-title font-bold">판매 심사 결과</h1><AdvertisingBadge advertising={p.advertising}/>
           <button onClick={() => navigate('/seller/products')} aria-label="닫기" className="p-1"><svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M17 5L5 17M5 5l12 12" stroke="#222" strokeWidth="1.8" strokeLinecap="round"/></svg></button>
         </div>
         <div className="relative overflow-hidden rounded-dialog">
@@ -158,7 +159,7 @@ export function SellerProductPage() {
 
     return <div className="space-y-5">
       <div className="flex items-center justify-between pt-1">
-        <h1 className="text-title font-bold">판매 심사 결과</h1>
+        <h1 className="text-title font-bold">판매 심사 결과</h1><AdvertisingBadge advertising={p.advertising}/>
         <button onClick={() => navigate('/seller/products')} aria-label="닫기" className="p-1"><svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M17 5L5 17M5 5l12 12" stroke="#222" strokeWidth="1.8" strokeLinecap="round"/></svg></button>
       </div>
       <div className="relative overflow-hidden rounded-dialog">

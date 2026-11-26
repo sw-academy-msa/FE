@@ -1,3 +1,4 @@
+import { AdvertisingBadge, AdvertisingDetails } from '../components/AdvertisingBadge';
 import { AdminReviewThumbnail } from '../components/AdminReviewThumbnail';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -564,7 +565,7 @@ export function AdminProductListPage() {
                 )}
                 {p.published && <span className="text-footnote text-meta">{openLabel}</span>}
               </div>
-              <p className="text-body font-bold">{p.name}</p>
+              <p className="text-body font-bold">{p.name}</p><AdvertisingBadge advertising={p.advertising}/>
               <p className="text-footnote text-aux">{p.category} · {money(p.price)}</p>
               {seller?.name && <p className="text-footnote text-meta">{seller.name}</p>}
             </div>
@@ -625,7 +626,7 @@ export function AdminProductDetailPage() {
         <div className="mb-6 flex items-center gap-3 rounded-element bg-soft px-4 py-3">
           <ProductImage src={p.images[0]} alt={p.name} className="h-12 w-12 shrink-0 rounded-inner"/>
           <div className="min-w-0 flex-1">
-            <p className="text-body font-bold">{p.name}</p>
+            <p className="text-body font-bold">{p.name}</p><AdvertisingBadge advertising={p.advertising}/>
             <p className="text-label text-aux">{[seller?.name, openLabel].filter(Boolean).join(' · ')}</p>
           </div>
         </div>
@@ -674,7 +675,7 @@ export function AdminProductDetailPage() {
   // 상품 승인 화면
   return (
     <div className="pb-32">
-      <Header title="판매 심사 상세" back={true} action={<ReviewKindBadge kind="sale"/>}/>
+      <Header title="판매 심사 상세" back={true} action={<ReviewKindBadge kind="sale"/>}/><AdvertisingDetails advertising={p.advertising}/>
       {/* Meta */}
       {p.published
         ? <div className="mb-4 inline-flex h-4.5 items-center rounded-inner bg-positive-soft px-2 text-footnote font-bold text-positive">승인 완료</div>
@@ -770,7 +771,7 @@ export function AdminProductDetailPage() {
                 <CalendarCheck size={16} className="text-aux"/>
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-body font-bold">{p.name}</p>
+                <p className="text-body font-bold">{p.name}</p><AdvertisingBadge advertising={p.advertising}/>
                 <p className="text-label text-aux">{openLabel} · {money(p.price)} · {totalStock}개</p>
               </div>
             </div>
