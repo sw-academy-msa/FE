@@ -30,6 +30,8 @@ export const listCampaigns = (signal?: AbortSignal) => api.get<CampaignDto[]>(CA
 export const createCampaign = (body: CampaignBody) => api.post<CampaignDto>(CAMPAIGNS, body, { service });
 export const activateCampaign = (id: string) => api.post<CampaignDto>(`${CAMPAIGNS}/${enc(id)}/activate`, undefined, { service });
 export const pauseCampaign = (id: string) => api.post<CampaignDto>(`${CAMPAIGNS}/${enc(id)}/pause`, undefined, { service });
+/** 받기형 광고 알림 요청은 캠페인당 한 번만 접수한다. */
+export const sendCampaignNotification = (id: string) => api.post<CampaignDto>(`${CAMPAIGNS}/${enc(id)}/notifications`, undefined, { service });
 export const getCampaignStats = (id: string, signal?: AbortSignal) => api.get<CampaignStatsDto>(`${CAMPAIGNS}/${enc(id)}/stats`, { service, signal });
 
 /* ── 화면 문구 ── */
