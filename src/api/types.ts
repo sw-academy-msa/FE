@@ -68,7 +68,7 @@ export interface InquiryCardDto { id: string; orderId: string; productId: string
 export interface ImageUploadDto { id: string; url: string | null; contentType: string; sizeBytes: number; expiresAt: Iso }
 
 /* ── 알림 ── */
-export interface NotificationDto { id: string; type: string; title: string; body: string; targetType: 'PRODUCT' | 'SELLER_APPLICATION' | 'SELLER_PRODUCT' | 'SELLER_PRODUCT_REVISION' | 'ORDER' | 'SELLER_ORDER' | 'SUPPORT_INQUIRY' | 'PRODUCT_INQUIRY' | 'ORDER_INQUIRY' | 'SELLER_PRODUCT_INQUIRY' | 'SELLER_ORDER_INQUIRY' | 'MEMBERSHIP' | 'COUPON'; targetId: string; relatedId: string | null; deadline: Iso | null; occurredAt: Iso; createdAt: Iso; readAt: Iso | null }
+export interface NotificationDto { id: string; type: string; title: string; body: string; targetType: 'PRODUCT' | 'SELLER_APPLICATION' | 'SELLER_PRODUCT' | 'SELLER_PRODUCT_REVISION' | 'ORDER' | 'SELLER_ORDER' | 'SUPPORT_INQUIRY' | 'PRODUCT_INQUIRY' | 'ORDER_INQUIRY' | 'SELLER_PRODUCT_INQUIRY' | 'SELLER_ORDER_INQUIRY' | 'MEMBERSHIP' | 'COUPON' | 'CLAIM_CAMPAIGN'; campaignCode?: string | null; targetId: string; relatedId: string | null; deadline: Iso | null; occurredAt: Iso; createdAt: Iso; readAt: Iso | null }
 
 /* ── 판매자 입점·마이페이지 ── */
 export interface SellerAddressDto { postalCode: string; roadAddress: string; detailAddress: string | null }

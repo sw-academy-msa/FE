@@ -11,7 +11,7 @@ export type CouponStatus = 'ISSUED' | 'LOCKED' | 'USED' | 'EXPIRED' | 'REVOKED';
 export type CouponTab = 'AVAILABLE' | 'USED' | 'EXPIRED';
 export interface CouponDto { issueId: string; name: string; discountType: 'AMOUNT' | 'RATE' | string; amount: number | null; rateBps: number | null; maxDiscount: number | null; minItemsAmount: number; scope: string; productId: string | null; validUntil: string | null; status: CouponStatus | string }
 export interface ApplicableCouponDto { coupon: CouponDto; estimatedDiscount: number }
-export interface CampaignDto { id: string; code: string; kind: string; totalBudget: number; issuedCount: number; status: string; startsAt: string; endsAt: string; demo: boolean }
+export interface CampaignDto { id: string; code: string; kind: string; totalBudget: number; issuedCount: number; status: string; startsAt: string; endsAt: string; demo: boolean; notificationSentAt?: string | null }
 export interface CouponDefinitionDto { id: string; name: string; discountType: string; amount: number | null; rateBps: number | null; maxDiscount: number | null; minItemsAmount: number; scope: string; status: string; version: number }
 export interface PublicCampaignDto { campaign: CampaignDto; definition: CouponDefinitionDto; remaining: number; claimed: boolean | null }
 

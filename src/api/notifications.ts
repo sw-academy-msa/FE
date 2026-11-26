@@ -11,17 +11,18 @@ const service = 'general' as const;
 const BASE = '/v1/notifications';
 
 export type NotificationKind = '구매' | '상품' | '맞춤 추천' | '판매';
-export interface InboxItem { id: string; kind: NotificationKind; title: string; desc: string; ts: number; read: boolean; targetType: NotificationDto['targetType']; targetId: string; relatedId?: string | null }
+export interface InboxItem { id: string; kind: NotificationKind; title: string; desc: string; ts: number; read: boolean; targetType: NotificationDto['targetType']; targetId: string; relatedId?: string | null; campaignCode?: string | null }
 
 export function notificationFromApi(d: NotificationDto): InboxItem {
   // 판매자에게 온 알림(입점·상품 심사·판매 주문)은 '판매'로 묶어 구매 알림과 섞이지 않게 한다
   const kind: NotificationKind = (d.type ?? '').includes('PERSONALIZED') ? '맞춤 추천' : d.targetType.startsWith('SELLER_') ? '판매' : ['ORDER', 'SUPPORT_INQUIRY', 'PRODUCT_INQUIRY', 'ORDER_INQUIRY', 'MEMBERSHIP', 'COUPON'].includes(d.targetType) ? '구매' : '상품';
-  return { id: d.id, kind, title: d.title ?? '', desc: d.body ?? '', ts: ms(d.occurredAt) ?? Date.parse(d.createdAt), read: !!d.readAt, targetType: d.targetType, targetId: d.targetId, relatedId: d.relatedId };
+  return { id: d.id, kind, title: d.title ?? '', desc: d.body ?? '', ts: ms(d.occurredAt) ?? Date.parse(d.createdAt), read: !!d.readAt, targetType: d.targetType, targetId: d.targetId, relatedId: d.relatedId, campaignCode: d.campaignCode };
 }
 /** 알림 대상 → 앱 경로. SELLER_APPLICATION은 전용 화면이 없어 /apply로 보낸다 */
-export function notificationPath(n: Pick<InboxItem, 'targetType' | 'targetId' | 'relatedId'>): string {
+export function notificationPath(n: Pick<InboxItem, 'targetType' | 'targetId' | 'relatedId' | 'campaignCode'>): string {
   const id = encodeURIComponent(n.targetId);
   switch (n.targetType) {
+    case 'CLAIM_CAMPAIGN': return n.campaignCode ? `/my?claim=${encodeURIComponent(n.campaignCode)}` : '/my';
     case 'PRODUCT': return `/product/${id}`;
     case 'ORDER': return `/orders/${id}`;
     case 'SELLER_ORDER': return `/seller/orders/${id}`;
