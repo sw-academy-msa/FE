@@ -23,7 +23,7 @@ const iso = (t: number) => new Date(t).toISOString();
 /** SellerProduct(편집 원본) → Product. 이미지는 별도 API라 비워 두고(merge가 기존 값 유지), 옵션 stock은 최초 수량 */
 export function sellerProductFromApi(d: SellerProductDto): Product {
   return {
-    id: d.id, sellerId: d.sellerId, name: d.name ?? '', brand: d.brandOrStore ?? '', category: d.category ?? '', description: d.description ?? '', images: [], originalUrl: d.sourceUrl ?? '',
+    advertising: d.advertising, id: d.id, sellerId: d.sellerId, name: d.name ?? '', brand: d.brandOrStore ?? '', category: d.category ?? '', description: d.description ?? '', images: [], originalUrl: d.sourceUrl ?? '',
     price: d.price ?? 0, shipping: d.shippingFee ?? 0, maxPerAccount: d.perAccountLimit ?? 0, dispatchDays: d.dispatchBusinessDays ?? 0, startsAt: ms(d.startsAt) ?? 0, endsAt: ms(d.endsAt) ?? 0,
     published: d.status === 'APPROVED', options: (d.options ?? []).map(o => ({ id: o.id, name: o.label, stock: o.initialQuantity })),
     dimensions: (d.optionDimensions ?? []).map(x => ({ name: x.name, values: (x.values ?? []).join(', ') })), extras: (d.attributes ?? []).map(a => ({ key: a.name, value: a.value })), reason: d.disposalReason ?? '',
@@ -35,7 +35,7 @@ export function sellerProductFromApi(d: SellerProductDto): Product {
 /** 관리 목록 항목 → Product. 목록에는 옵션·이미지가 없고 가격·한정 수량·판매 수량 요약만 있다 */
 export function sellerProductFromListItem(d: ProductReviewListItemDto, sellerId: string): Product {
   return {
-    id: d.id, sellerId, name: d.name, brand: '', category: d.category ?? '', description: '', images: [], originalUrl: '', price: d.price ?? 0, shipping: 0, maxPerAccount: 0, dispatchDays: 0,
+    advertising: d.advertising, id: d.id, sellerId, name: d.name, brand: '', category: d.category ?? '', description: '', images: [], originalUrl: '', price: d.price ?? 0, shipping: 0, maxPerAccount: 0, dispatchDays: 0,
     startsAt: ms(d.startsAt) ?? 0, endsAt: ms(d.endsAt) ?? 0, published: d.status === 'APPROVED', options: [], dimensions: [], extras: [], reason: '', faqs: [], version: d.version, reviewStatus: d.status,
     ...(d.totalQuantity !== undefined ? { listQuantity: { total: d.totalQuantity, sold: d.soldQuantity ?? 0 } } : {}),
   };
@@ -315,7 +315,7 @@ export async function saveProductDraft(d: Draft, id: string): Promise<{ product:
   await save('FAQ', v => saveRegistrationFaqs(id, v, faqsToSave(d)));
   return { product: p, localOnly };
 }
-export async function submitListing(d: Draft, id: string): Promise<Product> {
+export async function saveListingForSubmission(d: Draft, id: string): Promise<Product> {
   let p = await withStage('상품 조회 실패', () => getSellerProduct(id));
   const v = () => p.version ?? 0;
   p = await withStage('기본 정보 저장 실패', () => saveBasicInfo(id, v(), basicInfoOf(d)));
@@ -327,7 +327,12 @@ export async function submitListing(d: Draft, id: string): Promise<Product> {
   p = await withStage('판매 일정 저장 실패', () => saveSchedule(id, v(), startIso(d)));
   const faqs = faqsToSave(d);
   if (faqs.length || d.faqs.length) p = await withStage('FAQ 저장 실패', () => withFaqRetry(() => saveRegistrationFaqs(id, v(), faqs), faqs.some(f => f.suggestionId)));
-  return withStage('심사 요청 실패', () => submitReview(id, v()));
+  return p;
+}
+/** 일반 제출은 기존 동작을 유지하고 광고는 저장 뒤 별도 서버 신청을 사용한다. */
+export async function submitListing(d: Draft, id: string): Promise<Product> {
+  const p = await saveListingForSubmission(d, id);
+  return withStage('심사 요청 실패', () => submitReview(id, p.version ?? 0));
 }
 /**
  * 승인 상품 수정 제출(실제 모드): 설명·판매가·배송비·판매 시작·출고지·반품지만 보낸다(REVISION_FIELDS).

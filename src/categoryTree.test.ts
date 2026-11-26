@@ -2,7 +2,8 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { GROUP_LABELS, categoryTree, groupOf, OTHER_GROUP } from './categoryTree';
 
-const meta = JSON.parse(readFileSync('docs/registration-metadata.json', 'utf-8')) as { categoryCriteria: { code: string; name: string }[] };
+// 실제 서버 응답 대신 버전 관리하는 공개 분류 정의 fixture로 CI도 같은 검사를 수행한다.
+const meta = JSON.parse(readFileSync('tests/fixtures/registration-categories.json', 'utf-8')) as { categoryCriteria: { code: string; name: string }[] };
 describe('카테고리 단계 선택', () => {
   it('실제 서버 응답의 세부 카테고리 255개가 모두 한 번씩 들어가고, 대분류 4개 밖의 항목은 기타로 가지 않는다', () => {
     const tree = categoryTree(meta as never), all = tree.flatMap(m => m.groups.flatMap(g => g.items));

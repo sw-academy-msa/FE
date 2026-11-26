@@ -5,6 +5,8 @@ import { USE_MOCK } from './config';
  * mock 모드는 서버가 없어 켜지 않는다.
  */
 export const MEMBERSHIP_COUPON = !USE_MOCK && import.meta.env.VITE_FEATURE_MEMBERSHIP_COUPON === 'true';
+/** 광고 신규 신청 UI는 기본 OFF이며 금융 귀환 복구 경로는 drain을 위해 유지한다. */
+export const ADVERTISING = !USE_MOCK && import.meta.env.VITE_FEATURE_ADVERTISING === 'true';
 /**
  * 백엔드 수정 3개(membership small-fix-report.md, 2026-11-26 운영 반영)로 연결한 기능. 문제가 생기면 값을 false로 바꿔 그 기능만 숨긴다.
  * - resumeCancel: 해지 예약 취소(해지 취소하기 버튼)

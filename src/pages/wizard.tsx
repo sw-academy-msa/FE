@@ -15,6 +15,9 @@ import { categoryTree } from '../categoryTree';
 import { INSPECTION_CHECKS, INSPECTION_PHOTOS, analysisInputChanged, analysisInputOf, analysisStale, aiResultPatch } from '../domain';
 import { kstTime } from './checkoutExpired';
 import { IMAGE_EXPIRED, QUICK_SCHEDULE, USE_MOCK } from '../config';
+import { ADVERTISING } from '../features';
+import { advertisingQuote, prepareAdvertising } from '../api/advertising';
+import { getSellerProduct, saveListingForSubmission } from '../api/sellerProducts';
 import { AiDelayedError, saveProductDraft, deleteProductDraft } from '../api/sellerProducts';
 import { parseServerTime } from '../api';
 import { getProductImageUrl, FIELD_LABELS, REVISION_FIELDS, StageError, sourceUrlProblem, MOCK_REGISTRATION_METADATA, PRODUCT_STATE_MESSAGE, SHIPPING_NOTICE_MAX, ATTRIBUTE_VALUE_MAX, attributeName, composeShippingNotice, warnCriteria, analysisProblems, analyzeDraft, criteriaFor, listAddressBook, listingProblems, createProductDraft, deleteProductImage, errorMessage, fieldErrors, isApiError, getRegistrationMetadata, getSellerProductWithImages, mergeProducts, reorderProductImages, submitListing, submitRevisionFromDraft, uploadProductImage, useApi, useLive } from '../api';
@@ -48,7 +51,8 @@ function patchDraft(userId: string, value: Partial<Draft>) {
  * 수정할 수 없는 이유(null = 수정 가능). 실제 API는 서버 status로 판단: DRAFT·REJECTED는 항상(반려 → 수정 → 재심사 요청),
  * APPROVED는 판매 시작(startsAt, UTC epoch) 전만 수정 심사, IN_REVIEW는 불가. mock은 판매 시작 전.
  */
-export function editBlocker(p: Pick<Product, 'reviewStatus' | 'startsAt'>, now: number): string | null {
+export function editBlocker(p: Pick<Product, 'reviewStatus' | 'startsAt' | 'advertising'>, now: number): string | null {
+  if (p.advertising?.requested && p.advertising.paymentStatus === 'PENDING') return '광고 결제 처리 중이에요. 판매 상품에서 신청 상태를 확인해 주세요.';
   switch (p.reviewStatus) {
     case 'DRAFT': case 'REJECTED': return null;
     case 'IN_REVIEW': return '심사 중에는 정보를 수정할 수 없어요';
@@ -229,6 +233,8 @@ export function WizardPage() {
     }
   }, [editId]);
   const [error, setError] = useState(''), [uploading, setUploading] = useState(false), [progress, setProgress] = useState(''), [photoError, setPhotoError] = useState(''), [retryFiles, setRetryFiles] = useState<File[]>([]), [fieldErr, setFieldErr] = useState<Record<string, string>>({}), [busy, setBusy] = useState(false), [photo, setPhoto] = useState<number | null>(null), [optErr, setOptErr] = useState(''), [dropDim, setDropDim] = useState<number | 'all' | null>(null);
+  const [advertising, setAdvertising] = useState(false);
+  const adAmount = d ? Math.floor(d.price * listingOptions(d).reduce((sum, option) => sum + option.stock, 0) / 20) : 0;
   const picking = params.get('pick') === 'category', meta = useRegistrationMeta();
   // 초안 사진은 5분짜리 임시 주소라 시간이 지나면 깨진다 → 서버에서 열람 주소를 새로 받아 바꾼다
   const imgIds = d?.imageIds?.join(','), imgOwner = d?.editingId ?? d?.serverId, lastImg = useRef(0);
@@ -531,6 +537,16 @@ export function WizardPage() {
       const keep = criteria && new Set(criteria.checks.map(c => attributeName(c.code))); // 다른 카테고리 때 입력한 항목은 보내지 않는다
       const dd = { ...d, extras: keep ? d.extras.filter(e => keep.has(e.key)) : d.extras, dispatchAddressId: valid(d.dispatchAddressId, book.data?.[0]), returnAddressId: valid(d.returnAddressId, book.data?.[1]) };
       if (editing?.reviewStatus === 'APPROVED') { await submitRevisionFromDraft(dd, id); mutate(st => { delete st.drafts[user.id]; }); toast('수정 내용을 심사 요청했어요.'); leave.allowLeave(); navigate('/seller/products', { replace: true }); return; }
+      if (ADVERTISING && advertising) {
+        const current = await getSellerProduct(id), applicationId = current.advertising?.applicationId;
+        if (applicationId && ['PENDING', 'PAID'].includes(current.advertising?.paymentStatus ?? '')) {
+          leave.allowLeave(); navigate(`/seller/advertising/checkout/${id}/${applicationId}`); return;
+        }
+        const saved = await saveListingForSubmission(dd, id), quote = await advertisingQuote(id);
+        if (!quote.enabled || quote.productVersion !== saved.version) throw new Error('광고 신청이 준비되지 않았거나 광고비가 1,000원 미만이에요. 상품을 다시 확인해 주세요.');
+        const application = await prepareAdvertising(id, saved.version ?? 0, crypto.randomUUID());
+        leave.allowLeave(); navigate(`/seller/advertising/checkout/${id}/${application.applicationId}`); return;
+      }
       const product = await submitListing(dd, id);
       mutate(st => { mergeProducts(st, [product]); delete st.drafts[user.id]; }); leave.allowLeave(); navigate(`/seller/published/${product.id}`, { replace: true });
     }
@@ -758,6 +774,12 @@ export function WizardPage() {
     </>}
 
     {step === 4 && <>
+    {ADVERTISING && !revision && <section className="space-y-2 rounded-element border border-line p-4">
+      <label className="flex items-center gap-2"><input type="checkbox" checked={advertising} disabled={busy || adAmount < 1000} onChange={e => setAdvertising(e.target.checked)}/>광고 신청 안내에 동의하고 테스트 결제하기</label>
+      <p>예상 광고비 {money(adAmount)}</p><p className="text-footnote text-meta">판매가 × 최초 판매 수량 × 5%예요. 결제 전 서버 확정 금액을 확인해요. 승인 후 운영자가 5% 상품 쿠폰을 만들고 SNS에 안내해요. 최초 심사 반려나 결제 후 제출 실패 시 전액 취소하며, 그 외 환불은 운영자가 처리해요.</p>
+      {adAmount < 1000 && <p>광고비가 최소 1,000원 미만이면 신청할 수 없어요.</p>}
+    </section>}
+    {revision && ADVERTISING && <Note>수정 심사에는 광고비를 다시 결제하지 않아요. 최초 결제 금액을 유지하며 수정 심사 반려로 광고 결제가 취소되지 않아요.</Note>}
     {!revision ? <>
       {/* AI 분석 상태: 1단계 다음에서 요청한 분석이 여기서 끝나면(화면을 떠났어도) 카테고리와 상품 정보, 질문이 바로 채워진다 */}
       <section className="space-y-2" data-field="state" aria-label="AI 분석 상태">
@@ -828,7 +850,7 @@ export function WizardPage() {
     <ErrorBox message={error}/>
     {last && <p className="text-center text-label text-meta">{editId ? '수정 내용은 판매 심사 후 반영돼요 · 영업일 기준 1일 이내' : '판매 심사(물품 확인 포함)는 영업일 기준 1일 이내에 완료돼요'}</p>}
     <div className="fixed inset-x-0 bottom-0 z-20 mx-auto w-full max-w-[390px] border-t border-line bg-surface px-4 pt-3 safe-bottom">
-      {last ? <Button className="w-full text-subhead!" disabled={busy || uploading || blocked} onClick={submit}>{busy ? '요청 중…' : editId ? (editing?.reviewStatus === 'REJECTED' ? '수정하고 재심사 요청' : '수정 심사 요청') : '판매 심사 요청하기'}</Button> : fromAi ? <Button className="w-full text-subhead!" disabled={uploading} onClick={returnToStep}>진행 중이던 단계로 돌아가기</Button>
+      {last ? <Button className="w-full text-subhead!" disabled={busy || uploading || blocked} onClick={submit}>{busy ? '요청 중…' : ADVERTISING && advertising && !revision ? `광고비 ${money(adAmount)} 결제하고 심사 요청` : editId ? (editing?.reviewStatus === 'REJECTED' ? '수정하고 재심사 요청' : '수정 심사 요청') : '판매 심사 요청하기'}</Button> : fromAi ? <Button className="w-full text-subhead!" disabled={uploading} onClick={returnToStep}>진행 중이던 단계로 돌아가기</Button>
         : <Button className="w-full text-subhead!" disabled={uploading} onClick={nextStep}>다음</Button>}
     </div>
 

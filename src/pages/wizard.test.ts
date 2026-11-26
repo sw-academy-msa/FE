@@ -17,6 +17,10 @@ describe('판매 정보 수정 가능 여부(서버 status 기준)', () => {
     expect(editBlocker({ reviewStatus: 'APPROVED', startsAt: future }, now)).toBeNull();
     expect(editBlocker({ reviewStatus: 'APPROVED', startsAt: past }, now)).toContain('판매 시작 후');
   });
+  it('광고 미확정 초안은 편집을 막고 반려 뒤 PAID 취소 대기는 광고 OFF 재심사를 허용한다', () => {
+    expect(editBlocker({ reviewStatus: 'DRAFT', startsAt: future, advertising: { requested: true, paymentStatus: 'PENDING' } as never }, now)).toContain('광고 결제 처리 중');
+    expect(editBlocker({ reviewStatus: 'REJECTED', startsAt: future, advertising: { requested: true, paymentStatus: 'PAID', cancellationStatus: 'REQUESTED' } as never }, now)).toBeNull();
+  });
 });
 
 describe('AI 결과(outcome) → 초안 상태', () => {
