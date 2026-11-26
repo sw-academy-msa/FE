@@ -31,7 +31,7 @@ const BILLING_NONE = { subscriptionId: null, state: 'NONE', autoRenew: false, pe
 const CONFIG = { clientKey: 'test_ck_x', planVersion: 'monthly-v1', amount: 4900, currency: 'KRW', termsVersion: 'recurring-v1', successUrl: 'https://stockdrop-app.vercel.app/membership/billing/success', failUrl: 'https://stockdrop-app.vercel.app/membership/billing/fail' };
 const checkout = (o: Record<string, unknown> = {}) => ({ orderId: ORDER, orderNumber: 'SD-' + ORDER, version: 2, state: 'HELD', delivery: null, productId: P1, sellerId: 'seller-x', productName: '코튼 데일리 셔츠', brandOrStore: '아틀리에 노트', items, address, unitPrice: 50000, shippingFee: 3000, originalShippingFee: 3000, membershipShippingDiscount: 3000, effectiveShippingFee: 0, totalAmount: 47000, itemsAmount: 50000, couponIssueId: C1, couponState: 'LOCKED', couponRejectCode: null, couponDiscount: 3000, dispatchBusinessDays: 2, expiresAt: iso(Date.now() + 300_000), serverTime: iso(Date.now()), paymentAttemptId: null, confirmedAt: null, carrier: null, trackingNumber: null, purchaseConfirmedAt: null, failureCode: null, termsVersion: 'v1', ...o });
 
-interface Server { membership: unknown; billing: unknown; consent: boolean; mine: Record<string, unknown[]>; applicable: unknown[]; checkout: Record<string, unknown>; orderDetail?: Record<string, unknown>; aiEvents: { name: string; productId?: string; couponIssueId?: string; promotionId?: string; clientEventId: string }[]; created: Record<string, unknown>[]; claims: number; cancels: number; refreshes: number; alerts: string[]; product?: Record<string, unknown>; sessions: { key: string | null; body: Record<string, unknown> }[]; completions: { key: string | null; body: Record<string, unknown>; url: string }[]; withdraws: number; sessionError?: string; afterComplete?: () => void }
+interface Server { campaignProduct?: string; membership: unknown; billing: unknown; consent: boolean; mine: Record<string, unknown[]>; applicable: unknown[]; checkout: Record<string, unknown>; orderDetail?: Record<string, unknown>; aiEvents: { name: string; productId?: string; couponIssueId?: string; promotionId?: string; clientEventId: string }[]; created: Record<string, unknown>[]; claims: number; cancels: number; refreshes: number; alerts: string[]; product?: Record<string, unknown>; sessions: { key: string | null; body: Record<string, unknown> }[]; completions: { key: string | null; body: Record<string, unknown>; url: string }[]; withdraws: number; sessionError?: string; afterComplete?: () => void }
 const server = (o: Partial<Server> = {}): Server => ({ membership: membership(), billing: null, consent: true, mine: { AVAILABLE: [coupon(C1), coupon(C2, { name: '첫 구매 쿠폰', amount: 1000, validUntil: iso(Date.now() + 30 * 86_400_000) }), coupon(C3, { name: '가을 쿠폰', amount: 5000, status: 'LOCKED' })], USED: [coupon('u1', { status: 'USED' })], EXPIRED: [] }, applicable: [{ coupon: coupon(C1), estimatedDiscount: 3000 }, { coupon: coupon(C2, { name: '첫 구매 쿠폰', amount: 1000 }), estimatedDiscount: 1000 }], checkout: checkout(), aiEvents: [], created: [], claims: 0, cancels: 0, refreshes: 0, alerts: [], sessions: [], completions: [], withdraws: 0, ...o });
 
 async function serve(page: Page, sv: Server) {
@@ -55,7 +55,7 @@ async function serve(page: Page, sv: Server) {
     else if (path.endsWith('/coupons/me/applicable')) data = Number(url.searchParams.get('itemsAmount')) >= 10000 ? sv.applicable : [];
     else if (path.endsWith('/coupons/me')) data = sv.mine[url.searchParams.get('status') ?? 'AVAILABLE'] ?? [];
     else if (path.endsWith('/coupons/campaigns/WELCOME_1000/claims') && method === 'POST') { sv.claims++; status = 201; data = coupon('41111111-2222-4333-8444-555555555555', { name: '웰컴 쿠폰', amount: 1000, minItemsAmount: 0 }); }
-    else if (path.endsWith('/coupons/campaigns/WELCOME_1000')) data = { campaign: { id: 'c-1', code: 'WELCOME_1000', kind: 'CLAIM', totalBudget: 200, issuedCount: 80, status: 'ACTIVE', startsAt: iso(Date.now() - 86_400_000), endsAt: iso(Date.now() + 86_400_000), demo: false }, definition: { id: 'd-1', name: '웰컴 쿠폰', discountType: 'AMOUNT', amount: 1000, rateBps: null, maxDiscount: null, minItemsAmount: 0, scope: 'ALL', status: 'ACTIVE', version: 1 }, remaining: 120, claimed: sv.claims > 0 };
+    else if (path.endsWith('/coupons/campaigns/WELCOME_1000')) data = { campaign: { productId: sv.campaignProduct, id: 'c-1', code: 'WELCOME_1000', kind: 'CLAIM', totalBudget: 200, issuedCount: 80, status: 'ACTIVE', startsAt: iso(Date.now() - 86_400_000), endsAt: iso(Date.now() + 86_400_000), demo: false }, definition: { id: 'd-1', name: '웰컴 쿠폰', discountType: 'AMOUNT', amount: 1000, rateBps: null, maxDiscount: null, minItemsAmount: 0, scope: 'ALL', status: 'ACTIVE', version: 1 }, remaining: 120, claimed: sv.claims > 0 };
     else if (path.endsWith('/accounts/me/addresses')) data = [{ addressId: 'a1', label: '집', ...address, defaultAddress: true, createdAt: iso(0), updatedAt: iso(0) }];
     else if (path.endsWith('/notifications/product-alerts') && method === 'GET') data = sv.alerts.map(productId => ({ productId, subscribed: true, createdAt: iso(0) }));
     else if (path.includes('/notifications/product-alerts/') && method === 'PUT') { const id = path.split('/').pop()!; sv.alerts.push(id); data = { productId: id, subscribed: true, createdAt: iso(0) }; }
@@ -77,6 +77,19 @@ async function login(page: Page, next: string) {
   await page.getByRole('button', { name: '로그인', exact: true }).click();
 }
 const noOverflow = async (page: Page) => expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
+
+test('상품 전용 캠페인은 해당 상품에서만 받기 행을 보여 준다', async ({ page }) => {
+  const sv = server(); sv.campaignProduct = 'another-product';
+  await serve(page, sv); await login(page, `/product/${P1}?campaign=WELCOME_1000`);
+  await expect(page.getByRole('heading', { name: '코튼 데일리 셔츠', exact: true })).toBeVisible();
+  await expect(page.getByLabel('쿠폰 받기', { exact: true })).toHaveCount(0);
+  sv.campaignProduct = P1; await page.reload();
+  const row = page.getByLabel('쿠폰 받기', { exact: true });
+  await expect(row).toBeVisible();
+  await row.getByRole('button', { name: '받기', exact: true }).click();
+  await expect(row.getByText('받음', { exact: true })).toBeVisible();
+  expect(sv.claims).toBe(1);
+});
 
 test('마이페이지: 이용 중 멤버십 카드, 내 쿠폰(탭 3개, 사용 중 비활성), 관리 시트 해지', async ({ page }) => {
   const sv = server(); await serve(page, sv); await login(page, '/my');

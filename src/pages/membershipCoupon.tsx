@@ -227,7 +227,7 @@ export function ProductBenefits({ product: p, hidden }: { product: Product; hidd
   const [claimed, setClaimed] = useState<CouponDto>(), [claiming, setClaiming] = useState(false), [listOpen, setListOpen] = useState(false);
   const promoName = campaign.data ? `${campaign.data.definition.name} ${couponDiscountLabel(campaign.data.definition)}` : '';
   const promoSent = useRef('');
-  useEffect(() => { if (campaign.data && promoSent.current !== validCode) { promoSent.current = validCode; trackViewPromotion(validCode, promoName, p.id); } }, [campaign.data]);
+  useEffect(() => { if (campaign.data && (!campaign.data.campaign.productId || campaign.data.campaign.productId === p.id) && promoSent.current !== validCode) { promoSent.current = validCode; trackViewPromotion(validCode, promoName, p.id); } }, [campaign.data]);
   if (!MEMBERSHIP_COUPON || hidden) return null;
   const rows: ReactNode[] = [];
   const memberFree = ms.view && ms.view !== 'none' && ms.view !== 'pending' && ms.membership?.active;
@@ -248,7 +248,7 @@ export function ProductBenefits({ product: p, hidden }: { product: Product; hidd
   const got = !!claimed || camp?.claimed === true;
   return <>
     {rows.length > 0 && <div className="note divide-y divide-line py-1!" aria-label="구매 혜택">{rows}</div>}
-    {validCode && camp && <div className="note flex items-center justify-between gap-3" aria-label="쿠폰 받기"><span className="min-w-0 text-label">{camp.definition.name} {couponDiscountLabel(camp.definition)}{open && !got ? ` · 남은 수량 ${camp.remaining.toLocaleString('ko-KR')}장` : ''}</span>{got ? <Badge>받음</Badge> : open && camp.remaining > 0 ? <button type="button" disabled={claiming} onClick={claim} className="min-h-11 shrink-0 rounded-element bg-surface px-3 text-label font-bold">{claiming ? '받는 중…' : '받기'}</button> : <Badge>{open ? '소진' : '종료'}</Badge>}</div>}
+    {validCode && camp && (!camp.campaign.productId || camp.campaign.productId === p.id) && <div className="note flex items-center justify-between gap-3" aria-label="쿠폰 받기"><span className="min-w-0 text-label">{camp.definition.name} {couponDiscountLabel(camp.definition)}{open && !got ? ` · 남은 수량 ${camp.remaining.toLocaleString('ko-KR')}장` : ''}</span>{got ? <Badge>받음</Badge> : open && camp.remaining > 0 ? <button type="button" disabled={claiming} onClick={claim} className="min-h-11 shrink-0 rounded-element bg-surface px-3 text-label font-bold">{claiming ? '받는 중…' : '받기'}</button> : <Badge>{open ? '소진' : '종료'}</Badge>}</div>}
     {validCode && campaign.error && !campaign.notFound && <p className="muted text-footnote">쿠폰 정보를 불러오지 못했어요. <button type="button" className="underline" onClick={campaign.reload}>다시 시도</button></p>}
     {listOpen && <Modal title="쓸 수 있는 쿠폰" onClose={() => setListOpen(false)}><div className="space-y-4"><p className="muted text-label">{p.name} · 1개 · 상품금액 {money(p.price)} 기준</p><ul>{list.map(a => <li key={a.coupon.issueId} className="divider flex items-start justify-between gap-3 py-4"><div className="min-w-0"><p className="text-body font-bold">{a.coupon.name} · {couponDiscountLabel(a.coupon)}</p><p className="muted mt-1 text-footnote">{couponConditionLabel(a.coupon)} · {ymd(a.coupon.validUntil)}까지</p></div>{a.estimatedDiscount > 0 && <span className="shrink-0 text-label font-bold">−{money(a.estimatedDiscount)}</span>}</li>)}</ul><p className="muted text-footnote">구매하기에서 수량을 고른 뒤 쿠폰을 선택할 수 있어요.</p><Button className="w-full" closeSheet>닫기</Button></div></Modal>}
   </>;

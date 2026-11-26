@@ -4,7 +4,7 @@
  * CouponDefinitionServiceImpl.create, CampaignServiceImpl.create 검증 규칙.
  * - 정의는 만든 뒤 고치지 않는다(조건을 바꾸려면 종료하고 새로 만든다). 목록 data는 배열.
  * - 캠페인은 초안(DRAFT)으로 만들어지고 활성화해야 발급된다. 1인 한도는 1만 받는다.
- * - CLAIM, MEMBER는 전체 상품(ALL) 정의만, TARGETED는 특정 상품(PRODUCT) 정의와 규칙 코드 4개 중 하나만 받는다.
+ * - CLAIM은 적용 상품 선택 시 PRODUCT, 미선택 시 ALL 정의를 사용하고 MEMBER는 ALL, TARGETED는 PRODUCT 정의를 사용한다.
  * - 캠페인 응답에는 정의 ID와 규칙 코드가 없다(CampaignResponse). 발급 내역은 통계(stats)만 있다.
  */
 import { api } from './client';
@@ -20,7 +20,7 @@ const CAMPAIGNS = '/v1/admin/coupons/campaigns';
 export type CampaignKind = 'CLAIM' | 'TARGETED' | 'MEMBER';
 export type RuleCode = 'SALE_OPEN' | 'CHECKOUT_ABANDON' | 'SOLD_OUT_SIMILAR' | 'CATEGORY_NEW';
 export interface DefinitionBody { name: string; discountType: 'AMOUNT' | 'RATE'; amount: number | null; rateBps: number | null; maxDiscount: number | null; minItemsAmount: number | null; scope: 'ALL' | 'PRODUCT'; validityMode: 'FIXED' | 'RELATIVE'; validFrom: string | null; validUntil: string | null; validMinutes: number | null; noticeLeadMinutes: number | null }
-export interface CampaignBody { code: string; definitionId: string; kind: CampaignKind; ruleCode: RuleCode | null; totalBudget: number; perAccountLimit: 1; startsAt: string; endsAt: string; demo: boolean }
+export interface CampaignBody { code: string; definitionId: string; kind: CampaignKind; ruleCode: RuleCode | null; totalBudget: number; perAccountLimit: 1; startsAt: string; endsAt: string; demo: boolean; productId?: string | null }
 export interface CampaignStatsDto { issued: number; used: number; released: number; expired: number; discountTotal: number }
 
 export const listCouponDefinitions = (signal?: AbortSignal) => api.get<CouponDefinitionDto[]>(DEFS, { service, signal }).then(r => r ?? []);
@@ -43,8 +43,8 @@ export const RULES = Object.keys(RULE_LABEL) as RuleCode[];
 export const campaignStatusLabel = (status: string): [string, boolean] => status === 'ACTIVE' ? ['진행 중', true] : status === 'PAUSED' ? ['일시정지', false] : status === 'DRAFT' ? ['준비', false] : [status, false];
 export const definitionStatusLabel = (status: string): [string, boolean] => status === 'ACTIVE' ? ['사용 중', true] : status === 'RETIRED' ? ['종료', false] : [status, false];
 /** 캠페인 종류가 받을 수 있는 정의 범위(서버 규칙과 같다) */
-export const scopeFor = (kind: CampaignKind): 'ALL' | 'PRODUCT' => kind === 'TARGETED' ? 'PRODUCT' : 'ALL';
-export const definitionsFor = (kind: CampaignKind, defs: CouponDefinitionDto[]) => defs.filter(d => d.status === 'ACTIVE' && d.scope === scopeFor(kind));
+export const scopeFor = (kind: CampaignKind, productId?: string | null): 'ALL' | 'PRODUCT' => kind === 'TARGETED' || (kind === 'CLAIM' && !!productId) ? 'PRODUCT' : 'ALL';
+export const definitionsFor = (kind: CampaignKind, defs: CouponDefinitionDto[], productId?: string | null) => defs.filter(d => d.status === 'ACTIVE' && d.scope === scopeFor(kind, productId));
 
 /* ── 입력 → 요청 본문(서버 검증을 화면에서 먼저 확인) ── */
 const digits = (s: string) => s.replace(/[^\d]/g, '');
@@ -88,14 +88,14 @@ export function definitionRequest(f: DefinitionForm): { body?: DefinitionBody; e
   } };
 }
 
-export interface CampaignForm { kind: CampaignKind; definitionId: string; ruleCode: RuleCode | ''; code: string; totalBudget: string; startsAt: string; endsAt: string; demo: boolean }
+export interface CampaignForm { kind: CampaignKind; definitionId: string; ruleCode: RuleCode | ''; code: string; totalBudget: string; startsAt: string; endsAt: string; demo: boolean; productId?: string }
 export const CODE_PATTERN = /^[A-Z0-9_]{1,40}$/;
 export function campaignRequest(f: CampaignForm, defs: CouponDefinitionDto[]): { body?: CampaignBody; errors: Record<string, string> } {
   const e: Record<string, string> = {};
   const code = f.code.trim();
   if (!CODE_PATTERN.test(code)) e.code = '영문 대문자, 숫자, 밑줄(_)로 40자 이내로 입력해 주세요.';
-  const def = definitionsFor(f.kind, defs).find(d => d.id === f.definitionId);
-  if (!def) e.definitionId = f.kind === 'TARGETED' ? '특정 상품 범위의 쿠폰 정의를 골라 주세요.' : '전체 상품 범위의 쿠폰 정의를 골라 주세요.';
+  const def = definitionsFor(f.kind, defs, f.productId).find(d => d.id === f.definitionId);
+  if (!def) e.definitionId = scopeFor(f.kind, f.productId) === 'PRODUCT' ? '특정 상품 범위의 쿠폰 정의를 골라 주세요.' : '전체 상품 범위의 쿠폰 정의를 골라 주세요.';
   if (f.kind === 'TARGETED' && !f.ruleCode) e.ruleCode = '맞춤 규칙을 골라 주세요.';
   const budget = num(f.totalBudget);
   if (!(budget && budget > 0)) e.totalBudget = '1장 이상 입력해 주세요.';
@@ -105,7 +105,7 @@ export function campaignRequest(f: CampaignForm, defs: CouponDefinitionDto[]): {
   if (!ends) e.endsAt = '끝 시각을 골라 주세요.';
   else if (starts && Date.parse(starts) >= Date.parse(ends)) e.endsAt = '시작보다 뒤로 골라 주세요.';
   if (Object.keys(e).length) return { errors: e };
-  return { errors: e, body: { code, definitionId: def!.id, kind: f.kind, ruleCode: f.kind === 'TARGETED' ? f.ruleCode as RuleCode : null, totalBudget: budget!, perAccountLimit: 1, startsAt: starts!, endsAt: ends!, demo: f.demo } };
+  return { errors: e, body: { code, definitionId: def!.id, kind: f.kind, ruleCode: f.kind === 'TARGETED' ? f.ruleCode as RuleCode : null, totalBudget: budget!, perAccountLimit: 1, startsAt: starts!, endsAt: ends!, demo: f.demo, ...(f.kind === 'CLAIM' && f.productId ? { productId: f.productId } : {}) } };
 }
 
 /** 서버 오류 → 칸별 오류와 시트 안내(400 violations는 칸, 나머지는 코드별 문구) */

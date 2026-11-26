@@ -14,7 +14,11 @@ import { activateCampaign, adminActionError, adminCouponError, campaignRequest, 
 import type { CampaignForm, CampaignKind, DefinitionForm } from '../api/adminCoupons';
 import { sendCampaignNotification } from '../api/adminCoupons';
 import { MEMBERSHIP_COUPON } from '../features';
-import { money } from '../domain';
+import { activeUser, money } from '../domain';
+import type { Product } from '../domain';
+import { useStore } from '../store';
+import { listAdminProductReviews, listAdminApplications, mergeAdminApplications, useLive } from '../api';
+import { AdminReviewThumbnail } from '../components/AdminReviewThumbnail';
 import { ymd } from './membershipCoupon';
 
 const period = (a: string, b: string) => `${ymd(a)} – ${ymd(b)}`;
@@ -68,6 +72,8 @@ function ItemRow({ title, badge, live, lines, open, onToggle, children }: { titl
 }
 
 function CampaignItem({ campaign: c, onChanged }: { campaign: CampaignDto; onChanged: () => void }) {
+  const toast = useToast();
+  const link = `https://stockdrop-app.vercel.app/#/product/${c.productId}?campaign=${c.code}`;
   const [notify, setNotify] = useState(false), [sent, setSent] = useState(false);
   const [open, setOpen] = useState(false), [confirm, setConfirm] = useState(false), [stats, setStats] = useState(false);
   const [label, live] = campaignStatusLabel(c.status);
@@ -79,7 +85,8 @@ function CampaignItem({ campaign: c, onChanged }: { campaign: CampaignDto; onCha
     <InfoRow label="1인 한도" value="1장"/>
     <InfoRow label="기간" value={period(c.startsAt, c.endsAt)}/>
     <InfoRow label="시연용" value={c.demo ? '예' : '아니요'}/>
-    {c.kind === 'CLAIM' && <Button outline className="mt-3 w-full" disabled={sent || !!c.notificationSentAt || !active || Date.parse(c.startsAt) > Date.now() || Date.parse(c.endsAt) <= Date.now() || c.issuedCount >= c.totalBudget} onClick={() => setNotify(true)}>{sent || c.notificationSentAt ? '알림 보냄' : '알림 보내기'}</Button>}
+    {c.kind === 'CLAIM' && c.productId && <div className="mt-3"><p className="break-all text-label">{link}</p><Button outline className="mt-2 w-full" onClick={async () => { try { await navigator.clipboard.writeText(link); toast('링크를 복사했어요.'); } catch { toast('주소를 선택해 복사해 주세요.'); } }}>링크 복사</Button></div>}
+    {c.kind === 'CLAIM' && !c.productId && <Button outline className="mt-3 w-full" disabled={sent || !!c.notificationSentAt || !active || Date.parse(c.startsAt) > Date.now() || Date.parse(c.endsAt) <= Date.now() || c.issuedCount >= c.totalBudget} onClick={() => setNotify(true)}>{sent || c.notificationSentAt ? '알림 보냄' : '알림 보내기'}</Button>}
     {notify && <ConfirmSheet title="쿠폰 알림을 보낼까요?" action="알림 보내기" done="알림 발송을 요청했어요."
       run={() => sendCampaignNotification(c.id)} onClose={() => setNotify(false)} onDone={() => { setSent(true); onChanged(); }}>
       광고성 정보 수신에 동의한 구매자에게 쿠폰 받기 알림을 보내요. 같은 캠페인의 알림은 한 번만 보낼 수 있어요.
@@ -123,7 +130,7 @@ function DefinitionItem({ definition: d, onChanged }: { definition: CouponDefini
     <InfoRow label="할인" value={couponDiscountLabel(d)}/>
     {d.discountType === 'RATE' && <InfoRow label="최대 할인" value={won(d.maxDiscount)}/>}
     <InfoRow label="최소 상품 금액" value={won(d.minItemsAmount)}/>
-    <InfoRow label="적용 범위" value={d.scope === 'PRODUCT' ? '특정 상품(맞춤형 캠페인용)' : '전체 상품(받기형, 회원 쿠폰용)'}/>
+    <InfoRow label="적용 범위" value={d.scope === 'PRODUCT' ? '특정 상품' : '전체 상품'}/>
     {d.status === 'ACTIVE' && <Button outline className="mt-3 w-full" onClick={() => setConfirm(true)}>정의 종료</Button>}
     {confirm && <ConfirmSheet title="쿠폰 정의를 종료할까요?" action="종료" done="정의를 종료했어요." run={() => retireCouponDefinition(d.id)} onClose={() => setConfirm(false)} onDone={onChanged}>
       이 정의로는 새 캠페인을 만들 수 없어요. 이미 발급한 쿠폰의 조건은 그대로 남아요. 되돌릴 수 없어요.
@@ -174,7 +181,7 @@ function DefinitionSheet({ onClose, onCreated }: { onClose: () => void; onCreate
           <Field label="최대 할인" required error={errors.maxDiscount}><UnitInput label="최대 할인" unit="원" value={amountText(f.maxDiscount)} onChange={v => set({ maxDiscount: v })} placeholder="3,000" error={errors.maxDiscount}/></Field>
         </div>}
       <Field label="최소 상품 금액" hint="비우면 0원으로 저장돼요." error={errors.minItemsAmount}><UnitInput label="최소 상품 금액" unit="원" value={amountText(f.minItemsAmount)} onChange={v => set({ minItemsAmount: v })} placeholder="0" error={errors.minItemsAmount}/></Field>
-      <Field label="적용 범위" hint={f.scope === 'ALL' ? '받기형, 회원 쿠폰 캠페인에 써요.' : '맞춤형 캠페인에 써요. 대상 상품은 맞춤 이벤트가 정해요.'}><div className="flex gap-2"><Chip selected={f.scope === 'ALL'} onClick={() => set({ scope: 'ALL' })}>전체 상품</Chip><Chip selected={f.scope === 'PRODUCT'} onClick={() => set({ scope: 'PRODUCT' })}>특정 상품</Chip></div></Field>
+      <Field label="적용 범위" hint={f.scope === 'ALL' ? '전체 상품 받기형과 회원 쿠폰 캠페인에 써요.' : '상품 전용 받기형 또는 맞춤형 캠페인에 써요.'}><div className="flex gap-2"><Chip selected={f.scope === 'ALL'} onClick={() => set({ scope: 'ALL' })}>전체 상품</Chip><Chip selected={f.scope === 'PRODUCT'} onClick={() => set({ scope: 'PRODUCT' })}>특정 상품</Chip></div></Field>
       <Field label="사용 기간"><div className="flex gap-2"><Chip selected={f.validityMode === 'FIXED'} onClick={() => set({ validityMode: 'FIXED' })}>고정 기간</Chip><Chip selected={f.validityMode === 'RELATIVE'} onClick={() => set({ validityMode: 'RELATIVE' })}>발급 후 기간</Chip></div></Field>
       {f.validityMode === 'RELATIVE'
         ? <Field label="발급 후" hint="분 단위로 바꿔서 저장해요." error={errors.validMinutes}><UnitInput label="발급 후 사용 기간" unit="일" value={f.validDays} onChange={v => set({ validDays: v.replace(/[^\d]/g, '').slice(0, 4) })} placeholder="30" error={errors.validMinutes}/></Field>
@@ -193,20 +200,21 @@ function DefinitionSheet({ onClose, onCreated }: { onClose: () => void; onCreate
 const KINDS: CampaignKind[] = ['CLAIM', 'TARGETED', 'MEMBER'];
 function CampaignSheet({ definitions, definitionsLoading, onClose, onCreated }: { definitions: CouponDefinitionDto[]; definitionsLoading: boolean; onClose: () => void; onCreated: () => void }) {
   const toast = useToast();
+  const [pickProduct, setPickProduct] = useState(false), [product, setProduct] = useState<Product>();
   const [f, setF] = useState<CampaignForm>(() => { const now = Date.now(); return { kind: 'CLAIM', definitionId: '', ruleCode: '', code: '', totalBudget: '', startsAt: localInput(now), endsAt: localInput(now + 30 * 86_400_000), demo: false }; });
   const [errors, setErrors] = useState<Record<string, string>>({}), [message, setMessage] = useState(''), [busy, setBusy] = useState(false);
   const set = (v: Partial<CampaignForm>) => {
     const codeChanged = 'kind' in v || 'ruleCode' in v || 'demo' in v;
     setF(x => {
       const next = { ...x, ...v };
-      if ('kind' in v) next.demo = false;
+      if ('kind' in v) { next.demo = false; next.productId = ''; }
       if (next.kind === 'TARGETED') next.code = next.ruleCode ? next.ruleCode + (next.demo ? '_DEMO' : '_NORMAL') : '';
       else if ('kind' in v) next.code = '';
       return next;
     });
     setErrors(e => { const n = { ...e }; for (const k of Object.keys(v)) delete n[k]; if (codeChanged) delete n.code; return n; });
   };
-  const options = definitionsFor(f.kind, definitions);
+  const options = definitionsFor(f.kind, definitions, f.productId);
   const radio = (on: boolean) => <span className={`mt-0.5 h-4 w-4 shrink-0 rounded-full border-2 ${on ? 'border-ink bg-ink' : 'border-line'}`}/>;
   const submit = async () => {
     if (busy) return; setMessage('');
@@ -216,15 +224,19 @@ function CampaignSheet({ definitions, definitionsLoading, onClose, onCreated }: 
     catch (e) { const x = adminCouponError(e, 'campaign'); setErrors(x.fields); setMessage(x.message); }
     finally { setBusy(false); }
   };
-  return <Modal title="캠페인 만들기" onClose={onClose}>
-    <div className="space-y-5">
+  return <Modal title={pickProduct ? '적용 상품 고르기' : '캠페인 만들기'} onClose={pickProduct ? () => setPickProduct(false) : onClose}>
+    {pickProduct ? <CampaignProductPicker onClose={() => setPickProduct(false)} onSelect={p => { setProduct(p); set({ productId: p.id, definitionId: '' }); setPickProduct(false); }}/> : <div className="space-y-5">
       <Field label="종류" hint={f.kind === 'CLAIM' ? '링크(?campaign=코드)로 들어온 구매자가 직접 받아요.' : f.kind === 'MEMBER' ? '멤버십 결제가 될 때마다 회원에게 자동으로 발급돼요.' : 'AI 대상 이벤트(규칙)가 오면 그 상품용 쿠폰을 발급해요.'}>
         <div className="flex flex-wrap gap-2">{KINDS.map(k => <Chip key={k} selected={f.kind === k} onClick={() => set({ kind: k, definitionId: '', ruleCode: k === 'TARGETED' ? f.ruleCode : '' })}>{KIND_LABEL[k]}</Chip>)}</div>
       </Field>
+      {f.kind === 'CLAIM' && <Field label="적용 상품" hint="선택하지 않으면 전체 상품에서 쓸 수 있어요.">
+        <Button outline className="w-full" onClick={() => setPickProduct(true)}>{f.productId ? product?.name || f.productId : '상품 고르기'}</Button>
+        {f.productId && <Button outline className="mt-2 w-full" onClick={() => { set({ productId: '', definitionId: '' }); setProduct(undefined); }}>선택 해제</Button>}
+      </Field>}
       <Field label="쿠폰 정의" required error={errors.definitionId}>
         {definitionsLoading ? <p className="muted py-3 text-label">불러오는 중이에요…</p> : options.length
           ? <div role="radiogroup" aria-label="쿠폰 정의">{options.map(d => <button key={d.id} type="button" role="radio" aria-checked={f.definitionId === d.id} onClick={() => set({ definitionId: d.id })} className="divider flex w-full items-start gap-3 py-3 text-left">{radio(f.definitionId === d.id)}<div className="min-w-0 flex-1"><p className="break-all text-body font-semibold">{d.name} · {couponDiscountLabel(d)}</p><p className="muted mt-1 text-footnote">{couponConditionLabel(d)} · 버전 {d.version}</p></div></button>)}</div>
-          : <p className="muted py-3 text-label leading-relaxed">{f.kind === 'TARGETED' ? '특정 상품' : '전체 상품'} 범위의 사용 중인 정의가 없어요. 쿠폰 정의 탭에서 먼저 만들어 주세요.</p>}
+          : <p className="muted py-3 text-label leading-relaxed">{f.kind === 'TARGETED' || f.productId ? '특정 상품' : '전체 상품'} 범위의 사용 중인 정의가 없어요. 쿠폰 정의 탭에서 먼저 만들어 주세요.</p>}
       </Field>
       {f.kind === 'TARGETED' && <Field label="맞춤 규칙" required error={errors.ruleCode}><div className="flex flex-wrap gap-2">{RULES.map(r => <Chip key={r} selected={f.ruleCode === r} onClick={() => set({ ruleCode: r })}>{RULE_LABEL[r]}</Chip>)}</div></Field>}
       <Field label="캠페인 코드" required hint={f.kind === 'TARGETED' ? '맞춤형은 AI가 이 코드로 쿠폰을 요청해서 자동으로 정해져요.' : '영문 대문자, 숫자, 밑줄(_) 40자까지. 받기형은 링크에 그대로 써요.'} error={errors.code}><UnitInput label="캠페인 코드" numeric={false} readOnly={f.kind === 'TARGETED'} value={f.code} onChange={v => set({ code: v.toUpperCase().replace(/[^A-Z0-9_]/g, '').slice(0, 40) })} placeholder={f.kind === 'MEMBER' ? '예: MEMBER_MONTHLY' : f.kind === 'TARGETED' ? '예: SALE_OPEN_DEMO' : '예: WELCOME_1000'} error={errors.code}/></Field>
@@ -235,6 +247,25 @@ function CampaignSheet({ definitions, definitionsLoading, onClose, onCreated }: 
       <p className="muted text-caption leading-relaxed">만들면 준비 상태예요. 목록에서 활성화해야 발급을 시작해요.</p>
       <ErrorBox message={message}/>
       <div className="space-y-2"><Button className="w-full" disabled={busy} onClick={() => void submit()}>{busy ? '만드는 중…' : '만들기'}</Button><Button outline closeSheet className="w-full">취소</Button></div>
-    </div>
+    </div>}
   </Modal>;
+}
+
+/** 승인 상품 목록과 기존 썸네일을 적용 상품 선택에도 사용합니다. */
+function CampaignProductPicker({ onClose, onSelect }: { onClose: () => void; onSelect: (p: Product) => void }) {
+  const s = useStore(), user = activeUser(s);
+  const products = useApi(sig => listAdminProductReviews('APPROVED', sig), []);
+  useLive(sig => listAdminApplications({ status: 'APPROVED' }, sig), mergeAdminApplications, []);
+  const [search, setSearch] = useState('');
+  const rows = (products.data ?? []).filter(p => p.endsAt > Date.now() && !p.soldOutAt && (!p.listQuantity || p.listQuantity.total > p.listQuantity.sold) && p.name.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()));
+  return <>
+    <input aria-label="상품명 검색" placeholder="상품명 검색" className="field mb-3" value={search} onChange={e => setSearch(e.target.value)}/>
+    <LiveStatus state={products}/>
+    {rows.map(p => { const seller = s.applications.find(a => a.userId === p.sellerId && a.status === 'approved'); return <button key={p.id} type="button" className="divider flex w-full gap-3 py-3 text-left" onClick={() => onSelect(p)}>
+      <AdminReviewThumbnail accountId={user.id} productId={p.id} name={p.name} mockSrc={p.images[0]}/>
+      <span className="min-w-0 flex-1"><span className="block text-body font-bold">{p.name}</span><span className="muted mt-1 block text-label">{seller?.displayName || seller?.name || s.users.find(u => u.id === p.sellerId)?.name || p.sellerId}</span><span className="muted block text-caption">{p.startsAt > Date.now() ? '판매 예정' : '판매 중'}</span></span>
+    </button>; })}
+    {!products.loading && !products.error && !rows.length && <p className="muted py-5 text-center text-label">고를 수 있는 상품이 없어요.</p>}
+    <Button outline onClick={onClose} className="mt-3 w-full">닫기</Button>
+  </>;
 }
