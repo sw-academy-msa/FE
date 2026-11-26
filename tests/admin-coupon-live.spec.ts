@@ -144,6 +144,64 @@ test.describe('플래그 켬', () => {
     expect(sv.posts.at(-1)!.path).toBe('/api/v1/admin/coupons/definitions/d0000000-0000-4000-8000-000000000001/retire');
   });
 
+  test('맞춤형 자동 코드: 네 규칙과 시연용 변경, 종류 전환 시 직접 입력', async ({ page }) => {
+    await serve(page, server()); await login(page);
+    await page.getByRole('button', { name: '쿠폰 관리' }).click();
+    await page.getByRole('button', { name: '캠페인 만들기' }).click();
+    const s = sheet(page, '캠페인 만들기');
+    const code = s.getByLabel('캠페인 코드');
+    await expect(s.getByRole('switch', { name: '시연용' })).toHaveCount(0);
+    await code.fill('MANUAL_CLAIM');
+    await s.getByRole('button', { name: '맞춤형', exact: true }).click();
+    await expect(code).toHaveValue('');
+    await expect(code).not.toBeEditable();
+    await expect(s.getByText('맞춤형은 AI가 이 코드로 쿠폰을 요청해서 자동으로 정해져요.')).toBeVisible();
+    for (const [label, rule] of [['판매 오픈', 'SALE_OPEN'], ['결제 이탈', 'CHECKOUT_ABANDON'], ['품절 유사 상품', 'SOLD_OUT_SIMILAR'], ['관심 카테고리 신상품', 'CATEGORY_NEW']]) {
+      await s.getByRole('button', { name: label, exact: true }).click();
+      await expect(code).toHaveValue(`${rule}_NORMAL`);
+      await s.getByRole('switch', { name: '시연용' }).click();
+      await expect(code).toHaveValue(`${rule}_DEMO`);
+      await s.getByRole('switch', { name: '시연용' }).click();
+      await expect(code).toHaveValue(`${rule}_NORMAL`);
+    }
+    await s.getByRole('switch', { name: '시연용' }).click();
+    await s.getByRole('button', { name: '판매 오픈', exact: true }).click();
+    await expect(code).toHaveValue('SALE_OPEN_DEMO');
+    for (const kind of ['받기형', '회원 쿠폰']) {
+      await s.getByRole('button', { name: kind, exact: true }).click();
+      await expect(code).toBeEditable();
+      await expect(code).toHaveValue('');
+      await expect(s.getByRole('switch', { name: '시연용' })).toHaveCount(0);
+      await code.fill('manual_123');
+      await expect(code).toHaveValue('MANUAL_123');
+      await s.getByRole('button', { name: '맞춤형', exact: true }).click();
+      await expect(code).toHaveValue('');
+      await s.getByRole('button', { name: '판매 오픈', exact: true }).click();
+      await expect(code).toHaveValue('SALE_OPEN_NORMAL');
+      await expect(s.getByRole('switch', { name: '시연용' })).not.toBeChecked();
+      await s.getByRole('switch', { name: '시연용' }).click();
+    }
+  });
+
+  test('받기형과 회원형은 시연용을 숨기고 false로 요청한다', async ({ page }) => {
+    const sv = server(); await serve(page, sv); await login(page);
+    await page.getByRole('button', { name: '쿠폰 관리' }).click();
+    for (const [label, kind] of [['받기형', 'CLAIM'], ['회원 쿠폰', 'MEMBER']]) {
+      await page.getByRole('button', { name: '캠페인 만들기' }).click();
+      const s = sheet(page, '캠페인 만들기');
+      await s.getByRole('button', { name: '맞춤형', exact: true }).click();
+      await s.getByRole('switch', { name: '시연용' }).click();
+      await s.getByRole('button', { name: label, exact: true }).click();
+      await expect(s.getByRole('switch', { name: '시연용' })).toHaveCount(0);
+      await s.getByRole('radio').click();
+      await s.getByLabel('캠페인 코드').fill(`TEST_${kind}`);
+      await s.getByLabel('예산').fill('100');
+      await s.getByRole('button', { name: '만들기', exact: true }).click();
+      await expect(s).toBeHidden();
+      expect(sv.posts.at(-1)!.body).toMatchObject({ kind, demo: false, code: `TEST_${kind}` });
+    }
+  });
+
   test('캠페인 만들기: 종류별 정의 범위, 맞춤 규칙, 시연용, 코드 중복 409는 코드 칸, COUPON_INVALID는 시트 안내', async ({ page }) => {
     const sv = server(); sv.fail = [{ path: /campaigns$/, status: 409, body: { code: 'COMMON_DATA_CONFLICT', message: '현재 데이터 상태와 요청이 충돌합니다.' } }, { path: /campaigns$/, status: 400, body: { code: 'COUPON_INVALID', message: '쿠폰 조건이 올바르지 않습니다.' } }];
     await serve(page, sv); await login(page);
@@ -164,10 +222,11 @@ test.describe('플래그 켬', () => {
     await expect(s.getByText('맞춤 규칙을 골라 주세요.')).toBeVisible();
     await s.getByRole('radio', { name: /맞춤 10%/ }).click();
     await s.getByRole('button', { name: '판매 오픈' }).click();
-    await s.getByLabel('캠페인 코드').fill('sale_open_demo');
-    await expect(s.getByLabel('캠페인 코드')).toHaveValue('SALE_OPEN_DEMO');
+    await expect(s.getByLabel('캠페인 코드')).toHaveValue('SALE_OPEN_NORMAL');
+    await expect(s.getByLabel('캠페인 코드')).not.toBeEditable();
     await s.getByLabel('예산').fill('100');
     await s.getByRole('switch', { name: '시연용' }).click();
+    await expect(s.getByLabel('캠페인 코드')).toHaveValue('SALE_OPEN_DEMO');
     await noOverflow(page);
     await s.getByRole('button', { name: '맞춤형', exact: true }).scrollIntoViewIfNeeded();
     await shot(page, '04-campaign-sheet', false);
