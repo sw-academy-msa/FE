@@ -10,6 +10,7 @@ const { notificationPath, notificationFromApi } = await import('./api/notificati
 const { amountsFromApi, orderFromApi } = await import('./api/mappers');
 const { holdFromApi } = await import('./api/orders');
 const { aiEvent, AI_EVENT_NAMES, track, pendingEvents } = await import('./behavior');
+const { readBillingReturn } = await import('./membershipBilling');
 
 const base = { state: 'NONE', active: false, entitlementUntil: null, periodEnd: null, autoRenew: false, amount: 0, currency: 'KRW', sourceVersion: 0, cancelRequested: false, updatedAt: null };
 
@@ -90,5 +91,16 @@ describe('행동 이벤트', () => {
   it('플래그가 꺼져 있거나 분석 동의가 없으면 대기열에 넣지 않는다', () => {
     track('search', { search_term: 'x' }, { searchTerm: 'x' });
     expect(pendingEvents()).toHaveLength(0);
+  });
+});
+
+describe('카드 인증 귀환 쿼리', () => {
+  it('해시 안(#/…?…)과 해시 앞(?…#/…) 모두 읽고, 둘 다 있으면 해시 안을 쓴다', () => {
+    expect(readBillingReturn('success', '', '#/membership/billing/success?customerKey=ck&authKey=ak')).toEqual({ ok: true, authKey: 'ak', customerKey: 'ck' });
+    expect(readBillingReturn('success', '?customerKey=ck2&authKey=ak2', '#/membership/billing/success')).toEqual({ ok: true, authKey: 'ak2', customerKey: 'ck2' });
+    expect(readBillingReturn('success', '?authKey=old', '#/membership/billing/success?authKey=new&customerKey=c').authKey).toBe('new');
+  });
+  it('실패는 code와 message', () => {
+    expect(readBillingReturn('fail', '', '#/membership/billing/fail?code=PAY_PROCESS_CANCELED&message=%EC%B7%A8%EC%86%8C')).toEqual({ ok: false, code: 'PAY_PROCESS_CANCELED', message: '취소' });
   });
 });

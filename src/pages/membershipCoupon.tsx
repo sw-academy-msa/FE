@@ -4,7 +4,7 @@
  */
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { ReactNode } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Ticket, Truck } from 'lucide-react';
 import { Badge, Button, Empty, ErrorBox, InfoRow, LiveStatus, Modal, Spinner, useToast } from '../components/ui';
 import { api } from '../api/client';
@@ -12,7 +12,9 @@ import { errorMessage } from '../api/errors';
 import { useApi } from '../api/hooks';
 import { claimCampaign, claimError, couponConditionLabel, couponCountLabel, couponDiscountLabel, expiringSoon, getCampaign, listApplicableCoupons, listMyCoupons, COUPON_PAGE_SIZE } from '../api/coupons';
 import type { ApplicableCouponDto, CouponDto, CouponTab } from '../api/coupons';
-import { getMembership, getMembershipBilling, getMembershipConfiguration, membershipView, requestMembershipCancellation } from '../api/membership';
+import { completeMembershipSession, getMembership, getMembershipBilling, getMembershipConfiguration, membershipError, membershipView, requestMembershipCancellation, withdrawMembershipCancellation } from '../api/membership';
+import { clearPendingBilling, cleanBillingUrl, holdBillingReturn, readBillingReturn, readPendingBilling, startBillingAuth, takeHeldBillingReturn } from '../membershipBilling';
+import type { BillingPurpose, BillingReturn } from '../membershipBilling';
 import type { MembershipBillingDto, MembershipDto, MembershipView } from '../api/membership';
 import { MEMBERSHIP_COUPON, PENDING_CONTRACTS } from '../features';
 import { membershipTermsFor } from '../membershipTerms';
@@ -21,7 +23,7 @@ import type { TrackProduct } from '../behavior';
 import { loginHref, signedIn } from '../auth';
 import { money } from '../domain';
 import type { OrderAmounts, Product } from '../domain';
-import { useStore } from '../store';
+import { getState, useStore } from '../store';
 
 /* ── 날짜(한국 시간) ── */
 const KST = 'Asia/Seoul';
@@ -71,11 +73,15 @@ const MEMBER_COUPON_TEXT = '매달 3,000원 쿠폰';
 const MEMBER_COUPON_DETAIL = '1만 원 이상 구매 시';
 
 /* ── 마이페이지: 멤버십 카드 + 내 쿠폰 행 + 시트(가입, 관리, 내 쿠폰) ── */
-type Sheet = '' | 'join' | 'manage' | 'coupons';
+type Sheet = '' | 'join' | 'card' | 'manage' | 'coupons' | 'result';
+/** 카드 인증 귀환 뒤 /my로 넘기는 결과(주소에 남기지 않고 화면 이동 state로만) */
+interface BillingResult { ok: boolean; purpose: BillingPurpose; message?: string; billingVersion?: number }
 /** 주문·배송 조회 바로 아래에 넣는다. 알림 딥링크: ?membership=manage|join, ?coupons=available|used|expired */
 export function MembershipCouponSection() {
-  const ms = useMembership(); const [params, setParams] = useSearchParams();
-  const [sheet, setSheet] = useState<Sheet>(''), [couponTab, setCouponTab] = useState<CouponTab>('AVAILABLE');
+  const ms = useMembership(); const [params, setParams] = useSearchParams(); const loc = useLocation(), navigate = useNavigate();
+  const [result, setResult] = useState<BillingResult | undefined>(() => (loc.state as { billing?: BillingResult } | null)?.billing);
+  const [sheet, setSheet] = useState<Sheet>(() => (result ? 'result' : '')), [couponTab, setCouponTab] = useState<CouponTab>('AVAILABLE');
+  useEffect(() => { if ((loc.state as { billing?: BillingResult } | null)?.billing) navigate(loc.pathname + loc.search, { replace: true, state: null }); }, []);
   const first = useApi(signal => (ms.account ? listMyCoupons('AVAILABLE', 0, signal) : Promise.resolve([] as CouponDto[])), [ms.account]);
   useEffect(() => {
     if (!ms.account) return;
@@ -94,16 +100,18 @@ export function MembershipCouponSection() {
   const soon = usable.filter(c => expiringSoon(c.validUntil)).length;
   const couponRight = first.loading ? '' : first.error ? '다시 보기' : list.length ? `${couponCountLabel(usable.length)}${soon ? ` · 곧 만료 ${soon}장` : ''}` : '0장';
   return <>
-    <MembershipCard ms={ms} onJoin={() => setSheet('join')} onManage={() => setSheet('manage')}/>
+    <MembershipCard ms={ms} onJoin={() => setSheet('join')} onManage={() => setSheet('manage')} onCard={() => setSheet('card')}/>
     <RowButton label="내 쿠폰" right={couponRight} onClick={() => { setCouponTab('AVAILABLE'); setSheet('coupons'); }}/>
-    {shown === 'join' && <MembershipJoinSheet onClose={close}/>}
+    {shown === 'join' && <MembershipJoinSheet purpose="join" onClose={close}/>}
+    {shown === 'card' && <MembershipJoinSheet purpose="card" onClose={close}/>}
+    {shown === 'result' && result && <BillingResultSheet result={result} ms={ms} onClose={() => { setResult(undefined); close(); }} onRetry={() => { setSheet(result.purpose === 'card' ? 'card' : 'join'); setResult(undefined); }} onCoupons={() => { setResult(undefined); setCouponTab('AVAILABLE'); setSheet('coupons'); }}/>}
     {shown === 'manage' && ms.membership && <MembershipManageSheet ms={ms} couponRight={couponRight} onCoupons={() => { setCouponTab('AVAILABLE'); setSheet('coupons'); }} onClose={close}/>}
     {shown === 'manage' && !ms.membership && <Modal title="멤버십 관리" onClose={close}><LiveStatus state={{ loading: ms.loading, error: ms.error, reload: ms.reload }}/></Modal>}
     {shown === 'coupons' && <MyCouponsSheet initialTab={couponTab} onClose={() => { close(); first.reload(); }}/>}
   </>;
 }
 
-function MembershipCard({ ms, onJoin, onManage }: { ms: ReturnType<typeof useMembership>; onJoin: () => void; onManage: () => void }) {
+function MembershipCard({ ms, onJoin, onManage, onCard }: { ms: ReturnType<typeof useMembership>; onJoin: () => void; onManage: () => void; onCard: () => void }) {
   const config = useApi(signal => (ms.view === 'none' ? getMembershipConfiguration(signal) : Promise.resolve(null)), [ms.view]);
   const label = <p className="muted text-caption">STOCKDROP 멤버십</p>;
   if (ms.error && !ms.membership) return <section className="note space-y-3">{label}<p className="text-label">멤버십 상태를 확인하지 못했어요.</p><Button outline className="w-full" onClick={ms.reload}>다시 시도</Button></section>;
@@ -111,26 +119,36 @@ function MembershipCard({ ms, onJoin, onManage }: { ms: ReturnType<typeof useMem
   const m = ms.membership, view = ms.view as MembershipView, price = m.amount || config.data?.amount || 0;
   if (view === 'none') return <section className="note space-y-3" aria-label="STOCKDROP 멤버십">{label}<h2 className="text-heading font-bold leading-snug">{config.data ? <>월 {money(config.data.amount)}으로<br/></> : null}배송비 걱정 없이</h2><div><InfoRow label="배송비" value="모든 주문 무료"/><InfoRow label="회원 전용 쿠폰" value={MEMBER_COUPON_TEXT}/></div><Button className="w-full" onClick={onJoin}>혜택 확인하고 가입하기</Button></section>;
   if (view === 'pending') return <section className="note space-y-3" aria-label="STOCKDROP 멤버십">{label}<h2 className="text-heading font-bold">가입을 확인하고 있어요</h2><p className="muted text-label">카드 등록은 끝났어요. 혜택이 반영되기까지 잠시 걸릴 수 있어요.</p><Button outline className="w-full" onClick={ms.reload}>새로고침</Button></section>;
-  if (view === 'grace') return <section className="note space-y-3" aria-label="STOCKDROP 멤버십">{label}<div className="flex flex-wrap items-center gap-2"><h2 className="text-heading font-bold">결제에 실패했어요</h2><Badge red>유예 중</Badge></div><div><InfoRow label="혜택 유지" value={`${ymd(m.entitlementUntil)}까지`}/></div><p className="muted text-label">결제를 다시 시도하고 있어요. 유예 기간이 끝날 때까지 결제되지 않으면 혜택이 멈춰요.</p>{PENDING_CONTRACTS.cardReRegister && <Button className="w-full" disabled>카드 다시 등록하기</Button>}<Button outline className="w-full" onClick={onManage}>멤버십 관리</Button></section>;
-  if (view === 'cancelScheduled') return <section className="note space-y-3" aria-label="STOCKDROP 멤버십">{label}<div className="flex flex-wrap items-center gap-2"><h2 className="text-heading font-bold">{md(m.entitlementUntil)}까지 이용</h2><Badge>해지 예약</Badge></div><div><InfoRow label="다음 결제" value="없음"/><InfoRow label="이용 기한" value={`${ymd(m.entitlementUntil)}까지`}/></div><p className="muted text-label">기한까지 무료배송과 받은 쿠폰을 그대로 쓸 수 있어요.</p>{PENDING_CONTRACTS.resumeCancel && <Button outline className="w-full" disabled>해지 취소하기</Button>}<Button outline className="w-full" onClick={onManage}>멤버십 관리</Button></section>;
+  if (view === 'grace') return <section className="note space-y-3" aria-label="STOCKDROP 멤버십">{label}<div className="flex flex-wrap items-center gap-2"><h2 className="text-heading font-bold">결제에 실패했어요</h2><Badge red>유예 중</Badge></div><div><InfoRow label="혜택 유지" value={`${ymd(m.entitlementUntil)}까지`}/></div><p className="muted text-label">결제를 다시 시도하고 있어요. 유예 기간이 끝날 때까지 결제되지 않으면 혜택이 멈춰요.</p>{PENDING_CONTRACTS.cardReRegister && <Button className="w-full" onClick={onCard}>카드 다시 등록하기</Button>}<Button outline className="w-full" onClick={onManage}>멤버십 관리</Button></section>;
+  if (view === 'cancelScheduled') return <section className="note space-y-3" aria-label="STOCKDROP 멤버십">{label}<div className="flex flex-wrap items-center gap-2"><h2 className="text-heading font-bold">{md(m.entitlementUntil)}까지 이용</h2><Badge>해지 예약</Badge></div><div><InfoRow label="다음 결제" value="없음"/><InfoRow label="이용 기한" value={`${ymd(m.entitlementUntil)}까지`}/></div><p className="muted text-label">기한까지 무료배송과 받은 쿠폰을 그대로 쓸 수 있어요.</p>{PENDING_CONTRACTS.resumeCancel && <WithdrawCancelButton ms={ms}/>}<Button outline className="w-full" onClick={onManage}>멤버십 관리</Button></section>;
   return <section className="note space-y-3" aria-label="STOCKDROP 멤버십">{label}<h2 className="text-heading font-bold">멤버십 이용 중</h2><p className="text-label">무료배송 · 회원 전용 쿠폰</p><div><InfoRow label="다음 결제" value={`${md(m.periodEnd)}${price ? ` · ${money(price)}` : ''}`}/></div><Button className="w-full" onClick={onManage}>멤버십 관리</Button></section>;
 }
 
-/** 15 가입 시트: 요금과 약관 버전은 서버 configuration, 약관 본문은 FE 고정 문구(같은 버전만). 카드 등록은 귀환 처리 계약이 오면 연결 */
-function MembershipJoinSheet({ onClose }: { onClose: () => void }) {
+/** 15 가입 시트(유예 중 카드 다시 등록도 같은 흐름): 요금과 약관 버전은 서버 configuration, 약관 본문은 FE 고정 문구(같은 버전만) */
+function MembershipJoinSheet({ purpose, onClose }: { purpose: BillingPurpose; onClose: () => void }) {
   const config = useApi(signal => getMembershipConfiguration(signal), []);
-  const [agreed, setAgreed] = useState(false);
+  const [agreed, setAgreed] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState('');
+  async function start() {
+    if (!config.data) return;
+    setBusy(true); setError('');
+    try {
+      // 카드 다시 등록은 결과 판단(새 카드도 거절됐는지)에 쓰려고 지금 금융 상태 버전을 적어 둔다
+      const billingVersion = purpose === 'card' ? (await getMembershipBilling().catch(() => null))?.version : undefined;
+      await startBillingAuth(purpose, config.data, billingVersion); // 토스 카드 인증 창으로 이동한다
+    } catch (e) { setError(membershipError(e, '카드 등록을 시작하지 못했어요. 잠시 후 다시 시도해 주세요.')); setBusy(false); }
+  }
   const terms = membershipTermsFor(config.data?.termsVersion);
-  return <Modal title="STOCKDROP 멤버십" onClose={onClose}><div className="space-y-4">
-    <h3 className="text-heading font-bold leading-snug">자주 만나는 드롭,<br/>배송비 부담 없이.</h3>
-    {config.data ? <div className="rounded-inner bg-soft p-4"><p className="font-number text-title font-bold">월 {money(config.data.amount)}</p><p className="muted mt-2 text-label">매월 같은 날 정기결제돼요.</p></div> : <LiveStatus state={config}/>}
+  return <Modal title={purpose === 'card' ? '카드 다시 등록' : 'STOCKDROP 멤버십'} onClose={onClose}><div className="space-y-4">
+    {purpose === 'card' ? <h3 className="text-heading font-bold leading-snug">결제할 카드를<br/>다시 등록해 주세요.</h3> : <h3 className="text-heading font-bold leading-snug">자주 만나는 드롭,<br/>배송비 부담 없이.</h3>}
+    {config.data ? <div className="rounded-inner bg-soft p-4"><p className="font-number text-title font-bold">월 {money(config.data.amount)}</p><p className="muted mt-2 text-label">{purpose === 'card' ? '등록하면 이번 기간 이용료를 새 카드로 바로 결제해요.' : '매월 같은 날 정기결제돼요.'}</p></div> : <LiveStatus state={config}/>}
     <div><div className="divider flex min-h-13 items-center justify-between gap-3"><span className="text-body">무료배송</span><span className="muted text-label">모든 주문 배송비 0원</span></div><div className="divider flex min-h-13 items-center justify-between gap-3"><span className="text-body">회원 전용 쿠폰</span><span className="muted text-right text-label">{MEMBER_COUPON_TEXT}<br/>{MEMBER_COUPON_DETAIL}</span></div></div>
     <p className="muted text-footnote">쿠폰별 적용 상품과 사용 조건은 다를 수 있어요.</p>
     {config.data && !terms && <ErrorBox message="약관을 확인하지 못했어요. 잠시 후 다시 시도해 주세요."/>}
     {terms && <><label className="flex items-start gap-3 text-label leading-relaxed"><input type="checkbox" checked={agreed} onChange={e => setAgreed(e.target.checked)} className="mt-1 h-4 w-4"/>[필수] 멤버십 이용약관 및 정기결제 동의</label>
       <details className="muted text-footnote"><summary>이용약관 · 요금 및 해지 안내 보기</summary><p className="mt-2 whitespace-pre-wrap leading-relaxed">{terms.title}{'\n'}{terms.body}</p></details></>}
     <p className="muted text-footnote leading-relaxed">카드를 등록하면 첫 이용료가 결제됩니다.<br/>해지 후에도 이용 기한까지 혜택을 받을 수 있어요.</p>
-    <Button className="w-full" disabled={!agreed || !terms || !PENDING_CONTRACTS.billingAuth}>동의하고 카드 등록하기</Button>
+    <ErrorBox message={error}/>
+    <Button className="w-full" disabled={!agreed || !terms || !PENDING_CONTRACTS.billingAuth || busy} onClick={start}>{busy ? '카드 등록 창을 여는 중…' : '동의하고 카드 등록하기'}</Button>
     {!PENDING_CONTRACTS.billingAuth && <p className="muted text-center text-footnote">카드 등록은 곧 열려요.</p>}
     <Button outline className="w-full" closeSheet>다음에 하기</Button>
   </div></Modal>;
@@ -158,7 +176,7 @@ function MembershipManageSheet({ ms, couponRight, onCoupons, onClose }: { ms: Re
     {ms.error && <ErrorBox message={ms.error}/>}
     <Button className="w-full" closeSheet>확인</Button>
     {(view === 'active' || view === 'grace') && !m.cancelRequested && <><Button outline className="w-full" onClick={() => setAsking(true)}>정기결제 해지하기</Button><p className="muted text-footnote leading-relaxed">해지하면 다음 정기결제가 중단돼요.<br/>남은 이용 기간 동안 혜택은 유지됩니다.</p></>}
-    {view === 'cancelScheduled' && PENDING_CONTRACTS.resumeCancel && <Button outline className="w-full" disabled>해지 취소하기</Button>}
+    {view === 'cancelScheduled' && PENDING_CONTRACTS.resumeCancel && <WithdrawCancelButton ms={ms}/>}
   </div></Modal>;
 }
 
@@ -330,4 +348,101 @@ export function useListTracking(listId: string, listName: string, query: string,
 export function SoldOutSeen({ product }: { product: TrackProduct }) {
   useEffect(() => { trackSoldOut(product); }, [product.id]);
   return null;
+}
+
+/* ── 해지 취소(철회): DELETE 202 뒤 sourceVersion이 바뀌고 처리 중이 끝날 때까지 짧게 다시 읽는다 ── */
+const wait = (ms: number) => new Promise(r => setTimeout(r, ms));
+function WithdrawCancelButton({ ms }: { ms: ReturnType<typeof useMembership> }) {
+  const m = ms.membership; const toast = useToast(); const [busy, setBusy] = useState(false);
+  const live = !!m && m.state === 'CANCEL_SCHEDULED' && m.active && (!m.entitlementUntil || Date.parse(m.entitlementUntil) > Date.now());
+  if (!live) return null;
+  if (m.cancelWithdrawalRequested) return <Button outline className="w-full" disabled>해지 취소 처리 중</Button>;
+  async function run() {
+    setBusy(true);
+    try {
+      const before = m!.sourceVersion;
+      await withdrawMembershipCancellation();
+      let cur: MembershipDto | undefined;
+      for (let i = 0; i < 8; i++) { await wait(1500); cur = await getMembership().catch(() => cur); if (cur && cur.sourceVersion !== before && !cur.cancelWithdrawalRequested) break; }
+      const settled = !!cur && cur.sourceVersion !== before && !cur.cancelWithdrawalRequested;
+      if (settled && cur!.state === 'ACTIVE' && cur!.autoRenew) { await api.refresh().catch(() => undefined); toast('해지를 취소했어요. 다음 결제일에 정기결제가 이어져요.'); }
+      else if (settled) toast('지금은 해지를 취소할 수 없어 해지 예약을 유지해요.');
+      else toast('해지 취소를 처리하고 있어요. 잠시 뒤 다시 확인해 주세요.');
+      ms.reload();
+    } catch (e) { toast(membershipError(e, '해지를 취소하지 못했어요. 잠시 후 다시 시도해 주세요.')); } finally { setBusy(false); }
+  }
+  return <Button outline className="w-full" disabled={busy} onClick={run}>{busy ? '해지 취소 중…' : '해지 취소하기'}</Button>;
+}
+
+/* ── 15-1 완료, 15-2 실패 결과 시트(/my 위). 완료는 자격이 반영될 때까지 짧게 확인 ── */
+type Phase = 'checking' | 'done' | 'rejected' | 'slow';
+function BillingResultSheet({ result, ms, onClose, onRetry, onCoupons }: { result: BillingResult; ms: ReturnType<typeof useMembership>; onClose: () => void; onRetry: () => void; onCoupons: () => void }) {
+  const [phase, setPhase] = useState<Phase>(result.ok ? 'checking' : 'rejected');
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (!result.ok) return;
+    let stop = false;
+    (async () => {
+      setPhase('checking');
+      for (let i = 0; i < 12 && !stop; i++) {
+        try {
+          const [m, b] = await Promise.all([getMembership(), getMembershipBilling().catch(() => null)]);
+          if (stop) return;
+          if (m.active && m.state === 'ACTIVE') { await api.refresh().catch(() => undefined); ms.reload(); if (!stop) setPhase('done'); return; }
+          // 카드 다시 등록: 금융 상태 버전이 올랐는데 아직 유예면 새 카드도 거절. 가입: 첫 결제 실패면 구독이 NONE으로 돌아간다
+          if (result.purpose === 'card' && b && b.state === 'GRACE' && result.billingVersion !== undefined && b.version > result.billingVersion) { ms.reload(); setPhase('rejected'); return; }
+          if (result.purpose === 'join' && b && i >= 3 && (b.state === 'NONE' || b.state === 'EXPIRED')) { ms.reload(); setPhase('rejected'); return; }
+        } catch { /* 다음 확인에서 다시 */ }
+        await wait(2000);
+      }
+      if (!stop) { ms.reload(); setPhase('slow'); }
+    })();
+    return () => { stop = true; };
+  }, [tick]);
+  const m = ms.membership, card = result.purpose === 'card';
+  if (phase === 'rejected') {
+    const reason = result.ok ? '결제가 승인되지 않았어요.' : result.message || '카드 인증이 완료되지 않았어요.';
+    return <Modal title="카드 등록 실패" onClose={onClose}><div className="space-y-4">
+      <div className="rounded-inner bg-soft p-4"><h3 className="text-title font-bold">카드를 등록하지 못했어요</h3><p className="mt-2 text-label">{reason}</p></div>
+      <p className="muted text-footnote leading-relaxed">{card ? <>새 카드로 결제되지 않았어요.<br/>유예 기간 안에 다른 카드로 다시 시도할 수 있어요.</> : <>결제는 진행되지 않았고 멤버십도 시작되지 않았어요.<br/>다른 카드로 다시 시도하거나 나중에 가입할 수 있어요.</>}</p>
+      <Button className="w-full" onClick={onRetry}>다시 시도하기</Button>
+      <Button outline className="w-full" closeSheet>닫기</Button>
+    </div></Modal>;
+  }
+  if (phase !== 'done') return <Modal title={card ? '카드 다시 등록' : '멤버십 가입'} onClose={onClose}><div className="space-y-4">
+    <div className="rounded-inner bg-soft p-4"><h3 className="text-title font-bold">{card ? '결제를 확인하고 있어요' : '가입을 확인하고 있어요'}</h3><p className="mt-2 text-label">카드 등록은 끝났어요. 혜택이 반영되기까지 잠시 걸릴 수 있어요.</p></div>
+    {phase === 'checking' ? <div className="flex justify-center py-2" role="status" aria-label="확인 중"><Spinner/></div> : <Button outline className="w-full" onClick={() => setTick(n => n + 1)}>새로고침</Button>}
+    <Button className="w-full" closeSheet>확인</Button>
+  </div></Modal>;
+  return <Modal title={card ? '카드를 다시 등록했어요' : '멤버십 가입 완료'} onClose={onClose}><div className="space-y-4">
+    <div className="rounded-inner bg-soft p-4"><h3 className="text-title font-bold">멤버십 이용 중</h3><p className="mt-2 text-label">무료배송 · 회원 전용 쿠폰</p></div>
+    <div className="divider pb-3"><InfoRow label={card ? '이번 결제' : '첫 결제'} value={m?.amount ? money(m.amount) : '-'}/><InfoRow label="결제 카드" value="등록한 카드 (토스페이먼츠)"/><InfoRow label="다음 결제일" value={ymd(m?.periodEnd)}/>{!card && <InfoRow label="회원 쿠폰" value="3,000원 쿠폰 · 곧 지급돼요"/>}</div>
+    {!card && <p className="muted text-footnote">방금 가입한 혜택은 다음 주문부터 적용돼요.</p>}
+    <Button className="w-full" closeSheet>확인</Button>
+    <Button outline className="w-full" onClick={onCoupons}>내 쿠폰 보기</Button>
+  </div></Modal>;
+}
+
+/* ── 카드 인증 귀환(#/membership/billing/success|fail, 로그인 복귀는 resume) ── */
+const FAIL_TEXT: Record<string, string> = { PAY_PROCESS_CANCELED: '카드 인증이 취소됐어요.', USER_CANCEL: '카드 인증이 취소됐어요.' };
+export function MembershipBillingReturnPage() {
+  const { result = '' } = useParams(); const navigate = useNavigate();
+  const done = useRef(false);
+  useEffect(() => {
+    if (done.current) return; done.current = true;
+    if (!MEMBERSHIP_COUPON) { navigate('/', { replace: true }); return; }
+    let r: BillingReturn | undefined;
+    if (result === 'resume') r = takeHeldBillingReturn();
+    else if (result === 'success' || result === 'fail') { r = readBillingReturn(result, location.search, location.hash); cleanBillingUrl(result); }
+    const pending = readPendingBilling(), purpose: BillingPurpose = pending?.purpose ?? 'join';
+    const toMy = (billing: BillingResult) => navigate('/my', { replace: true, state: { billing } });
+    if (!r) { toMy({ ok: false, purpose, message: '카드 등록 결과를 확인하지 못했어요. 다시 시도해 주세요.' }); return; }
+    if (!signedIn(getState())) { holdBillingReturn(r); navigate(loginHref('/membership/billing/resume'), { replace: true }); return; }
+    if (!r.ok) { clearPendingBilling(); toMy({ ok: false, purpose, message: (r.code && FAIL_TEXT[r.code]) || r.message || undefined }); return; }
+    if (!pending || !r.authKey || !r.customerKey) { clearPendingBilling(); toMy({ ok: false, purpose, message: '카드 등록 정보를 찾지 못했어요. 처음부터 다시 시도해 주세요.' }); return; }
+    completeMembershipSession(pending.sessionId, pending.completionKey, { authKey: r.authKey, customerKey: r.customerKey })
+      .then(op => { clearPendingBilling(); if (op.refreshRequired) void api.refresh().catch(() => undefined); toMy({ ok: true, purpose, billingVersion: pending.billingVersion }); })
+      .catch(e => { clearPendingBilling(); toMy({ ok: false, purpose, message: membershipError(e, '카드 등록을 마치지 못했어요. 다시 시도해 주세요.') }); });
+  }, []);
+  return <div role="status" aria-label="카드 등록 결과를 확인하고 있어요" className="grid min-h-[60dvh] place-items-center"><Spinner/></div>;
 }

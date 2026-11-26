@@ -6,9 +6,9 @@ import { USE_MOCK } from './config';
  */
 export const MEMBERSHIP_COUPON = !USE_MOCK && import.meta.env.VITE_FEATURE_MEMBERSHIP_COUPON === 'true';
 /**
- * 백엔드 수정이 끝나면 연결할 자리(계약 전달 전에는 숨김). 계약이 오면 값만 true로 바꾸고 연결 코드를 넣는다.
+ * 백엔드 수정 3개(membership small-fix-report.md, 2026-11-26 운영 반영)로 연결한 기능. 문제가 생기면 값을 false로 바꿔 그 기능만 숨긴다.
  * - resumeCancel: 해지 예약 취소(해지 취소하기 버튼)
  * - cardReRegister: 결제 실패 유예 중 카드 다시 등록
  * - billingAuth: 카드 등록 시작과 귀환 처리(15-1 완료, 15-2 실패 결과 시트)
  */
-export const PENDING_CONTRACTS = { resumeCancel: false, cardReRegister: false, billingAuth: false } as const;
+export const PENDING_CONTRACTS = { resumeCancel: true, cardReRegister: true, billingAuth: true } as const;
