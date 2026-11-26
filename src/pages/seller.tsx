@@ -25,6 +25,7 @@ import { productSettlement } from '../api/sellerOrders';
 import { USE_MOCK } from '../config';
 import { useProductPhotos } from '../productPhotos';
 import { retryable } from '../api/live';
+import { MembershipCouponSection } from './membershipCoupon';
 const hm = (t: number) => new Date(t).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false });
 const md = (t: number) => { const d = new Date(t); return `${d.getMonth() + 1}.${d.getDate()} (${'일월화수목금토'[d.getDay()]})`; };
 export function SellerSalesPage() {
@@ -534,6 +535,7 @@ export function SellerMyPage() {
       <section className="mb-4">
         <p className="muted mb-2 mt-4 text-body font-bold">내 구매</p>
         <MenuRow to="/orders" label="주문 · 배송 조회"/>
+        <MembershipCouponSection/>
         <MenuRow to="/addresses" label="배송지 관리"/>
         <MenuRow to="/inquiries" label="문의 내역"/>
       </section>

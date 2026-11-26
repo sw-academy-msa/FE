@@ -8,7 +8,7 @@ vi.stubGlobal('window', win);
 vi.stubGlobal('document', { createElement: () => ({}), head: { appendChild: () => {} } });
 vi.stubEnv('VITE_GA_ID', 'G-TEST');
 const { api, ApiError } = await import('./api');
-const { initAnalytics, syncAnalyticsIdentity, trackViewItem } = await import('./analytics');
+const { applyAnalyticsId, initAnalytics, syncAnalyticsIdentity, trackViewItem } = await import('./analytics');
 const { login, logout } = await import('./auth');
 
 /** gtag 호출 기록: [명령, ...인자] */
@@ -56,8 +56,13 @@ describe('GA 동의·가명 ID', () => {
 });
 
 describe('view_item', () => {
+  it('분석 참여를 확인하기 전(미참여, 로그아웃)에는 보내지 않는다', () => {
+    initAnalytics(); applyAnalyticsId(null); const before = calls().length;
+    trackViewItem({ id: 'p1', name: 'n', category: 'c', price: 1 });
+    expect(calls()).toHaveLength(before);
+  });
   it('item_category는 서버 원문 그대로 보낸다', () => {
-    initAnalytics();
+    initAnalytics(); applyAnalyticsId('uuid-1');
     trackViewItem({ id: 'p1', name: '면 티셔츠', category: '반팔 티셔츠', price: 12900 });
     expect(calls().at(-1)).toEqual(['event', 'view_item', { currency: 'KRW', value: 12900, items: [{ item_id: 'p1', item_name: '면 티셔츠', item_category: '반팔 티셔츠', price: 12900 }] }]);
   });

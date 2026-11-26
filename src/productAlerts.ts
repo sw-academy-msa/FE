@@ -13,7 +13,8 @@ import { listProductAlerts, productAlertError, subscribeProductAlert, unsubscrib
 import { loginHref, signedIn } from './auth';
 import { useToast } from './components/ui';
 import { USE_MOCK } from './config';
-import { useStore } from './store';
+import { getState, useStore } from './store';
+import { trackWishlist } from './behavior';
 
 const NOTIFY_KEY = 'stockdrop:notified-products';
 /** mock 신청 목록. 처음 열면 예시 상품 하나가 신청된 상태로 보인다 */
@@ -65,6 +66,7 @@ export function useNotified() {
     set({ busy: [...state.busy, id], ids: on ? state.ids.filter(x => x !== id) : [...state.ids, id] });
     try {
       if (on) await unsubscribeProductAlert(id); else await subscribeProductAlert(id);
+      trackWishlist(getState().products.find(p => p.id === id), id, !on); // 신청·취소가 서버에서 성공했을 때만(동의, 플래그 확인은 behavior.ts)
       toast(on ? '상품 알림을 취소했어요.' : '상품 알림을 신청했어요. 알림 설정의 ‘상품 알림’이 켜져 있어야 받을 수 있어요.');
     } catch (e) {
       if (state.account === account) set({ ids: on ? [...state.ids.filter(x => x !== id), id] : state.ids.filter(x => x !== id) });

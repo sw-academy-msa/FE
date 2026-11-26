@@ -23,8 +23,17 @@ export function initAnalytics() {
 /* ── 관심 상품 알림용 분석 참여(가명 ID). 명세 docs/api-spec.md 「GA 분석 참여」. analyticsId는 저장하지 않고 로그인할 때마다 서버에서 다시 받는다 ── */
 const IDENTITY = '/v1/ai/analytics/identity';
 type Identity = { analyticsId: string; consentedAt: string };
+/** 분석 참여를 확인한 가명 ID(미확인, 미참여, 로그아웃, 철회면 null). GA와 AI 행동 이벤트는 이 값이 있을 때만 보낸다 */
+let consentedId: string | null = null;
+const consentListeners = new Set<(id: string | null) => void>();
+export const analyticsConsented = () => !!consentedId;
+/** 참여 상태가 바뀔 때(철회, 로그아웃, 계정 전환) 알림을 받는다. 행동 이벤트 대기열 비우기용 */
+export const onAnalyticsConsent = (l: (id: string | null) => void) => { consentListeners.add(l); return () => { consentListeners.delete(l); }; };
+/** 동의 확인 뒤에만 GA 이벤트를 보낸다 */
+export function gaEvent(name: string, params: Record<string, unknown>) { if (!consentedId || USE_MOCK) return; gtag('event', name, params); }
 /** 가명 ID를 GA에 적용한다. id가 없으면(미참여·로그아웃·철회) user_id를 비우고 분석 저장을 거부한다 */
 export function applyAnalyticsId(id: string | null) {
+  consentedId = id; consentListeners.forEach(l => l(id));
   gtag('consent', 'update', { analytics_storage: id ? 'granted' : 'denied' });
   gtag('config', gaId(), { user_id: id, send_page_view: false });
 }
@@ -51,7 +60,7 @@ export async function withdrawAnalytics(): Promise<void> {
 
 /** 상품 상세 응답을 받은 뒤 1회. item_category는 서버 문자열 원문 그대로(화면용 변환·상위 분류 금지) */
 export function trackViewItem(p: { id: string; name: string; category: string; price: number }) {
-  if (USE_MOCK) return;
+  if (USE_MOCK || !consentedId) return;
   gtag('event', 'view_item', { currency: 'KRW', value: p.price, items: [{ item_id: p.id, item_name: p.name, item_category: p.category, price: p.price }] });
 }
 
@@ -65,7 +74,7 @@ export function usePageView() {
     if (!gaId() || !window.gtag) return;
     const path = pathname + search;
     const t = setTimeout(() => {
-      if (path === lastPath) return;
+      if (path === lastPath || !consentedId) return;
       lastPath = path;
       gtag('event', 'page_view', { page_path: path, page_title: document.title, page_location: location.href });
     }, SETTLE_MS);

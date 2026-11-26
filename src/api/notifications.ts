@@ -15,7 +15,7 @@ export interface InboxItem { id: string; kind: NotificationKind; title: string; 
 
 export function notificationFromApi(d: NotificationDto): InboxItem {
   // 판매자에게 온 알림(입점·상품 심사·판매 주문)은 '판매'로 묶어 구매 알림과 섞이지 않게 한다
-  const kind: NotificationKind = (d.type ?? '').includes('PERSONALIZED') ? '맞춤 추천' : d.targetType.startsWith('SELLER_') ? '판매' : ['ORDER', 'SUPPORT_INQUIRY', 'PRODUCT_INQUIRY', 'ORDER_INQUIRY'].includes(d.targetType) ? '구매' : '상품';
+  const kind: NotificationKind = (d.type ?? '').includes('PERSONALIZED') ? '맞춤 추천' : d.targetType.startsWith('SELLER_') ? '판매' : ['ORDER', 'SUPPORT_INQUIRY', 'PRODUCT_INQUIRY', 'ORDER_INQUIRY', 'MEMBERSHIP', 'COUPON'].includes(d.targetType) ? '구매' : '상품';
   return { id: d.id, kind, title: d.title ?? '', desc: d.body ?? '', ts: ms(d.occurredAt) ?? Date.parse(d.createdAt), read: !!d.readAt, targetType: d.targetType, targetId: d.targetId, relatedId: d.relatedId };
 }
 /** 알림 대상 → 앱 경로. SELLER_APPLICATION은 전용 화면이 없어 /apply로 보낸다 */
@@ -31,6 +31,9 @@ export function notificationPath(n: Pick<InboxItem, 'targetType' | 'targetId' | 
     case 'PRODUCT_INQUIRY': return n.relatedId ? `/inquiries/${id}?productId=${encodeURIComponent(n.relatedId)}` : '/inquiries';
     case 'ORDER_INQUIRY': return n.relatedId ? `/inquiries/${id}?orderId=${encodeURIComponent(n.relatedId)}` : '/inquiries';
     case 'SELLER_PRODUCT_INQUIRY': case 'SELLER_ORDER_INQUIRY': return '/seller/inquiries';
+    // 회원제 알림(결제 실패, 갱신, 만료 예정, 만료)은 마이페이지 멤버십 관리 시트, 쿠폰 알림(만료 예정, 회원 쿠폰 도착)은 내 쿠폰 시트
+    case 'MEMBERSHIP': return '/my?membership=manage';
+    case 'COUPON': return '/my?coupons=available';
     default: return '/apply'; // 추측(명세 없음): 입점 신청 상태는 /apply에서 본다
   }
 }
