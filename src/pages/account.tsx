@@ -1,3 +1,4 @@
+import { AdminReviewThumbnail } from '../components/AdminReviewThumbnail';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ChevronDown, Search } from 'lucide-react';
@@ -552,7 +553,7 @@ export function AdminProductListPage() {
         const dDay = Math.ceil((p.startsAt - Date.now()) / 86_400_000);
         return (
           <Link key={p.id} to={`/admin/products/${p.id}`} className="flex gap-3 border-b border-line py-4">
-            <ProductImage src={p.images[0]} alt={p.name} className="h-16 w-16 shrink-0 rounded-inner"/>
+            <AdminReviewThumbnail accountId={user.id} productId={p.id} name={p.name} mockSrc={p.images[0]}/>
             <div className="min-w-0 flex-1 space-y-1">
               <div className="flex items-center gap-2">
                 <span className="inline-flex h-4.5 items-center rounded-inner bg-soft px-2 text-footnote font-bold text-aux">
