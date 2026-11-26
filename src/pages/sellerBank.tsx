@@ -62,7 +62,7 @@ export function SellerBankSettingsPage() {
       <p className="font-number text-heading font-bold mt-1 break-all">{current?.account || '-'}</p>
       {current?.holder && <p className="muted text-footnote mt-1">예금주 {current.holder}</p>}
     </section>
-    {USE_MOCK && <div className="space-y-2"><InfoRow label="정산 주기" value="구매 확정 후 D+7 영업일"/><InfoRow label="다음 정산 예정일" value="2026.11.11 (수)"/><InfoRow label="정산 예정 금액" value={<span className="font-bold">1,284,000원</span>}/><button type="button" className="flex items-center pt-1 text-body font-bold">정산 내역 보기<ChevronRight size={15}/></button></div>}
+    {USE_MOCK && <div className="space-y-2"><InfoRow label="정산 주기" value="월별 (구매 확정 기준)"/><InfoRow label="다음 정산 예정일" value="2026.11.11 (수)"/><InfoRow label="정산 예정 금액" value={<span className="font-bold">1,284,000원</span>}/><button type="button" className="flex items-center pt-1 text-body font-bold">정산 내역 보기<ChevronRight size={15}/></button></div>}
     <div className="-mx-4 h-px bg-line"/><h2 className="text-body font-bold text-muted">계좌 변경</h2>
     <fieldset disabled={busy || unavailable || needsRefresh} className="space-y-5">
       <Field label="은행" required><BankField label="은행" value={form.bank} onChange={bank => setForm(f => ({ ...f, bank }))}/></Field>

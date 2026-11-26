@@ -296,7 +296,7 @@ export function feeFor(s: State, p: Product) {
   const orders = s.orders.filter(o => o.productId === p.id && !['cancelled', 'refunded'].includes(o.status));
   const sold = orders.reduce((n, o) => n + o.lines.reduce((a, l) => a + l.quantity, 0), 0);
   const revenue = orders.reduce((n, o) => n + o.total - o.shipping, 0);
-  const fee = initial > 0 && sold * 10 > initial * 9 ? Math.round(revenue * .1) : 0;
+  const fee = Math.floor(revenue / 10);
   return { initial, sold, revenue, rate: initial ? sold / initial : 0, fee, net: revenue - fee };
 }
 export function publishDraft(s: State, userId: string, d: Draft, now: number): Product {

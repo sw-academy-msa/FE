@@ -113,7 +113,7 @@ Access JWT 수명은 기본 15분이다. 서버 팀에 수명을 1~2분으로 �
 - [ ] 이미지: `POST /seller/products/{id}/image-uploads` → presigned PUT → `POST .../images/{imageId}/completion` → `PUT .../images`(순서·대표).
 - [ ] AI 분석(`/seller/new/ai`): `POST /seller/products/{id}/ai-analyses` → `GET /api/v1/ai/product-analyses/{id}` 2초 간격(최대 30회, 404는 재시도) → 결과 적용.
 - [ ] 심사 요청 `POST /seller/products/{id}/review-submissions` → `/seller/products`(`GET /seller/products`)에서 '심사 대기'.
-- 함수만: FAQ 개별 추가·수정·삭제, 수정 심사 이력. mock 유지: 정산(수수료), AI 신뢰도·대안.
+- 함수만: FAQ 개별 추가·수정·삭제, 수정 심사 이력. 월별 정산 API 연동: 수수료는 월 판매액(구매 확정 기준)의 10%. mock 유지: AI 신뢰도 및 대안.
 
 ## 14. 운영자 승인 (운영자 계정)
 

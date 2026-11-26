@@ -39,22 +39,16 @@ export const getSellerOrderSummary = (q: { productId?: string; createdFrom?: str
 
 /** GET /v1/seller/orders/settlement — 월별 정산 금액(구매 확정 기준, 송금 없음). month=YYYY-MM */
 export const getSellerSettlement = (month: string, signal?: AbortSignal) => api.get<SellerSettlementDto>(`${S}/settlement`, { service: general, signal, query: { month } });
-/**
- * 정산 예정 금액: 그달 구매 확정 금액에서 수수료를 뺀다. 수수료는 상품별로 한정 수량의 90%를 넘게 팔리면 그 상품 금액의 10%(feeFor와 같은 규칙).
- * 상품 수량을 모르면(목록 요약 없음) 수수료를 0으로 본다
- */
-export function settlementNet(d: SellerSettlementDto, quantities: Record<string, { total: number; sold: number } | undefined>) {
-  // 수수료 판단에 필요한 상품 수량을 아직 모르면(목록 조회 전 등) 금액을 확정하지 않는다
-  if (d.products.some(p => !quantities[p.productId])) return undefined;
-  const fee = d.products.reduce((n, p) => { const q = quantities[p.productId]!; return n + (q.total > 0 && q.sold * 10 > q.total * 9 ? Math.round(p.amount * 0.1) : 0); }, 0);
+/** 월 판매액(구매 확정 기준)의 10%, 원 미만 버림. 서버 상품 금액은 배송비 제외, 쿠폰 할인 전 기준. */
+export function settlementNet(d: SellerSettlementDto) {
+  const fee = Math.floor(d.confirmedAmount / 10);
   return { gross: d.confirmedAmount, fee, net: d.confirmedAmount - fee };
 }
-/** 상품별 화면도 월별 구매 확정 정산 API의 상품 금액(배송비 제외)을 쓴다. */
-export function productSettlement(d: SellerSettlementDto, productId: string, quantity: { total: number; sold: number }) {
+/** 상품별 월 구매 확정 판매액에 고정 10%를 적용한다. */
+export function productSettlement(d: SellerSettlementDto, productId: string) {
   const gross = d.products.filter(p => p.productId === productId).reduce((n, p) => n + p.amount, 0);
-  const rate = quantity.total > 0 && quantity.sold * 10 > quantity.total * 9 ? 10 : 0;
-  const fee = rate ? Math.round(gross * 0.1) : 0;
-  return { gross, fee, net: gross - fee, rate };
+  const fee = Math.floor(gross / 10);
+  return { gross, fee, net: gross - fee, rate: 10 };
 }
 
 /* ── 출고·배송 (Command) ── */

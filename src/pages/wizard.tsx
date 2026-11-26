@@ -805,6 +805,7 @@ export function WizardPage() {
     </>}
 
     {last && <>
+      <p className="muted text-footnote">판매 수수료는 월 판매액(구매 확정 기준)의 10%예요. 쿠폰 할인 전 상품 금액을 기준으로 하며 배송비는 제외해요.</p>
     <section className="space-y-1" aria-label="입력한 내용 확인"><Label>입력한 내용</Label>
       {summary.map(([n, label, value]) => <div key={label} className="flex min-h-11 items-center gap-3 border-b border-line"><span className="w-24 shrink-0 text-label text-aux">{label}</span><span className="min-w-0 flex-1 truncate text-body">{value}</span><button type="button" aria-label={`${label} 수정`} onClick={() => goStep(n)} className="h-11 min-w-11 shrink-0 px-1 text-right text-label text-aux underline">수정</button></div>)}
     </section>

@@ -10,17 +10,17 @@ const settlement: SellerSettlementDto = { month: '2026-11', confirmedOrders: 1, 
 
 describe('상품별 구매 확정 정산', () => {
   it('상품 금액 2000원과 배송비 3000원 주문은 서버 정산 2000원으로 수수료 200원과 정산 1800원을 계산한다', () => {
-    expect(productSettlement(settlement, 'p1', { total: 1, sold: 1 })).toEqual({ gross: 2000, fee: 200, net: 1800, rate: 10 });
+    expect(productSettlement(settlement, 'p1')).toEqual({ gross: 2000, fee: 200, net: 1800, rate: 10 });
   });
   it('구매 미확정 상품과 다른 상품의 금액은 정산에 넣지 않는다', () => {
-    expect(productSettlement(settlement, 'unconfirmed', { total: 2, sold: 1 })).toEqual({ gross: 0, fee: 0, net: 0, rate: 0 });
+    expect(productSettlement(settlement, 'unconfirmed')).toEqual({ gross: 0, fee: 0, net: 0, rate: 10 });
   });
-  it('정확히 90%는 수수료 0%, 초과하면 구매 확정 상품 금액의 10%이다', () => {
-    expect(productSettlement(settlement, 'p1', { total: 10, sold: 9 })).toMatchObject({ fee: 0, net: 2000, rate: 0 });
-    expect(productSettlement(settlement, 'p1', { total: 10, sold: 10 })).toMatchObject({ fee: 200, net: 1800, rate: 10 });
+  it('상품 금액의 원 미만 수수료를 버리고 나머지를 지급한다', () => {
+    const d = { ...settlement, products: [{ ...settlement.products[0], amount: 2019 }] };
+    expect(productSettlement(d, 'p1')).toEqual({ gross: 2019, fee: 201, net: 1818, rate: 10 });
   });
-  it('0개 한정이면 수수료를 적용하지 않는다', () => {
-    expect(productSettlement(settlement, 'p1', { total: 0, sold: 0 }).rate).toBe(0);
+  it('수량과 무관하게 고정 10%를 적용한다', () => {
+    expect(productSettlement(settlement, 'p1').rate).toBe(10);
   });
 });
 

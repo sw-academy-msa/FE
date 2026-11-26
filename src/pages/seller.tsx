@@ -2,7 +2,7 @@ import { SellerBankSettingsPage } from './sellerBank';
 import { Card as AxCard } from '@astryxdesign/core/Card';
 import { SellerStatusTabs } from '../components/SellerStatusTabs';
 import { SellerMonthlySales } from '../components/SellerMonthlySales';
-import { salesGauge, sellerMonth } from '../sellerMetrics';
+import { mockSellerSettlement, salesGauge, sellerMonth } from '../sellerMetrics';
 import { LogoutButton, SETTINGS_HREF } from './auth';
 import { FaqList, SELLER_FAQ_ITEMS } from './account';
 import { BankField } from '../components/BankField';
@@ -38,7 +38,7 @@ export function SellerSalesPage() {
   return <div className="space-y-5">
     <Header title="판매 현황" backTo="/my"/>
     <LiveStatus state={live}/>
-    <SellerMonthlySales key={user.id} sellerId={user.id} month={month} products={mine} orders={ownOrders} now={now}/>
+    <SellerMonthlySales key={user.id} sellerId={user.id} month={month} orders={ownOrders} now={now}/>
     <section className="space-y-3"><h2 className="text-subhead font-bold">주문 처리</h2><div className="grid grid-cols-3 gap-2">{([['배송준비', 'preparingOrders', 'preparing'], ['배송중', 'shippingOrders', 'shipping'], ['배송완료', 'deliveredOrders', 'delivered']] as const).map(([label, key, status]) => <Link key={key} to={`/seller/orders?state=${status}`} className="min-h-11 rounded-element bg-canvas p-3 text-center"><p className="font-number text-title font-bold">{USE_MOCK ? ownOrders.filter(o => o.status === status).length : orders.data?.[key] ?? '-'}</p><p className="muted text-label">{label}</p></Link>)}</div>{!USE_MOCK && <LiveStatus state={orders}/>}</section>
   </div>;
 }
@@ -99,8 +99,7 @@ export function SellerProductPage() {
   const month = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit' }).format(now);
   const settle = useApi(async signal => {
     if (USE_MOCK || !id || !user.seller) return null;
-    const [amounts, product] = await Promise.all([getSellerSettlement(month, signal), getSellerProduct(id, signal)]);
-    return { amounts, product };
+    return { amounts: await getSellerSettlement(month, signal), productId: id };
   }, [id, user.id, month]);
   if (!user.seller) return <Unavailable/>;
   if (!p) return retryable(live) ? <LiveStatus state={live}/> : <Unavailable/>;
@@ -108,11 +107,11 @@ export function SellerProductPage() {
   // 실제 모드: 심사 중·반려 상품은 (알림에서 /seller/product/:id로 들어와도) 심사 결과 화면을 보여 준다
   const status = saleState(p, now), fee = feeFor(s, p), published = location.pathname.includes('/published/') || (!USE_MOCK && (p.reviewStatus === 'IN_REVIEW' || p.reviewStatus === 'REJECTED'));
   const productOrders = s.orders.filter(o => o.productId === p.id && !['cancelled','refunded'].includes(o.status));
-  const quantity = settle.data?.product.id === p.id ? settle.data.product.listQuantity : p.listQuantity;
+  const quantity = p.listQuantity;
   const totalSold = quantity?.sold ?? sum.data?.confirmedQuantity ?? fee.sold;
   const totalStock = quantity?.total ?? p.live?.initial ?? p.options.reduce((n, o) => n + o.stock, 0);
-  const result = USE_MOCK ? { gross: fee.revenue, fee: fee.fee, net: fee.net, rate: fee.initial > 0 && fee.sold * 10 > fee.initial * 9 ? 10 : 0 }
-    : settle.data?.product.id === p.id && !settle.loading && !settle.error ? productSettlement(settle.data.amounts, p.id, { total: totalStock, sold: totalSold }) : undefined;
+  const result = USE_MOCK ? productSettlement(mockSellerSettlement(s.orders.filter(o => o.sellerId === user.id), month, now), p.id)
+    : settle.data?.productId === p.id && !settle.loading && !settle.error ? productSettlement(settle.data.amounts, p.id) : undefined;
   const resultMoney = (amount: number | undefined) => amount === undefined ? '-' : money(amount);
 
   // 심사 대기 / 심사 승인 / 심사 반려
@@ -313,7 +312,7 @@ export function SellerProductPage() {
         {!USE_MOCK && settle.error && <p className="text-label text-red">정산 금액을 불러오지 못했어요. <button type="button" className="underline" onClick={settle.reload}>다시 시도</button></p>}
       </section>
       <div className="rounded-dialog bg-soft p-5 space-y-2">
-        <p className="text-body font-bold">구매 확정 후 D+7 영업일에 입금돼요</p>
+        <p className="text-body font-bold">구매 확정 기준으로 월별 정산해요</p>
         <p className="text-label text-aux">반품·환불은 STOCKDROP이 처리하지 않아요. 구매자와 직접 협의해 진행해 주세요.</p>
         <p className="text-label text-aux">정산 내역은 마이페이지 &gt; 정산 계좌에서 볼 수 있어요.</p>
       </div>
@@ -488,9 +487,9 @@ export function SellerMyPage() {
   const products = s.products.filter(p => p.sellerId === user.id);
   const sd = sales.data, ready = USE_MOCK || !!sd;
   const activeDrops = sd ? sd.onSaleCount + sd.scheduledCount : products.filter(p => saleState(p, Date.now()) === '판매 중' || saleState(p, Date.now()) === '판매 예정').length;
-  const settlement = s.orders.filter(o => o.sellerId === user.id && !['cancelled','refunded'].includes(o.status)).reduce((n, o) => n + o.total - o.shipping, 0);
+  const settlement = settlementNet(mockSellerSettlement(s.orders.filter(o => o.sellerId === user.id), month, nowOf(s))).net;
   const productCount = sd ? sd.productCount : products.length;
-  const net = settle.data ? settlementNet(settle.data, Object.fromEntries(products.map(p => [p.id, p.listQuantity])))?.net : undefined;
+  const net = settle.data ? settlementNet(settle.data).net : undefined;
   const unanswered = s.inquiries.filter(q => q.sellerId === user.id && !q.answer).length;
   const maskedBank = USE_MOCK ? (settings?.account ? `국민 ****${settings.account.slice(-4)}` : '국민 ****1024') : settings?.account ? `${settings.bank} ${settings.account}`.trim() : '';
   return (
@@ -908,7 +907,7 @@ export function SellerSupportPage() {
         {[['판매자 이용약관', '/seller/terms'], ['판매 수수료 안내', '/seller/terms'], ['운영 정책 · 패널티 기준', '/seller/terms']].map(([label, to]) => (
           <Link key={label} to={to} className="divider flex h-13 items-center justify-between">
             <span className="text-body">{label}</span>
-            <span className="muted text-label">{label === '판매 수수료 안내' ? '상품별 한정 수량 90% 초과 판매 시 판매 금액의 10%, 그 외 0% (배송비 제외)' : ''}<ChevronRight size={16} className="inline muted ml-1"/></span>
+            <span className="muted text-label">{label === '판매 수수료 안내' ? '판매 수수료는 월 판매액(구매 확정 기준)의 10%예요. 쿠폰 할인 전 상품 금액을 기준으로 하며 배송비는 제외해요.' : ''}<ChevronRight size={16} className="inline muted ml-1"/></span>
           </Link>
         ))}
       </section>
@@ -931,7 +930,7 @@ export function TermsPage() {
   const items: [string, string, boolean][] = [['terms', '판매자 이용약관', true], ['fee', '정산 및 판매 수수료 정책', true], ['operation', '한정 판매 운영 정책', true], ['privacy', '개인정보 수집·이용 동의', true], ['marketing', '판매 알림·혜택 정보 수신', false]];
   const allRequired = items.filter(([,, r]) => r).every(([k]) => checks[k]);
   const allChecked = items.every(([k]) => checks[k]);
-  return <div className="space-y-5"><Header title="판매자 약관 동의"/><div className="space-y-2"><p className="text-caption font-bold tracking-[1px]">STOCKDROP PARTNERS</p><h1 className="text-heading font-bold leading-[1.5] tracking-[-1px]">심사 요청 전에<br/>판매자 약관을 확인해 주세요</h1><p className="muted text-label leading-relaxed">한정 수량 선착순 판매는 구매자와의 약속이에요.<br/>운영 정책을 꼭 읽고 동의해 주세요.</p></div><label className="divider flex items-center gap-3 py-3 text-callout font-bold"><input type="checkbox" className="h-5 w-5" checked={allChecked} onChange={() => { const next = !allChecked; const obj: Record<string, boolean> = {}; items.forEach(([k]) => { obj[k] = next; }); setChecks(obj); }}/>전체 동의하기</label>{items.map(([key, label, required]) => <div key={key} className="divider flex items-center gap-2 py-3 text-label"><label className="flex flex-1 items-center gap-3"><input type="checkbox" className="h-4 w-4 shrink-0" checked={checks[key] ?? false} onChange={e => setChecks({ ...checks, [key]: e.target.checked })}/><span>{required ? '필수' : '선택'} {'  '}{label}</span></label><Link to="/legal" className="muted shrink-0 text-footnote underline">보기</Link></div>)}<Note title="한정 판매 운영 정책 요약"><p className="mb-2"><b>01</b> {'  '}판매가 시작되면 한정 수량과 가격을 변경할 수 없어요.</p><p className="mb-2"><b>02</b> {'  '}결제 완료 후 2영업일 이내에 출고해야 해요.</p><p><b>03</b> {'  '}출고 지연·품절 취소가 반복되면 판매가 제한될 수 있어요.</p></Note><Button className="w-full" disabled={!allRequired} onClick={() => navigate('/apply')}>동의하고 심사 요청하기</Button></div>;
+  return <div className="space-y-5"><Header title="판매자 약관 동의"/><div className="space-y-2"><p className="text-caption font-bold tracking-[1px]">STOCKDROP PARTNERS</p><h1 className="text-heading font-bold leading-[1.5] tracking-[-1px]">심사 요청 전에<br/>판매자 약관을 확인해 주세요</h1><p className="muted text-label leading-relaxed">한정 수량 선착순 판매는 구매자와의 약속이에요.<br/>운영 정책을 꼭 읽고 동의해 주세요.</p></div><label className="divider flex items-center gap-3 py-3 text-callout font-bold"><input type="checkbox" className="h-5 w-5" checked={allChecked} onChange={() => { const next = !allChecked; const obj: Record<string, boolean> = {}; items.forEach(([k]) => { obj[k] = next; }); setChecks(obj); }}/>전체 동의하기</label>{items.map(([key, label, required]) => <div key={key} className="divider flex items-center gap-2 py-3 text-label"><label className="flex flex-1 items-center gap-3"><input type="checkbox" className="h-4 w-4 shrink-0" checked={checks[key] ?? false} onChange={e => setChecks({ ...checks, [key]: e.target.checked })}/><span>{required ? '필수' : '선택'} {'  '}{label}</span></label><Link to="/legal" className="muted shrink-0 text-footnote underline">보기</Link></div>)}<Note>판매 수수료는 월 판매액(구매 확정 기준)의 10%예요. 쿠폰 할인 전 상품 금액을 기준으로 하며 배송비는 제외해요.</Note><Note title="한정 판매 운영 정책 요약"><p className="mb-2"><b>01</b> {'  '}판매가 시작되면 한정 수량과 가격을 변경할 수 없어요.</p><p className="mb-2"><b>02</b> {'  '}결제 완료 후 2영업일 이내에 출고해야 해요.</p><p><b>03</b> {'  '}출고 지연·품절 취소가 반복되면 판매가 제한될 수 있어요.</p></Note><Button className="w-full" disabled={!allRequired} onClick={() => navigate('/apply')}>동의하고 심사 요청하기</Button></div>;
 }
 
 /** 회원 탈퇴 — 실제 모드: 탈퇴 가능 여부 조회 후 DELETE /v1/accounts/me, 성공하면 로그아웃과 같이 로컬 세션을 끝낸다. mock 모드는 기존 토스트만 */
