@@ -1,6 +1,6 @@
 /** API 응답 → 화면이 쓰는 기존 도메인 타입 변환. 화면 코드는 그대로 두고 여기서 모양을 맞춘다 */
-import type { Address, Order, OrderStatus } from '../domain';
-import type { DeliveryState, OrderAddressDto, OrderDetailDto, OrderState } from './types';
+import type { Address, Order, OrderAmounts, OrderStatus } from '../domain';
+import type { DeliveryState, OrderAddressDto, OrderAmountsDto, OrderDetailDto, OrderState } from './types';
 
 /** 서버 시각은 나노초(.200089800Z)까지 온다 — 밀리초 3자리로 잘라 파싱한다(Safari 호환). 못 읽으면 NaN */
 export const parseServerTime = (v: string) => new Date(v.replace(/(\.\d{3})\d+/, '$1')).getTime();
@@ -24,6 +24,12 @@ export function addressFromApi(a: OrderAddressDto): Address {
   return { name: a.recipientName, phone: a.recipientPhone, address: a.roadAddress, detail: a.detailAddress ?? '', request: a.deliveryMemo ?? '', postalCode: a.postalCode };
 }
 
+/** 서버 금액 요약 → 화면용. 할인 필드가 하나도 없는 예전 응답이면 undefined(기존 계산 그대로 보여 준다) */
+export function amountsFromApi(d: OrderAmountsDto & { totalAmount?: number | null }): { amounts?: OrderAmounts } {
+  if (d.itemsAmount == null && d.couponDiscount == null && d.membershipShippingDiscount == null && d.effectiveShippingFee == null) return {};
+  const n = (v: number | null | undefined) => (v == null ? undefined : v);
+  return { amounts: { itemsAmount: n(d.itemsAmount), couponIssueId: d.couponIssueId ?? undefined, couponState: d.couponState ?? undefined, couponRejectCode: d.couponRejectCode ?? undefined, couponDiscount: d.couponDiscount ?? 0, originalShippingFee: n(d.originalShippingFee), membershipShippingDiscount: d.membershipShippingDiscount ?? 0, effectiveShippingFee: n(d.effectiveShippingFee), totalAmount: n(d.totalAmount) } };
+}
 export function orderFromApi(d: OrderDetailDto, userId: string, image = ''): Order {
   return {
     id: d.orderId, userId, sellerId: '', productId: d.productId, holdId: d.orderId,
@@ -34,5 +40,6 @@ export function orderFromApi(d: OrderDetailDto, userId: string, image = ''): Ord
     status: orderStatus(d.state, d.delivery), createdAt: Date.parse(d.createdAt),
     carrier: d.carrier ?? undefined, tracking: d.trackingNumber ?? undefined, shippedAt: ms(d.shippedAt), deliveredAt: ms(d.deliveredAt),
     paidAt: ms(d.confirmedAt), dispatchDays: d.dispatchBusinessDays || undefined, purchaseConfirmedAt: ms(d.purchaseConfirmedAt ?? null),
+    ...amountsFromApi(d),
   };
 }

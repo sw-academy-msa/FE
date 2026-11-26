@@ -45,7 +45,7 @@ export type DeliveryState = 'PREPARING' | 'SHIPPING' | 'DELIVERED';
 export interface OrderItemDto { optionId: string; label: string | null; quantity: number }
 export interface OrderAddressDto { recipientName: string; recipientPhone: string; postalCode: string; roadAddress: string; detailAddress: string | null; deliveryMemo: string | null }
 export interface OrderListItemDto { orderId: string; orderNumber: string; productId: string; productName: string; brandOrStore: string; items: OrderItemDto[]; state: OrderState; delivery: DeliveryState | null; totalAmount: number; createdAt: Iso; sourceVersion: number }
-export interface OrderDetailDto extends OrderListItemDto {
+export interface OrderDetailDto extends OrderListItemDto, OrderAmountsDto {
   address: OrderAddressDto | null; unitPrice: number; shippingFee: number; dispatchBusinessDays: number; expiresAt: Iso | null; confirmedAt: Iso | null;
   carrier: string | null; trackingNumber: string | null; shippedAt: Iso | null; deliveredAt: Iso | null;
   /** 구매 확정 시각(구매자 확정 또는 배송 완료 7일 뒤 자동). 이전 응답에는 없다 */ purchaseConfirmedAt?: Iso | null;
@@ -53,7 +53,9 @@ export interface OrderDetailDto extends OrderListItemDto {
 /** GET /v1/seller/orders/settlement — 월별 정산 금액(상품 금액, 배송비 제외). confirmed=그달 구매 확정, awaiting=배송 완료 후 확정 전 */
 export interface SellerSettlementDto { month: string; confirmedOrders: number; confirmedAmount: number; awaitingOrders: number; awaitingAmount: number; products: { productId: string; productName: string | null; orders: number; quantity: number; amount: number }[] }
 /** Command 원본 응답(주문 생성·결제 요청·배송지 변경·checkout·fulfillment). RESERVING에서는 값이 null일 수 있다 */
-export interface OrderCommandDto {
+/** 쿠폰·멤버십 금액 스냅샷(Command checkout, Query 상세 공통). 이전 주문은 null. couponRejectCode는 checkout에만 */
+export interface OrderAmountsDto { itemsAmount?: number | null; couponIssueId?: string | null; couponState?: string | null; couponRejectCode?: string | null; couponDiscount?: number | null; originalShippingFee?: number | null; membershipShippingDiscount?: number | null; effectiveShippingFee?: number | null }
+export interface OrderCommandDto extends OrderAmountsDto {
   orderId: string; orderNumber: string; version: number; state: OrderState; delivery: DeliveryState | null; productId: string | null; sellerId: string | null;
   productName: string | null; brandOrStore: string | null; items: OrderItemDto[]; address: OrderAddressDto | null; unitPrice: number | null; shippingFee: number | null; totalAmount: number | null;
   dispatchBusinessDays: number | null; expiresAt: Iso | null; serverTime: Iso; paymentAttemptId: string | null; confirmedAt: Iso | null; carrier: string | null; trackingNumber: string | null; failureCode: string | null; termsVersion: string | null;
@@ -66,7 +68,7 @@ export interface InquiryCardDto { id: string; orderId: string; productId: string
 export interface ImageUploadDto { id: string; url: string | null; contentType: string; sizeBytes: number; expiresAt: Iso }
 
 /* ── 알림 ── */
-export interface NotificationDto { id: string; type: string; title: string; body: string; targetType: 'PRODUCT' | 'SELLER_APPLICATION' | 'SELLER_PRODUCT' | 'SELLER_PRODUCT_REVISION' | 'ORDER' | 'SELLER_ORDER' | 'SUPPORT_INQUIRY' | 'PRODUCT_INQUIRY' | 'ORDER_INQUIRY' | 'SELLER_PRODUCT_INQUIRY' | 'SELLER_ORDER_INQUIRY'; targetId: string; relatedId: string | null; deadline: Iso | null; occurredAt: Iso; createdAt: Iso; readAt: Iso | null }
+export interface NotificationDto { id: string; type: string; title: string; body: string; targetType: 'PRODUCT' | 'SELLER_APPLICATION' | 'SELLER_PRODUCT' | 'SELLER_PRODUCT_REVISION' | 'ORDER' | 'SELLER_ORDER' | 'SUPPORT_INQUIRY' | 'PRODUCT_INQUIRY' | 'ORDER_INQUIRY' | 'SELLER_PRODUCT_INQUIRY' | 'SELLER_ORDER_INQUIRY' | 'MEMBERSHIP' | 'COUPON'; targetId: string; relatedId: string | null; deadline: Iso | null; occurredAt: Iso; createdAt: Iso; readAt: Iso | null }
 
 /* ── 판매자 입점·마이페이지 ── */
 export interface SellerAddressDto { postalCode: string; roadAddress: string; detailAddress: string | null }

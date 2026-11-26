@@ -7,7 +7,7 @@
 import type { Hold, Order, State } from '../domain';
 import { api } from './client';
 import { isApiError } from './errors';
-import { ms, orderStatus, addressFromApi, orderFromApi } from './mappers';
+import { ms, orderStatus, addressFromApi, orderFromApi, amountsFromApi } from './mappers';
 import { rememberTossPending, tossOrderIdOf, tossReturnUrls } from './tossReturn';
 import { allPages, pageInfo } from './sellerPaging';
 import type { CheckoutTermsDto, OrderCommandDto, OrderItemDto, OrderListItemDto, OrderDetailDto, OrderState } from './types';
@@ -29,7 +29,7 @@ export function expiresLocal(expiresAt: string | null, serverTime: string | null
 /** 주문 생성·checkout·배송지 변경 응답 → Hold */
 export function holdFromApi(d: OrderCommandDto, userId: string): Hold {
   const expiresAt = expiresLocal(d.expiresAt, d.serverTime);
-  return { id: d.orderId, userId, productId: d.productId ?? '', lines: lines(d.items), createdAt: expiresAt === undefined ? undefined : expiresAt - 300_000, expiresAt, status: holdStatus(d.state), orderId: d.state === 'CONFIRMED' ? d.orderId : undefined, failureCode: d.state === 'FAILED' ? d.failureCode || 'UNKNOWN' : undefined };
+  return { id: d.orderId, userId, productId: d.productId ?? '', lines: lines(d.items), createdAt: expiresAt === undefined ? undefined : expiresAt - 300_000, expiresAt, status: holdStatus(d.state), orderId: d.state === 'CONFIRMED' ? d.orderId : undefined, failureCode: d.state === 'FAILED' ? d.failureCode || 'UNKNOWN' : undefined, ...amountsFromApi(d) };
 }
 /** 확정된 checkout 응답 → Order (조회 모델 반영 전에도 완료 화면을 보여 주기 위해) */
 export function orderFromCommand(d: OrderCommandDto, userId: string): Order {
@@ -40,6 +40,7 @@ export function orderFromCommand(d: OrderCommandDto, userId: string): Order {
     address: d.address ? addressFromApi(d.address) : { name: '', phone: '', address: '', detail: '', request: '' },
     status: orderStatus(d.state, d.delivery), createdAt: ms(d.confirmedAt) ?? Date.now(), carrier: d.carrier ?? undefined, tracking: d.trackingNumber ?? undefined,
     paidAt: ms(d.confirmedAt), dispatchDays: d.dispatchBusinessDays || undefined, purchaseConfirmedAt: ms(d.purchaseConfirmedAt ?? null),
+    ...amountsFromApi(d),
   };
 }
 /** 목록 항목 → Order. 목록에는 단가·배송비·배송지가 없어 0/빈 값 (상세를 이미 받았다면 merge가 유지) */
@@ -66,7 +67,7 @@ export async function getOrder(id: string, userId: string, signal?: AbortSignal)
   return orderFromApi(await api.get<OrderDetailDto>(`/v1/orders/${enc(id)}`, { service: general, signal }), userId);
 }
 /** POST /v1/orders — 주문 생성·재고 확보 (202 접수). requestKey가 같으면 같은 주문을 돌려준다 */
-export function createOrder(b: { productId: string; items: { optionId: string; quantity: number }[]; addressId: string; requestKey?: string }): Promise<OrderCommandDto> {
+export function createOrder(b: { productId: string; items: { optionId: string; quantity: number }[]; addressId: string; requestKey?: string; /** 주문 생성 때만 고를 수 있는 쿠폰(선택) */ couponIssueId?: string }): Promise<OrderCommandDto> {
   return api.post<OrderCommandDto>('/v1/orders', { requestKey: crypto.randomUUID(), ...b }, { service: purchase });
 }
 /** 판매 시작 직후 ORDER_UNAVAILABLE(503, 외부 연동 준비 전)이면 waitMs 뒤 retries번까지 다시 시도한다.
