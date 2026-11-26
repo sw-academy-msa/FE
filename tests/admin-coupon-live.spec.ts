@@ -13,7 +13,7 @@ const SHOTS = process.env.ADMIN_COUPON_SHOTS;
 const NOW = '2026-11-26T05:00:00Z';
 const def = (o: Record<string, unknown> = {}) => ({ id: 'd0000000-0000-4000-8000-000000000001', name: '회원 전용 3,000원', discountType: 'AMOUNT', amount: 3000, rateBps: null, maxDiscount: null, minItemsAmount: 10000, scope: 'ALL', status: 'ACTIVE', version: 1, ...o });
 const camp = (o: Record<string, unknown> = {}) => ({ id: 'c0000000-0000-4000-8000-000000000001', code: 'MEMBER_2611', kind: 'MEMBER', totalBudget: 1000, issuedCount: 312, status: 'ACTIVE', startsAt: '2026-10-31T15:00:00Z', endsAt: '2026-11-30T14:59:00Z', demo: false, ...o });
-interface Server { defs: Record<string, unknown>[]; campaigns: Record<string, unknown>[]; posts: { path: string; body: unknown }[]; fail?: { path: RegExp; status: number; body: Record<string, unknown> }[] }
+interface Server { products?: Record<string, unknown>[]; defs: Record<string, unknown>[]; campaigns: Record<string, unknown>[]; posts: { path: string; body: unknown }[]; fail?: { path: RegExp; status: number; body: Record<string, unknown> }[] }
 const server = (): Server => ({
   defs: [def(), def({ id: 'd0000000-0000-4000-8000-000000000002', name: '맞춤 10%', discountType: 'RATE', amount: null, rateBps: 1000, maxDiscount: 3000, scope: 'PRODUCT' }), def({ id: 'd0000000-0000-4000-8000-000000000003', name: '예전 웰컴', amount: 1000, minItemsAmount: 0, status: 'RETIRED' })],
   campaigns: [camp(), camp({ id: 'c0000000-0000-4000-8000-000000000002', code: 'SALE_OPEN_10', kind: 'TARGETED', totalBudget: 500, issuedCount: 48, status: 'PAUSED', startsAt: '2026-11-19T15:00:00Z', endsAt: '2026-12-31T14:59:00Z' }), camp({ id: 'c0000000-0000-4000-8000-000000000003', code: 'WELCOME_1000', kind: 'CLAIM', totalBudget: 300, issuedCount: 0, status: 'DRAFT', startsAt: '2026-11-19T15:00:00Z', endsAt: '2026-12-31T14:59:00Z' })],
@@ -35,12 +35,12 @@ async function serve(page: Page, sv: Server) {
     else if (path.endsWith('/auth/login') || path.endsWith('/auth/refresh')) data = { accessToken: 'test-token', accountId: 'admin-1', roles: ['BUYER', 'ADMIN'], expiresAt: '2030-01-01T00:00:00Z', tokenType: 'Bearer' };
     else if (path.endsWith('/accounts/me')) data = { accountId: 'admin-1', id: 'admin-1', name: '운영자', email: 'ops@example.com', roles: ['ADMIN'], interestCategories: [] };
     else if (path.endsWith('/admin/seller-applications')) data = { content: [], page: 0, size: 100, totalPages: 0, totalElements: 0 };
-    else if (path.includes('/admin/product-reviews')) data = path.endsWith('/revisions') ? [] : { items: [], page: 0, size: 100, totalPages: 0, totalElements: 0 };
+    else if (path.includes('/admin/product-reviews')) data = path.endsWith('/images') || path.endsWith('/revisions') ? [] : { items: sv.products ?? [], page: 0, size: 100, totalPages: 0, totalElements: 0 };
     else if (path.endsWith('/admin/coupons/definitions') && method === 'GET') data = sv.defs;
     else if (path.endsWith('/admin/coupons/definitions') && method === 'POST') { const b = body(); data = { id: 'd-new', status: 'ACTIVE', version: 1, ...b, minItemsAmount: b.minItemsAmount ?? 0 }; sv.defs.push(data as Record<string, unknown>); status = 201; }
     else if (/\/admin\/coupons\/definitions\/[^/]+\/retire$/.test(path)) { const id = path.split('/').at(-2); const d = sv.defs.find(x => x.id === id)!; d.status = 'RETIRED'; data = d; }
     else if (path.endsWith('/admin/coupons/campaigns') && method === 'GET') data = sv.campaigns;
-    else if (path.endsWith('/admin/coupons/campaigns') && method === 'POST') { const b = body(); data = { id: 'c-new-' + sv.campaigns.length, code: b.code, kind: b.kind, totalBudget: b.totalBudget, issuedCount: 0, status: 'DRAFT', startsAt: b.startsAt, endsAt: b.endsAt, demo: b.demo }; sv.campaigns.push(data as Record<string, unknown>); status = 201; }
+    else if (path.endsWith('/admin/coupons/campaigns') && method === 'POST') { const b = body(); data = { id: 'c-new-' + sv.campaigns.length, code: b.code, kind: b.kind, totalBudget: b.totalBudget, issuedCount: 0, status: 'DRAFT', startsAt: b.startsAt, endsAt: b.endsAt, demo: b.demo, productId: b.productId }; sv.campaigns.push(data as Record<string, unknown>); status = 201; }
     else if (/\/admin\/coupons\/campaigns\/[^/]+\/(activate|pause)$/.test(path)) { const parts = path.split('/'), id = parts.at(-2), c = sv.campaigns.find(x => x.id === id)!; c.status = parts.at(-1) === 'activate' ? 'ACTIVE' : 'PAUSED'; data = c; }
     else if (/\/admin\/coupons\/campaigns\/[^/]+\/stats$/.test(path)) data = { issued: 312, used: 128, released: 6, expired: 4, discountTotal: 384000 };
     else if (path.endsWith('/notifications/unread-count')) data = { count: 0 };
@@ -59,6 +59,44 @@ async function login(page: Page) {
 const noOverflow = async (page: Page) => expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
 const shot = async (page: Page, name: string, fullPage = true) => { if (SHOTS) await page.screenshot({ path: `${SHOTS}/${name}.png`, fullPage }); };
 const sheet = (page: Page, name: string) => page.getByRole('dialog', { name });
+
+test('상품을 검색해 고른 캠페인은 PRODUCT 정의와 링크만 제공하고 선택 해제가 가능하다', async ({ page, context }) => {
+  test.skip(FLAG_OFF, '플래그 켬 서버 전용');
+  const sv = server();
+  sv.products = [{ id: '10000000-0000-4000-8000-000000000001', name: '광고용 셔츠', sellerId: 'seller-1', status: 'APPROVED', startsAt: '2026-11-25T00:00:00Z', endsAt: '2026-12-01T00:00:00Z', totalQuantity: 10, soldQuantity: 1, version: 1 }, { id: 'ended', name: '종료 상품', status: 'APPROVED', endsAt: '2026-11-01T00:00:00Z' }, { id: 'sold', name: '품절 상품', status: 'APPROVED', endsAt: '2026-12-01T00:00:00Z', totalQuantity: 1, soldQuantity: 1 }];
+  await serve(page, sv); await login(page);
+  await page.getByRole('button', { name: '쿠폰 관리' }).click();
+  await page.getByRole('button', { name: '캠페인 만들기' }).click();
+  const form = sheet(page, '캠페인 만들기');
+  await form.getByRole('button', { name: '상품 고르기' }).click();
+  await sheet(page, '적용 상품 고르기').getByRole('button', { name: '닫기', exact: true }).last().click();
+  await expect(form).toBeVisible();
+  await form.getByRole('button', { name: '상품 고르기' }).click();
+  const picker = sheet(page, '적용 상품 고르기');
+  await expect(picker.getByText('종료 상품')).toHaveCount(0);
+  await expect(picker.getByText('품절 상품')).toHaveCount(0);
+  await picker.getByRole('textbox', { name: '상품명 검색' }).fill('셔츠');
+  await picker.getByRole('button', { name: /광고용 셔츠/ }).click();
+  await expect(form.getByRole('radio', { name: /맞춤 10%/ })).toBeVisible();
+  await expect(form.getByRole('radio', { name: /회원 전용/ })).toHaveCount(0);
+  await form.getByRole('button', { name: '선택 해제' }).click();
+  await expect(form.getByRole('radio', { name: /회원 전용/ })).toBeVisible();
+  await form.getByRole('button', { name: '상품 고르기' }).click();
+  await sheet(page, '적용 상품 고르기').getByRole('button', { name: /광고용 셔츠/ }).click();
+  await form.getByRole('radio', { name: /맞춤 10%/ }).click();
+  await form.getByRole('textbox', { name: '캠페인 코드' }).fill('PRODUCT_LINK');
+  await form.getByRole('textbox', { name: '예산' }).fill('10');
+  await form.getByRole('button', { name: '만들기', exact: true }).click();
+  await page.getByRole('button', { name: /PRODUCT_LINK/ }).click();
+  const link = 'https://stockdrop-app.vercel.app/#/product/10000000-0000-4000-8000-000000000001?campaign=PRODUCT_LINK';
+  await expect(page.getByText(link, { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '알림 보내기', exact: true })).toHaveCount(0);
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.getByRole('button', { name: '링크 복사' }).click();
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(link);
+  expect(sv.posts.find(x => x.path.endsWith('/campaigns'))?.body).toMatchObject({ productId: sv.products[0].id, definitionId: sv.defs[1].id });
+  await noOverflow(page);
+});
 
 test.describe('플래그 켬', () => {
   test.skip(FLAG_OFF, '플래그 켬 서버 전용');

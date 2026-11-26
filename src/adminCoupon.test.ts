@@ -30,6 +30,12 @@ describe('쿠폰 정의 요청', () => {
 });
 
 describe('캠페인 요청', () => {
+  it('받기형 적용 상품을 고르면 PRODUCT 정의만 허용하고 상품 ID를 보낸다', () => {
+    expect(definitionsFor('CLAIM', defs as never, 'product-1').map(d => d.id)).toEqual(['d-prod']);
+    expect(campaignRequest({ ...campaign, productId: 'product-1' }, defs as never).errors.definitionId).toBeTruthy();
+    expect(campaignRequest({ ...campaign, productId: 'product-1', definitionId: 'd-prod' }, defs as never).body).toMatchObject({ productId: 'product-1', definitionId: 'd-prod' });
+    expect(campaignRequest(campaign, defs as never).body).not.toHaveProperty('productId');
+  });
   it('CLAIM, MEMBER는 전체 상품 정의만, TARGETED는 특정 상품 정의만 고를 수 있다', () => {
     expect(definitionsFor('CLAIM', defs as never).map(d => d.id)).toEqual(['d-all']);
     expect(definitionsFor('MEMBER', defs as never).map(d => d.id)).toEqual(['d-all']);
