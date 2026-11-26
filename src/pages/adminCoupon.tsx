@@ -135,9 +135,9 @@ function ConfirmSheet({ title, action, done, run, onClose, onDone, children }: {
 }
 
 /* ── 입력 칸 ── */
-function UnitInput({ label, value, onChange, unit, placeholder, error, numeric = true }: { label: string; value: string; onChange: (v: string) => void; unit?: string; placeholder?: string; error?: string; numeric?: boolean }) {
+function UnitInput({ label, value, onChange, unit, placeholder, error, numeric = true, readOnly = false }: { label: string; value: string; onChange: (v: string) => void; unit?: string; placeholder?: string; error?: string; numeric?: boolean; readOnly?: boolean }) {
   return <label className={`flex h-12 items-center gap-2 border-b ${error ? 'border-red' : 'border-line'}`}>
-    <input aria-label={label} inputMode={numeric ? 'numeric' : undefined} className="min-w-0 flex-1 bg-transparent text-headline outline-none placeholder:text-placeholder" value={value} placeholder={placeholder} onChange={e => onChange(e.target.value)}/>
+    <input aria-label={label} readOnly={readOnly} inputMode={numeric ? 'numeric' : undefined} className="min-w-0 flex-1 bg-transparent text-headline outline-none placeholder:text-placeholder" value={value} placeholder={placeholder} onChange={e => onChange(e.target.value)}/>
     {unit && <span className="shrink-0 text-callout text-aux">{unit}</span>}
   </label>;
 }
@@ -188,7 +188,17 @@ function CampaignSheet({ definitions, definitionsLoading, onClose, onCreated }: 
   const toast = useToast();
   const [f, setF] = useState<CampaignForm>(() => { const now = Date.now(); return { kind: 'CLAIM', definitionId: '', ruleCode: '', code: '', totalBudget: '', startsAt: localInput(now), endsAt: localInput(now + 30 * 86_400_000), demo: false }; });
   const [errors, setErrors] = useState<Record<string, string>>({}), [message, setMessage] = useState(''), [busy, setBusy] = useState(false);
-  const set = (v: Partial<CampaignForm>) => { setF(x => ({ ...x, ...v })); setErrors(e => { const n = { ...e }; for (const k of Object.keys(v)) delete n[k]; return n; }); };
+  const set = (v: Partial<CampaignForm>) => {
+    const codeChanged = 'kind' in v || 'ruleCode' in v || 'demo' in v;
+    setF(x => {
+      const next = { ...x, ...v };
+      if ('kind' in v) next.demo = false;
+      if (next.kind === 'TARGETED') next.code = next.ruleCode ? next.ruleCode + (next.demo ? '_DEMO' : '_NORMAL') : '';
+      else if ('kind' in v) next.code = '';
+      return next;
+    });
+    setErrors(e => { const n = { ...e }; for (const k of Object.keys(v)) delete n[k]; if (codeChanged) delete n.code; return n; });
+  };
   const options = definitionsFor(f.kind, definitions);
   const radio = (on: boolean) => <span className={`mt-0.5 h-4 w-4 shrink-0 rounded-full border-2 ${on ? 'border-ink bg-ink' : 'border-line'}`}/>;
   const submit = async () => {
@@ -210,11 +220,11 @@ function CampaignSheet({ definitions, definitionsLoading, onClose, onCreated }: 
           : <p className="muted py-3 text-label leading-relaxed">{f.kind === 'TARGETED' ? '특정 상품' : '전체 상품'} 범위의 사용 중인 정의가 없어요. 쿠폰 정의 탭에서 먼저 만들어 주세요.</p>}
       </Field>
       {f.kind === 'TARGETED' && <Field label="맞춤 규칙" required error={errors.ruleCode}><div className="flex flex-wrap gap-2">{RULES.map(r => <Chip key={r} selected={f.ruleCode === r} onClick={() => set({ ruleCode: r })}>{RULE_LABEL[r]}</Chip>)}</div></Field>}
-      <Field label="캠페인 코드" required hint="영문 대문자, 숫자, 밑줄(_) 40자까지. 받기형은 링크에 그대로 써요." error={errors.code}><UnitInput label="캠페인 코드" numeric={false} value={f.code} onChange={v => set({ code: v.toUpperCase().replace(/[^A-Z0-9_]/g, '').slice(0, 40) })} placeholder={f.kind === 'MEMBER' ? '예: MEMBER_MONTHLY' : f.kind === 'TARGETED' ? '예: SALE_OPEN_DEMO' : '예: WELCOME_1000'} error={errors.code}/></Field>
+      <Field label="캠페인 코드" required hint={f.kind === 'TARGETED' ? '맞춤형은 AI가 이 코드로 쿠폰을 요청해서 자동으로 정해져요.' : '영문 대문자, 숫자, 밑줄(_) 40자까지. 받기형은 링크에 그대로 써요.'} error={errors.code}><UnitInput label="캠페인 코드" numeric={false} readOnly={f.kind === 'TARGETED'} value={f.code} onChange={v => set({ code: v.toUpperCase().replace(/[^A-Z0-9_]/g, '').slice(0, 40) })} placeholder={f.kind === 'MEMBER' ? '예: MEMBER_MONTHLY' : f.kind === 'TARGETED' ? '예: SALE_OPEN_DEMO' : '예: WELCOME_1000'} error={errors.code}/></Field>
       <Field label="예산" required hint="발급할 총 장수예요. 1인 한도는 1장이에요." error={errors.totalBudget}><UnitInput label="예산" unit="장" value={amountText(f.totalBudget)} onChange={v => set({ totalBudget: v })} placeholder="1,000" error={errors.totalBudget}/></Field>
       <Field label="시작" required error={errors.startsAt}><DateInput label="캠페인 시작" value={f.startsAt} onChange={v => set({ startsAt: v })}/></Field>
       <Field label="끝" required error={errors.endsAt}><DateInput label="캠페인 끝" value={f.endsAt} onChange={v => set({ endsAt: v })}/></Field>
-      <div className="flex items-center justify-between gap-4"><div><p className="text-body">시연용</p><p className="muted mt-1 text-caption leading-relaxed">켜면 시연 이벤트와 허용된 시연 계정에만 발급돼요.</p></div><Toggle label="시연용" checked={f.demo} onChange={v => set({ demo: v })}/></div>
+      {f.kind === 'TARGETED' && <div className="flex items-center justify-between gap-4"><div><p className="text-body">시연용</p><p className="muted mt-1 text-caption leading-relaxed">켜면 시연 이벤트와 허용된 시연 계정에만 발급돼요.</p></div><Toggle label="시연용" checked={f.demo} onChange={v => set({ demo: v })}/></div>}
       <p className="muted text-caption leading-relaxed">만들면 준비 상태예요. 목록에서 활성화해야 발급을 시작해요.</p>
       <ErrorBox message={message}/>
       <div className="space-y-2"><Button className="w-full" disabled={busy} onClick={() => void submit()}>{busy ? '만드는 중…' : '만들기'}</Button><Button outline closeSheet className="w-full">취소</Button></div>
