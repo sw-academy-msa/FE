@@ -51,10 +51,12 @@ describe('다시 분석한 뒤 AI 질문 답', () => {
 });
 
 describe('정산 예정 금액', () => {
-  it('한정 수량 90% 넘게 팔린 상품만 10% 수수료', async () => {
+  it('월별 구매 확정 판매액의 10% 수수료', async () => {
     const { settlementNet } = await import('./api/sellerOrders');
     const d = { month: '2026-11', confirmedOrders: 3, confirmedAmount: 30000, awaitingOrders: 0, awaitingAmount: 0, products: [{ productId: 'a', productName: 'A', orders: 2, quantity: 2, amount: 20000 }, { productId: 'b', productName: 'B', orders: 1, quantity: 1, amount: 10000 }] };
-    expect(settlementNet(d, { a: { total: 10, sold: 10 }, b: { total: 10, sold: 9 } })).toEqual({ gross: 30000, fee: 2000, net: 28000 });
-    expect(settlementNet(d, {})).toBeUndefined(); // 수량을 모르면 금액을 확정하지 않는다
+    expect(settlementNet(d)).toEqual({ gross: 30000, fee: 3000, net: 27000 });
+    expect(settlementNet({ ...d, confirmedAmount: 19, products: [] })).toEqual({ gross: 19, fee: 1, net: 18 });
+    expect(settlementNet({ ...d, confirmedAmount: 38, products: d.products.map(p => ({ ...p, amount: 19 })) })).toEqual({ gross: 38, fee: 3, net: 35 });
+    expect(settlementNet({ ...d, confirmedAmount: 0, products: [] })).toEqual({ gross: 0, fee: 0, net: 0 });
   });
 });

@@ -1,3 +1,4 @@
+import { AdminReviewThumbnail } from '../components/AdminReviewThumbnail';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ChevronDown, Search } from 'lucide-react';
@@ -75,7 +76,7 @@ export function ApplicationPage() {
   if (user.seller) {
     const sellerName = s.sellerSettings[user.id]?.displayName ?? user.name;
     const shippingAddr = s.sellerSettings[user.id]?.shippingAddress ?? (s.applications.find(a => a.userId === user.id)?.shippingAddress ?? '');
-    return <div className="space-y-5"><Header title="입점 심사"/><div className="grid grid-cols-3 gap-2 text-center text-footnote"><span>✓ 정보 입력</span><span>✓ 입점 심사</span><b>03 판매 시작</b></div><p className="text-caption font-bold tracking-[1px]">WELCOME TO STOCKDROP PARTNERS</p><h1 className="text-heading font-bold leading-[1.5] tracking-[-1px]">{sellerName}님,<br/>입점이 승인됐어요</h1><p className="muted text-label leading-relaxed">이제 남은 재고를 3시간 한정 판매로<br/>빠르게 정리할 수 있어요.</p><div className="grid grid-cols-3 gap-2 rounded-inner bg-blue-soft p-4 text-center"><div><p className="font-number text-title-lg font-bold">10% / 0%</p><p className="muted text-caption">판매 수수료</p><p className="muted text-caption">상품별 한정 수량 90% 초과 판매 시 판매 금액의 10%, 그 외 0% (배송비 제외)</p></div><div><p className="font-number text-title-lg font-bold">D+7</p><p className="muted text-caption">정산 주기</p></div><div><p className="font-number text-title-lg font-bold">2영업일</p><p className="muted text-caption">출고 기한</p></div></div><Note title="판매 시작 전에 확인해 주세요"><p className="mb-2"><b>첫 한정 판매 등록</b><br/><span className="muted">상품, 수량, 판매 시간을 정하고 판매 심사를 요청해요</span></p>{shippingAddr && <p className="mb-2"><b>출고지 · 반품 주소 확인</b><br/><span className="muted">{shippingAddr}</span></p>}<p><b>판매자 알림 설정</b><br/><span className="muted">주문·출고 마감 알림을 받을 번호를 확인해요</span></p></Note><Button outline className="w-full" onClick={() => { navigate('/'); }}>홈으로</Button></div>;
+    return <div className="space-y-5"><Header title="입점 심사"/><div className="grid grid-cols-3 gap-2 text-center text-footnote"><span>✓ 정보 입력</span><span>✓ 입점 심사</span><b>03 판매 시작</b></div><p className="text-caption font-bold tracking-[1px]">WELCOME TO STOCKDROP PARTNERS</p><h1 className="text-heading font-bold leading-[1.5] tracking-[-1px]">{sellerName}님,<br/>입점이 승인됐어요</h1><p className="muted text-label leading-relaxed">이제 남은 재고를 3시간 한정 판매로<br/>빠르게 정리할 수 있어요.</p><div className="grid grid-cols-3 gap-2 rounded-inner bg-blue-soft p-4 text-center"><div><p className="font-number text-title-lg font-bold">10%</p><p className="muted text-caption">판매 수수료</p><p className="muted text-caption">판매 수수료는 월 판매액(구매 확정 기준)의 10%예요. 쿠폰 할인 전 상품 금액을 기준으로 하며 배송비는 제외해요.</p></div><div><p className="font-number text-title-lg font-bold">월별</p><p className="muted text-caption">정산 주기</p></div><div><p className="font-number text-title-lg font-bold">2영업일</p><p className="muted text-caption">출고 기한</p></div></div><Note title="판매 시작 전에 확인해 주세요"><p className="mb-2"><b>첫 한정 판매 등록</b><br/><span className="muted">상품, 수량, 판매 시간을 정하고 판매 심사를 요청해요</span></p>{shippingAddr && <p className="mb-2"><b>출고지 · 반품 주소 확인</b><br/><span className="muted">{shippingAddr}</span></p>}<p><b>판매자 알림 설정</b><br/><span className="muted">주문·출고 마감 알림을 받을 번호를 확인해요</span></p></Note><Button outline className="w-full" onClick={() => { navigate('/'); }}>홈으로</Button></div>;
   }
   if (previous && !reapply) {
     const shortDt = (ms: number) => { const d = new Date(ms); const days = ['일','월','화','수','목','금','토']; return `${d.getMonth()+1}.${d.getDate()} (${days[d.getDay()]})`; };
@@ -552,7 +553,7 @@ export function AdminProductListPage() {
         const dDay = Math.ceil((p.startsAt - Date.now()) / 86_400_000);
         return (
           <Link key={p.id} to={`/admin/products/${p.id}`} className="flex gap-3 border-b border-line py-4">
-            <ProductImage src={p.images[0]} alt={p.name} className="h-16 w-16 shrink-0 rounded-inner"/>
+            <AdminReviewThumbnail accountId={user.id} productId={p.id} name={p.name} mockSrc={p.images[0]}/>
             <div className="min-w-0 flex-1 space-y-1">
               <div className="flex items-center gap-2">
                 <span className="inline-flex h-4.5 items-center rounded-inner bg-soft px-2 text-footnote font-bold text-aux">
@@ -989,7 +990,7 @@ const FAQ_ITEMS: FaqItem[] = [
 ];
 /** 판매자 이용안내 FAQ (목업) */
 export const SELLER_FAQ_ITEMS: FaqItem[] = [
-  { question: '정산은 언제 입금되나요?', answer: '구매 확정된 주문은 정산 주기에 맞춰 등록한 정산 계좌로 입금돼요. 정산 계좌는 마이페이지 › 정산 계좌 관리에서 확인할 수 있어요.' },
+  { question: '정산은 언제 입금되나요?', answer: '구매 확정된 주문을 월별로 정산해요. 판매 수수료는 월 판매액(구매 확정 기준)의 10%예요. 쿠폰 할인 전 상품 금액을 기준으로 하며 배송비는 제외해요. 정산 계좌는 마이페이지 › 정산 계좌 관리에서 확인할 수 있어요.' },
   { question: '출고 마감 시간을 넘기면 어떻게 되나요?', answer: '상품에 설정한 출고 기한 안에 송장을 등록해 주세요. 기한을 넘기면 구매자에게 지연 안내가 가고, 반복되면 운영 정책에 따라 판매가 제한될 수 있어요.' },
   { question: '판매 심사에서 반려되면 다시 요청할 수 있나요?', answer: '네. 반려 사유를 확인하고 내용을 고친 뒤 판매 상품 관리에서 다시 심사를 요청할 수 있어요.' },
   { question: '구매자가 반품을 요청하면?', answer: '반품·환불은 STOCKDROP이 처리하지 않아요. 주문 문의로 들어온 요청을 확인하고 구매자와 직접 협의해 반품지 안내와 환불을 진행해 주세요.' },
