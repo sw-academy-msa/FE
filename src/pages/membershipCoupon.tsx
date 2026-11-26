@@ -12,6 +12,7 @@ import { errorMessage } from '../api/errors';
 import { useApi } from '../api/hooks';
 import { claimCampaign, claimError, couponConditionLabel, couponCountLabel, couponDiscountLabel, expiringSoon, getCampaign, listApplicableCoupons, listMyCoupons, COUPON_PAGE_SIZE } from '../api/coupons';
 import type { ApplicableCouponDto, CouponDto, CouponTab } from '../api/coupons';
+import { ClaimCampaignSheet } from './claimCampaign';
 import { completeMembershipSession, getMembership, getMembershipBilling, getMembershipConfiguration, membershipError, membershipView, requestMembershipCancellation, withdrawMembershipCancellation } from '../api/membership';
 import { clearPendingBilling, cleanBillingUrl, holdBillingReturn, readBillingReturn, readPendingBilling, startBillingAuth, takeHeldBillingReturn } from '../membershipBilling';
 import type { BillingPurpose, BillingReturn } from '../membershipBilling';
@@ -100,6 +101,7 @@ export function MembershipCouponSection() {
   const soon = usable.filter(c => expiringSoon(c.validUntil)).length;
   const couponRight = first.loading ? '' : first.error ? '다시 보기' : list.length ? `${couponCountLabel(usable.length)}${soon ? ` · 곧 만료 ${soon}장` : ''}` : '0장';
   return <>
+    {params.get('claim') && <ClaimCampaignSheet key={params.get('claim')} code={params.get('claim')!} onClaimed={first.reload} onClose={() => { const next = new URLSearchParams(params); next.delete('claim'); setParams(next, { replace: true }); }}/>}
     <MembershipCard ms={ms} onJoin={() => setSheet('join')} onManage={() => setSheet('manage')} onCard={() => setSheet('card')}/>
     <RowButton label="내 쿠폰" right={couponRight} onClick={() => { setCouponTab('AVAILABLE'); setSheet('coupons'); }}/>
     {shown === 'join' && <MembershipJoinSheet purpose="join" onClose={close}/>}

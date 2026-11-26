@@ -12,6 +12,7 @@ import { couponConditionLabel, couponDiscountLabel } from '../api/coupons';
 import type { CampaignDto, CouponDefinitionDto } from '../api/coupons';
 import { activateCampaign, adminActionError, adminCouponError, campaignRequest, campaignStatusLabel, createCampaign, createCouponDefinition, DEFAULT_DEFINITION, definitionRequest, definitionsFor, definitionStatusLabel, getCampaignStats, KIND_FULL, KIND_LABEL, listCampaigns, listCouponDefinitions, localInput, pauseCampaign, retireCouponDefinition, RULE_LABEL, RULES } from '../api/adminCoupons';
 import type { CampaignForm, CampaignKind, DefinitionForm } from '../api/adminCoupons';
+import { sendCampaignNotification } from '../api/adminCoupons';
 import { MEMBERSHIP_COUPON } from '../features';
 import { money } from '../domain';
 import { ymd } from './membershipCoupon';
@@ -67,6 +68,7 @@ function ItemRow({ title, badge, live, lines, open, onToggle, children }: { titl
 }
 
 function CampaignItem({ campaign: c, onChanged }: { campaign: CampaignDto; onChanged: () => void }) {
+  const [notify, setNotify] = useState(false), [sent, setSent] = useState(false);
   const [open, setOpen] = useState(false), [confirm, setConfirm] = useState(false), [stats, setStats] = useState(false);
   const [label, live] = campaignStatusLabel(c.status);
   const active = c.status === 'ACTIVE';
@@ -77,6 +79,11 @@ function CampaignItem({ campaign: c, onChanged }: { campaign: CampaignDto; onCha
     <InfoRow label="1인 한도" value="1장"/>
     <InfoRow label="기간" value={period(c.startsAt, c.endsAt)}/>
     <InfoRow label="시연용" value={c.demo ? '예' : '아니요'}/>
+    {c.kind === 'CLAIM' && <Button outline className="mt-3 w-full" disabled={sent || !!c.notificationSentAt || !active || Date.parse(c.startsAt) > Date.now() || Date.parse(c.endsAt) <= Date.now() || c.issuedCount >= c.totalBudget} onClick={() => setNotify(true)}>{sent || c.notificationSentAt ? '알림 보냄' : '알림 보내기'}</Button>}
+    {notify && <ConfirmSheet title="쿠폰 알림을 보낼까요?" action="알림 보내기" done="알림 발송을 요청했어요."
+      run={() => sendCampaignNotification(c.id)} onClose={() => setNotify(false)} onDone={() => { setSent(true); onChanged(); }}>
+      광고성 정보 수신에 동의한 구매자에게 쿠폰 받기 알림을 보내요. 같은 캠페인의 알림은 한 번만 보낼 수 있어요.
+    </ConfirmSheet>}
     <div className="mt-3 flex gap-2">
       <Button outline className="flex-1" onClick={() => setConfirm(true)}>{active ? '일시정지' : '활성화'}</Button>
       <Button outline className="flex-1" onClick={() => setStats(true)}>발급 내역</Button>
