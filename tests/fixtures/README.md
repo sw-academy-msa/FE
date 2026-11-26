@@ -1,0 +1,1 @@
+registration-categories.json은 ProductCommandService c80f3ab의 변경하지 않은 V2 및 V3 분류 SQL에서 code와 name만 추출한 공개 고정 분류 fixture다. 운영 API 응답, 상품 데이터, 사용자 정보와 환경 설정을 포함하지 않는다. CI가 ignore된 docs/registration-metadata.json에 의존하지 않게 사용한다.

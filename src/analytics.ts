@@ -72,11 +72,13 @@ export function usePageView() {
   const { pathname, search } = useLocation();
   useEffect(() => {
     if (!gaId() || !window.gtag) return;
-    const path = pathname + search;
+    // 광고 공급자 귀환의 원본 쿼리는 어떤 분석 필드에도 포함하지 않는다.
+    const advertisingReturn = pathname.startsWith('/seller/advertising/toss/');
+    const path = pathname + (advertisingReturn ? '' : search);
     const t = setTimeout(() => {
       if (path === lastPath || !consentedId) return;
       lastPath = path;
-      gtag('event', 'page_view', { page_path: path, page_title: document.title, page_location: location.href });
+      gtag('event', 'page_view', { page_path: path, page_title: document.title, page_location: advertisingReturn ? `${location.origin}${location.pathname}#${pathname}` : location.href });
     }, SETTLE_MS);
     return () => clearTimeout(t); // 그 사이 다른 경로로 바뀌면(리다이렉트) 이전 경로는 보내지 않는다
   }, [pathname, search]);

@@ -68,7 +68,7 @@ export function mergeAdminProductList(s: State, items: Product[]) {
   for (const p of items) {
     const i = s.products.findIndex(x => x.id === p.id);
     if (i < 0) s.products.push(p);
-    else { const o = s.products[i]; s.products[i] = { ...o, sellerId: p.sellerId || o.sellerId, name: p.name, published: p.published, startsAt: p.startsAt, endsAt: p.endsAt, version: p.version, reviewStatus: p.reviewStatus, rejectionReason: p.reviewStatus === 'REJECTED' ? o.rejectionReason || '반려됨' : undefined }; }
+    else { const o = s.products[i]; s.products[i] = { ...o, advertising: p.advertising, sellerId: p.sellerId || o.sellerId, name: p.name, published: p.published, startsAt: p.startsAt, endsAt: p.endsAt, version: p.version, reviewStatus: p.reviewStatus, rejectionReason: p.reviewStatus === 'REJECTED' ? o.rejectionReason || '반려됨' : undefined }; }
   }
 }
 /** GET …/product-reviews/{id} — 상품 원본(version 포함) */

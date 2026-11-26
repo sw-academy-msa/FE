@@ -114,7 +114,7 @@ const TOSS = {
   // 추측(명세 없음): 비회원 결제 키(ANONYMOUS) — 저장된 카드·간편결제 없이 결제창이 열린다
   customerKey: (Toss: any) => Toss.ANONYMOUS as string,
 };
-function loadToss(): Promise<any> {
+export function loadToss(): Promise<any> {
   const w = window as any;
   if (w.TossPayments) return Promise.resolve(w.TossPayments);
   return new Promise((res, rej) => {

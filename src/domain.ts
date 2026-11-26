@@ -10,6 +10,7 @@ export interface Option { id: string; name: string; stock: number }
 export interface Dimension { name: string; values: string }
 type DraftAddresses = { dispatch: { postalCode: string; roadAddress: string; detailAddress: string | null } | null; return: { postalCode: string; roadAddress: string; detailAddress: string | null } | null };
 export interface Product {
+  /** 판매자 및 관리자 원본 관리 전용 광고 금융 투영이다. */ advertising?: import('./api/advertising').AdvertisingSummary;
   /** 판매자 초안 조회의 주소 스냅샷. 다른 기기에서 주소록 선택을 복원한다. 공개 상세에는 없음 */ draftAddresses?: DraftAddresses;
   id: string; sellerId: string; name: string; brand: string; category: string; description: string;
   images: string[]; originalUrl: string; price: number; shipping: number; maxPerAccount: number;
