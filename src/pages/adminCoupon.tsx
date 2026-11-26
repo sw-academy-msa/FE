@@ -224,7 +224,7 @@ function CampaignSheet({ definitions, definitionsLoading, onClose, onCreated }: 
     catch (e) { const x = adminCouponError(e, 'campaign'); setErrors(x.fields); setMessage(x.message); }
     finally { setBusy(false); }
   };
-  return <Modal title={pickProduct ? '적용 상품 고르기' : '캠페인 만들기'} onClose={pickProduct ? () => setPickProduct(false) : onClose}>
+  return <Modal title={pickProduct ? '적용 상품 고르기' : '캠페인 만들기'} onClose={onClose}>
     {pickProduct ? <CampaignProductPicker onClose={() => setPickProduct(false)} onSelect={p => { setProduct(p); set({ productId: p.id, definitionId: '' }); setPickProduct(false); }}/> : <div className="space-y-5">
       <Field label="종류" hint={f.kind === 'CLAIM' ? '링크(?campaign=코드)로 들어온 구매자가 직접 받아요.' : f.kind === 'MEMBER' ? '멤버십 결제가 될 때마다 회원에게 자동으로 발급돼요.' : 'AI 대상 이벤트(규칙)가 오면 그 상품용 쿠폰을 발급해요.'}>
         <div className="flex flex-wrap gap-2">{KINDS.map(k => <Chip key={k} selected={f.kind === k} onClick={() => set({ kind: k, definitionId: '', ruleCode: k === 'TARGETED' ? f.ruleCode : '' })}>{KIND_LABEL[k]}</Chip>)}</div>

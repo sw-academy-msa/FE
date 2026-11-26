@@ -61,12 +61,16 @@ const shot = async (page: Page, name: string, fullPage = true) => { if (SHOTS) a
 const sheet = (page: Page, name: string) => page.getByRole('dialog', { name });
 
 test('상품을 검색해 고른 캠페인은 PRODUCT 정의와 링크만 제공하고 선택 해제가 가능하다', async ({ page, context }) => {
+  test.skip(FLAG_OFF, '플래그 켬 서버 전용');
   const sv = server();
   sv.products = [{ id: '10000000-0000-4000-8000-000000000001', name: '광고용 셔츠', sellerId: 'seller-1', status: 'APPROVED', startsAt: '2026-11-25T00:00:00Z', endsAt: '2026-12-01T00:00:00Z', totalQuantity: 10, soldQuantity: 1, version: 1 }, { id: 'ended', name: '종료 상품', status: 'APPROVED', endsAt: '2026-11-01T00:00:00Z' }, { id: 'sold', name: '품절 상품', status: 'APPROVED', endsAt: '2026-12-01T00:00:00Z', totalQuantity: 1, soldQuantity: 1 }];
   await serve(page, sv); await login(page);
   await page.getByRole('button', { name: '쿠폰 관리' }).click();
   await page.getByRole('button', { name: '캠페인 만들기' }).click();
   const form = sheet(page, '캠페인 만들기');
+  await form.getByRole('button', { name: '상품 고르기' }).click();
+  await sheet(page, '적용 상품 고르기').getByRole('button', { name: '닫기', exact: true }).last().click();
+  await expect(form).toBeVisible();
   await form.getByRole('button', { name: '상품 고르기' }).click();
   const picker = sheet(page, '적용 상품 고르기');
   await expect(picker.getByText('종료 상품')).toHaveCount(0);
