@@ -51,7 +51,9 @@ export interface Application {
 }
 export interface Line { optionId: string; name: string; quantity: number }
 /** expiresAt이 없으면 서버가 아직 만료 시각을 주지 않은 것(다시 조회). failureCode가 있으면 만료가 아니라 주문 실패(state FAILED) */
-export interface Hold { id: string; userId: string; productId: string; lines: Line[]; createdAt?: number; expiresAt?: number; status: 'reserved' | 'pending' | 'consumed' | 'released'; orderId?: string; failureCode?: string }
+export interface Hold { id: string; userId: string; productId: string; lines: Line[]; createdAt?: number; expiresAt?: number; status: 'reserved' | 'pending' | 'consumed' | 'released'; orderId?: string; failureCode?: string; /** 서버 금액 요약(실제 모드) */ amounts?: OrderAmounts }
+/** 서버가 계산한 주문 금액 요약(쿠폰 할인, 멤버십 배송 할인 포함). 값이 없는 예전 주문은 undefined */
+export interface OrderAmounts { itemsAmount?: number; couponIssueId?: string; couponState?: string; couponRejectCode?: string; couponDiscount: number; originalShippingFee?: number; membershipShippingDiscount: number; effectiveShippingFee?: number; totalAmount?: number }
 export type OrderStatus = 'paid' | 'preparing' | 'shipping' | 'delivered' | 'cancelled' | 'refunded';
 export interface Order {
   id: string; userId: string; sellerId: string; productId: string; holdId: string; lines: Line[];
@@ -61,6 +63,7 @@ export interface Order {
   processedBy?: string; processedAt?: number;
   /** 결제 확정 시각(없으면 createdAt) · 상품의 출고 기한(영업일) */ paidAt?: number; dispatchDays?: number;
   /** 구매 확정 시각(구매자 확정 또는 배송 완료 7일 뒤 자동) */ purchaseConfirmedAt?: number;
+  /** 서버 금액 요약(쿠폰, 멤버십 배송 할인). 목록 응답에는 없다 */ amounts?: OrderAmounts;
 }
 /** 화면에 보이는 주문번호. 구매자·판매자·운영자가 같은 값을 보도록 주문 ID 앞 10자리를 쓴다 */
 export const orderNo = (id: string) => id.replace(/-/g, '').slice(0, 10).toUpperCase();
