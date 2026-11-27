@@ -774,11 +774,6 @@ export function WizardPage() {
     </>}
 
     {step === 4 && <>
-    {ADVERTISING && !revision && <section className="space-y-2 rounded-element border border-line p-4">
-      <label className="flex items-center gap-2"><input type="checkbox" checked={advertising} disabled={busy || adAmount < 1000} onChange={e => setAdvertising(e.target.checked)}/>광고 신청 안내에 동의하고 테스트 결제하기</label>
-      <p>예상 광고비 {money(adAmount)}</p><p className="text-footnote text-meta">판매가 × 최초 판매 수량 × 5%예요. 결제 전 서버 확정 금액을 확인해요. 승인 후 운영자가 5% 상품 쿠폰을 만들고 SNS에 안내해요. 최초 심사 반려나 결제 후 제출 실패 시 전액 취소하며, 그 외 환불은 운영자가 처리해요.</p>
-      {adAmount < 1000 && <p>광고비가 최소 1,000원 미만이면 신청할 수 없어요.</p>}
-    </section>}
     {revision && ADVERTISING && <Note>수정 심사에는 광고비를 다시 결제하지 않아요. 최초 결제 금액을 유지하며 수정 심사 반려로 광고 결제가 취소되지 않아요.</Note>}
     {!revision ? <>
       {/* AI 분석 상태: 1단계 다음에서 요청한 분석이 여기서 끝나면(화면을 떠났어도) 카테고리와 상품 정보, 질문이 바로 채워진다 */}
@@ -790,6 +785,12 @@ export function WizardPage() {
         </div> : null}
         <FieldError name="state"/>
       </section>
+
+    {ADVERTISING && !revision && <section className="space-y-2 rounded-element border border-line p-4">
+      <label className="flex items-center gap-2"><input type="checkbox" checked={advertising} disabled={busy || adAmount < 1000} onChange={e => setAdvertising(e.target.checked)}/>광고 신청 안내에 동의하고 테스트 결제하기</label>
+      <p>예상 광고비 {money(adAmount)}</p><p className="text-footnote text-meta">판매가 × 최초 판매 수량 × 5%예요. 결제 전 서버 확정 금액을 확인해요. 승인 후 운영자가 5% 상품 쿠폰을 만들고 SNS에 안내해요. 최초 심사 반려나 결제 후 제출 실패 시 전액 취소하며, 그 외 환불은 운영자가 처리해요.</p>
+      {adAmount < 1000 && <p>광고비가 최소 1,000원 미만이면 신청할 수 없어요.</p>}
+    </section>}
 
       <section data-field="category"><Label hint="· AI 추천 또는 직접 선택">카테고리</Label>
         <button type="button" onClick={openCategory} className="flex h-12 w-full items-center gap-2 border-b border-line text-left">
