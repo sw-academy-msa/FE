@@ -15,7 +15,7 @@ body { height: auto; min-height: 100%; overflow-x: clip; }
   /* 아이폰 세로와 가로 화면은 채우고 데스크톱의 390px 레이아웃은 유지한다. */
   [class~="max-w-[390px]"] { max-width: 100%; }
   body { padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px); }
-  nav[aria-label="하단 메뉴"] { padding-left: max(4px, env(safe-area-inset-left, 0px)); padding-right: max(4px, env(safe-area-inset-right, 0px)); }
+  nav[aria-label="하단 메뉴"] { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
   input, textarea, select { max-width: 100%; }
 }
 /* 예전 색 변수. 값은 src/theme/stockdrop.ts 한 곳에서만 정하고(Astryx 테마가 html에 --sd-color-*로 싣는다) 여기서는 가리키기만 한다 */
@@ -23,6 +23,7 @@ body { height: auto; min-height: 100%; overflow-x: clip; }
   --bg: var(--sd-color-bg);
   --surface: var(--sd-color-surface);
   --ink: var(--sd-color-ink);
+  --text: var(--sd-color-text);
   --muted: var(--sd-color-muted);
   --line: var(--sd-color-line);
   --blue: var(--sd-color-blue);
@@ -54,6 +55,9 @@ body { height: auto; min-height: 100%; overflow-x: clip; }
   /* 간격: Tailwind 간격 단위(p-4 = 4 x 단위)를 Astryx 간격 토큰(--spacing-1 = 4px)에 묶는다 */
   --spacing: var(--spacing-1);
   --color-ink: var(--sd-color-ink);
+  --color-text: var(--sd-color-text);
+  --color-tint: var(--sd-color-tint);
+  --color-tab-bar: var(--sd-color-tab-bar);
   --color-muted: var(--sd-color-muted);
   --color-aux: var(--sd-color-aux);
   --color-meta: var(--sd-color-meta);
@@ -111,15 +115,17 @@ body { height: auto; min-height: 100%; overflow-x: clip; }
   --radius-inner: var(--radius-inner);
   --radius-element: var(--radius-element);
   --radius-dialog: var(--sd-radius-dialog);
+  --radius-card: var(--sd-radius-card);
+  --radius-pill: var(--sd-radius-pill);
   --radius-container: var(--radius-container);
 }
 @layer base {
   html, body, #root { min-height: 100%; }
-  body { font-family: var(--font-family-body); background: var(--canvas); color: var(--ink); font-size: var(--sd-text-body); }
+  body { font-family: var(--font-family-body); background: var(--canvas); color: var(--text); font-size: var(--sd-text-body); }
   button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
   button:not(:disabled), a, select, summary { cursor: pointer; }
   button:disabled { cursor: not-allowed; }
-  button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, summary:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+  button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, summary:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
   input, textarea, select { accent-color: var(--ink); }
   textarea { resize: vertical; }
   .font-number { font-family: 'Inter', 'Noto Sans KR', sans-serif; }
@@ -128,19 +134,22 @@ body { height: auto; min-height: 100%; overflow-x: clip; }
 }
 @layer components {
   .btn { @apply inline-flex min-h-12 items-center justify-center gap-2 rounded-element px-4 text-body font-bold transition-opacity active:opacity-70 disabled:opacity-35; background: var(--ink); color: var(--surface); }
-  .btn-outline { @apply border; border-color: var(--line); color: var(--ink); background: var(--surface); }
-  .btn-buy { background: var(--red); }
-  .field { @apply min-h-11 w-full min-w-0 border-b bg-transparent py-2.5 text-body outline-none; border-color: var(--line); }
-  .field-box { @apply min-h-22 rounded-inner border p-3; background: var(--blue-soft); border-color: var(--line); }
+  .btn-outline { @apply border; border-color: var(--border); color: var(--text); background: var(--surface); }
+  .btn-buy { background: var(--action); }
+  /* 입력칸(시안 Input): 높이 48, 회색 면, 둥글기 14. 입력 중 주색 1.5px 안쪽 테두리, 오류(Field의 data-invalid) 빨강 1.5px */
+  .field { @apply min-h-12 w-full min-w-0 rounded-inner px-4 py-2.5 text-body outline-none; background: var(--soft); }
+  .field-box { @apply min-h-22 rounded-inner p-3; background: var(--soft); }
   .divider { @apply border-b; border-color: var(--line); }
   .muted { color: var(--muted); }
   .note { @apply rounded-inner p-3.5 text-footnote leading-[1.7]; background: var(--blue-soft); }
-  .field-line { @apply h-12 w-full min-w-0 border-b bg-transparent text-headline outline-none placeholder:text-placeholder; border-color: var(--line); }
+  .field-line { @apply h-12 w-full min-w-0 rounded-inner px-4 text-headline outline-none placeholder:text-placeholder; background: var(--soft); }
+  .field:focus, .field-line:focus, .field-box:focus, .field-box:focus-within { box-shadow: inset 0 0 0 1.5px var(--ink); }
+  [data-invalid] :is(.field, .field-box, .field-line) { box-shadow: inset 0 0 0 1.5px var(--red); }
   .label { @apply mb-2 block text-label font-medium; }
   /* Astryx Button은 내용을 말줄임 span 두 겹으로 감싼다. 지금 버튼처럼 아이콘과 글자가 버튼의 flex 항목이 되게(gap, justify 클래스 그대로) 풀어 준다 */
   .ax-btn > span:first-child, .ax-btn > span:first-child > span { display: contents; }
-  /* 꺼진 버튼은 지금 .btn처럼 35%로 흐리게(Astryx 기본 50%. 테마의 :disabled 덮어쓰기가 Astryx 꺼짐 스타일을 이기지 못해 여기서 맞춘다) */
-  .ax-btn:disabled { opacity: .35; }
+  /* 꺼진 버튼(시안 Button disabled): 선 색 면에 흐린 글자(테마의 :disabled 덮어쓰기가 Astryx 꺼짐 스타일을 이기지 못해 여기서 맞춘다) */
+  .ax-btn:disabled { opacity: 1; background: var(--divider); color: var(--placeholder); box-shadow: none; }
   /* <Theme>이 감싸는 div는 테마 본문 글자(터치 기기 16px)를 정한다(astryx-base 레이어라 이 레이어에서 되돌린다). 지금 화면은 body 13px을 그대로 물려받는다 */
   div[data-astryx-theme], .astryx-bottom-sheet { font: inherit; color: inherit; letter-spacing: inherit; }
 }
@@ -193,7 +202,7 @@ a.divider { transition: background-color 150ms ease; }
 
 nav[aria-label] a { position: relative; transition: color 160ms ease, transform 160ms cubic-bezier(.22, 1, .36, 1); }
 nav[aria-label] a:active { transform: scale(.98); }
-nav[aria-label] a[aria-current="page"]::after {
+nav[aria-label]:not([aria-label="하단 메뉴"]) a[aria-current="page"]::after {
   position: absolute; bottom: -2px; left: 50%; width: 4px; height: 4px;
   border-radius: 999px; background: currentColor; content: ""; transform: translateX(-50%);
 }
@@ -226,7 +235,7 @@ main { padding-top: calc(12px + env(safe-area-inset-top, 0px)); }
 
 /* 토스트: 화면 가운데 아래, 좌우 16px 여백(최대 너비는 화면 − 32px), 하단 메뉴·고정 버튼 위 */
 .toast-wrap { position: fixed; z-index: 100; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom, 0px) + 128px); display: flex; justify-content: center; padding: 0 16px; pointer-events: none; }
-.toast { box-sizing: border-box; max-width: min(358px, calc(100vw - 32px)); max-width: min(358px, 100%); border-radius: 6px; background: var(--ink); color: var(--surface); padding: 12px 16px; text-align: center; font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; animation: toast-up 220ms cubic-bezier(.22, 1, .36, 1) both; }
+.toast { box-sizing: border-box; max-width: min(358px, calc(100vw - 32px)); max-width: min(358px, 100%); border-radius: 6px; background: var(--text); color: var(--surface); padding: 12px 16px; text-align: center; font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; animation: toast-up 220ms cubic-bezier(.22, 1, .36, 1) both; }
 @keyframes toast-up { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
 
 .pb-safe { padding-bottom: max(16px, env(safe-area-inset-bottom, 0px)); }
@@ -237,3 +246,15 @@ body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: 
 /* iOS식 12선 로딩 표시(components/ui Spinner): 30도씩 끊어 돌아 선이 차례로 밝아지는 것처럼 보인다 */
 .ios-spinner { animation: ios-spin 1s steps(12) infinite; }
 @keyframes ios-spin { to { transform: rotate(360deg); } }
+
+/* 하단 메뉴(시안 Tab Bar): 반투명 흰 알약, 흐림, 안쪽 빛과 바깥 그림자. 선택 칸(tint)은 고른 탭으로 미끄러져 옮긴다 */
+.tab-bar { background: var(--sd-color-tab-bar); -webkit-backdrop-filter: blur(5px); backdrop-filter: blur(5px); box-shadow: inset 0 0 10px var(--sd-color-tab-glow), 0 8px 24px var(--sd-color-tab-shadow); }
+.tab-indicator { transition: transform 320ms var(--ease-move); }
+
+/* 누름 효과: 누르는 동안 0.97배(100ms). 아이폰 Safari는 문서에 touchstart가 걸려 있어야 :active가 터치에 반응한다(main.tsx) */
+.press { transition: transform 100ms ease-out; }
+.press:not(:disabled):active { transform: scale(.97); }
+
+/* 오류 흔들림: 입력칸과 오류 상자가 새로 틀렸을 때 한 번 */
+@keyframes sd-shake { 0%, 100% { transform: translateX(0); } 20%, 60% { transform: translateX(-6px); } 40%, 80% { transform: translateX(6px); } }
+.sd-shake { animation: sd-shake 320ms ease-in-out; }

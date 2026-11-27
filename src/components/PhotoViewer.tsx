@@ -31,6 +31,6 @@ export function PhotoViewer({ images, start = 0, onClose, panel }: { images: str
         <button aria-label="다음 사진" onClick={() => go(1)} className="absolute right-2 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full bg-black/50"><ChevronRight size={22}/></button>
       </>}
     </div>
-    {panel && <div className="max-h-[42%] overflow-y-auto bg-white p-4 text-ink">{panel}</div>}
+    {panel && <div className="max-h-[42%] overflow-y-auto bg-white p-4 text-text">{panel}</div>}
   </div>;
 }

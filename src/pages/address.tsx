@@ -86,11 +86,11 @@ export function AddressFormPage() {
         <div>{labelRow('배송지명')}{input('label', '배송지명', '예: 집, 회사')}</div>
         <div>{labelRow('받는 분', true)}{input('recipientName', '받는 분', '이름을 입력해 주세요')}</div>
         <div>{labelRow('연락처', true)}{input('recipientPhone', '연락처', "'-' 없이 숫자만 입력", { type: 'tel', inputMode: 'numeric' })}</div>
-        <div>{labelRow('주소', true)}
+        <div>{labelRow('주소', true)}<div className="space-y-2">
           <div className="flex items-center gap-3">{input('postalCode', '우편번호', '우편번호', { readOnly: true, onClick: openSearch })}<button type="button" onClick={openSearch} className="h-10 shrink-0 rounded-element border border-border px-3.5 text-label font-bold">주소 검색</button></div>
           <input aria-label="기본 주소" className="field-line text-aux!" value={value.roadAddress} placeholder="기본 주소" readOnly onClick={openSearch}/>
           {jibun && jibun !== value.roadAddress && <p className="mt-1 text-label text-meta">지번 {jibun}</p>}
-          {input('detailAddress', '상세 주소', '상세 주소를 입력해 주세요', { ref: detailRef })}
+          {input('detailAddress', '상세 주소', '상세 주소를 입력해 주세요', { ref: detailRef })}</div>
         </div>
         <div>{labelRow('배송 요청사항')}
           <label className="relative block"><select aria-label="배송 요청사항" className={`field-line appearance-none pr-8 ${value.deliveryMemo ? '' : 'text-placeholder'}`} value={value.deliveryMemo} onChange={e => set({ deliveryMemo: e.target.value })}><option value="">요청사항을 선택해 주세요</option>{DELIVERY_MEMOS.map(m => <option key={m} value={m}>{m}</option>)}{value.deliveryMemo && !DELIVERY_MEMOS.includes(value.deliveryMemo) && <option value={value.deliveryMemo}>{value.deliveryMemo}</option>}</select><ChevronDown size={18} className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 text-muted"/></label>

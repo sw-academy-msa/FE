@@ -338,7 +338,7 @@ export function AdminListPage() {
             <span className="text-footnote text-meta">{dateTime(app.submittedAt)} 접수</span>
             <div className="flex items-center gap-2">
               {tab === 'pending' && <DdayBadge ts={reviewDeadline(app.submittedAt)}/>}
-              <span className={`inline-flex h-4.5 items-center rounded-inner px-2 text-footnote font-bold ${app.status === 'approved' ? 'bg-soft text-ink' : 'bg-soft text-ink'}`}>
+              <span className={`inline-flex h-4.5 items-center rounded-inner px-2 text-footnote font-bold ${app.status === 'approved' ? 'bg-soft text-text' : 'bg-soft text-text'}`}>
                 {app.status === 'pending' ? '심사 대기' : app.apiStatus === 'CHANGES_REQUESTED' ? '보완 요청' : '승인 완료'}
               </span>
             </div>
@@ -944,7 +944,7 @@ export function AddressManagePage() {
         <section className="space-y-0">
           <div className="flex items-center gap-1 mb-2">
             <p className="text-label font-bold text-meta">다른 배송지</p>
-            <span className="text-label font-bold text-ink">{others.length}</span>
+            <span className="text-label font-bold text-text">{others.length}</span>
           </div>
           {others.map(addr => (
             <div key={addr.addressId} className="border-b border-divider py-2">

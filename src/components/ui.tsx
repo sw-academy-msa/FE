@@ -4,7 +4,8 @@ import { BottomSheet as AxBottomSheet } from '@astryxdesign/core/BottomSheet';
 import { Dialog as AxDialog } from '@astryxdesign/core/Dialog';
 import type { ButtonHTMLAttributes, MouseEvent, ReactNode } from 'react';
 import { Link, NavLink, useBlocker, useHref, useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Bell, Timer, X, Home, CalendarDays, Package, UserRound, ChevronRight, Info, Copy } from 'lucide-react';
+import { Bell, Timer, X, Package, Info, Copy, Check } from 'lucide-react';
+import { Icon } from './icons';
 import type { Product, Order } from '../domain';
 import { money, saleState, stockTotal } from '../domain';
 import { IMAGE_EXPIRED } from '../config';
@@ -22,7 +23,7 @@ export const useToast = () => useContext(ToastContext);
 /** 버튼 안 글자를 이어 붙인다. Astryx Button은 label을 접근 이름(aria-label)으로 쓰므로 보이는 글자와 같게 맞춘다 */
 const textOf = (node: ReactNode): string => node == null || typeof node === 'boolean' ? '' : typeof node === 'string' || typeof node === 'number' ? String(node) : Array.isArray(node) ? node.map(textOf).join('') : isValidElement<{ children?: ReactNode }>(node) ? textOf(node.props.children) : '';
 /**
- * 공통 버튼(Astryx Button). 기본은 검정, outline은 흰 바탕 테두리, buy는 빨강. disabled는 지금처럼 진짜 disabled로 둬서 Enter 제출과 :disabled 스타일을 지킨다.
+ * 공통 버튼(Astryx Button). 기본은 주색(파랑), outline은 흰 바탕 테두리, buy도 주색(시안 buy). disabled는 지금처럼 진짜 disabled로 둬서 Enter 제출과 :disabled 스타일을 지킨다.
  * closeSheet가 있으면 감싼 시트(Modal, BottomSheet)를 닫는다.
  * to가 있으면 화면 이동 링크(<a href>)로 그린다(예전 btn 클래스를 붙인 Link). state, replace는 react-router Link와 같다
  */
@@ -41,9 +42,39 @@ export function Button({ children, outline, buy, className = '', disabled, type 
   return <AxButton {...props} {...native} label={label} type={type as 'button' | 'submit' | 'reset'} href={link ? href : undefined} onClick={click} variant={outline ? 'secondary' : buy ? 'buy' : 'primary'} size="lg" isDisabled={disabled} className={`ax-btn ${className}`}>{children}</AxButton>;
 }
 
-export function Field({ label, hint, required, error, children }: { label: string; hint?: string; required?: boolean; error?: string; children: ReactNode }) { return <div><span className="label">{label}{required && <span className="muted ml-1 text-caption">· 필수</span>}</span>{children}{error && <p role="alert" className="mt-2 text-label text-red">{error}</p>}{hint && <p className="muted mt-2 text-caption leading-relaxed">{hint}</p>}</div>; }
+/** 오류 흔들림(한 번). 움직임 줄이기 설정이면 흔들지 않는다 */
+function shake(el: HTMLElement | null) { if (!el || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return; el.classList.remove('sd-shake'); void el.offsetWidth; el.classList.add('sd-shake'); }
+let focusQueued = false;
+/** 새로 틀린 칸들 중 화면 맨 위 칸의 입력으로 포커스를 옮긴다. 이미 입력칸에 있으면(입력 중) 옮기지 않는다 */
+function focusFirstInvalid() {
+  if (focusQueued) return; focusQueued = true;
+  requestAnimationFrame(() => {
+    focusQueued = false;
+    const a = document.activeElement;
+    if (a instanceof HTMLInputElement || a instanceof HTMLTextAreaElement || a instanceof HTMLSelectElement) return;
+    document.querySelector<HTMLElement>('[data-invalid] :is(input, textarea, select)')?.focus();
+  });
+}
+/** 오류가 새로 생기거나 바뀌면 흔들고(focus면 첫 틀린 칸으로 포커스). 화면이 열릴 때부터 있던 오류는 그대로 둔다 */
+function useErrorCue(error: string | undefined, ref: { current: HTMLElement | null }, focus: boolean) {
+  const mounted = useRef(false);
+  useEffect(() => {
+    if (!mounted.current) { mounted.current = true; return; }
+    if (!error) return;
+    shake(ref.current); if (focus) focusFirstInvalid();
+  }, [error, ref, focus]);
+}
+export function Field({ label, hint, required, error, children }: { label: string; hint?: string; required?: boolean; error?: string; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useErrorCue(error, ref, true);
+  return <div ref={ref} data-invalid={error ? '' : undefined}><span className="label">{label}{required && <span className="muted ml-1 text-caption">· 필수</span>}</span>{children}{error && <p role="alert" className="mt-2 text-label text-red">{error}</p>}{hint && <p className="muted mt-2 text-caption leading-relaxed">{hint}</p>}</div>;
+}
 export function Note({ title, children, green = false }: { title?: string; children: ReactNode; green?: boolean }) { return <div className={`note ${green ? 'bg-green-soft!' : ''}`}>{title && <h3 className="mb-1 font-bold">{title}</h3>}<div className="muted">{children}</div></div>; }
-export function ErrorBox({ message }: { message: string }) { return message ? <div role="alert" className="rounded-inner bg-red-soft p-3 text-label leading-relaxed text-red">{message}</div> : null; }
+export function ErrorBox({ message }: { message: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useErrorCue(message, ref, false);
+  return message ? <div ref={ref} role="alert" className="rounded-inner bg-red-soft p-3 text-label leading-relaxed text-red">{message}</div> : null;
+}
 /** iOS식 12선 로딩 표시. 12개 선이 한 칸씩(steps) 돌아 끝으로 갈수록 흐려진다. 색은 부모 글자색(기본 보조색) */
 export function Spinner({ size = 22, className = 'text-muted' }: { size?: number; className?: string }) {
   return <svg role="progressbar" aria-label="불러오는 중" width={size} height={size} viewBox="0 0 24 24" className={`ios-spinner ${className}`}>
@@ -59,11 +90,11 @@ export function Empty({ title, message, children }: { title: string; message?: s
 /** backTo: 뒤로 가기 버튼이 이전 기록 대신 갈 화면(탭 전환 기록이 쌓이는 화면 등) */
 export function Header({ title, subtitle, back = true, action, bare = false, backTo, onBack }: { title: string; subtitle?: string; back?: boolean; action?: ReactNode; bare?: boolean; backTo?: string; onBack?: () => void }) {
   const navigate = useNavigate();
-  return <header className={bare ? 'mb-5 pb-3' : 'divider mb-5 pb-3'}><div className="flex min-h-9.5 items-center gap-3">{back && <button type="button" aria-label="이전 화면" onClick={() => onBack ? onBack() : backTo ? navigate(backTo, { replace: true }) : window.history.state?.idx > 0 ? navigate(-1) : navigate('/')} className="-ml-1 grid h-9 w-9 shrink-0 place-items-center"><ArrowLeft size={20}/></button>}<h1 className="min-w-0 flex-1 text-title font-bold tracking-[-.5px]">{title}</h1>{action}</div>{subtitle && <p className="muted mt-1 text-footnote leading-relaxed">{subtitle}</p>}</header>;
+  return <header className={bare ? 'mb-5 pb-3' : 'divider mb-5 pb-3'}><div className="flex min-h-9.5 items-center gap-3">{back && <button type="button" aria-label="이전 화면" onClick={() => onBack ? onBack() : backTo ? navigate(backTo, { replace: true }) : window.history.state?.idx > 0 ? navigate(-1) : navigate('/')} className="press -ml-3 grid h-11 w-11 shrink-0 place-items-center"><Icon name="Back" size={24}/></button>}<h1 className="min-w-0 flex-1 text-title font-bold tracking-[-.5px]">{title}</h1>{action}</div>{subtitle && <p className="muted mt-1 text-footnote leading-relaxed">{subtitle}</p>}</header>;
 }
-export function Badge({ children, live = false, red = false }: { children: ReactNode; live?: boolean; red?: boolean }) { return <span className={`inline-flex w-fit items-center rounded-badge px-2 py-1 text-caption font-semibold ${live ? 'bg-green-soft text-green' : red ? 'bg-red-soft text-red' : 'bg-blue-soft text-ink'}`}>{children}</span>; }
+export function Badge({ children, live = false, red = false }: { children: ReactNode; live?: boolean; red?: boolean }) { return <span className={`inline-flex w-fit items-center rounded-badge px-2 py-1 text-caption font-semibold ${live ? 'bg-green-soft text-green' : red ? 'bg-red-soft text-red' : 'bg-blue-soft text-text'}`}>{children}</span>; }
 export function InfoRow({ label, value, strong = false }: { label: string; value: ReactNode; strong?: boolean }) { return <div className="flex items-start justify-between gap-4 py-1"><span className="muted shrink-0 text-label">{label}</span><span className={`min-w-0 text-right text-label leading-relaxed ${strong ? 'font-bold' : ''}`}>{value}</span></div>; }
-export function MenuRow({ label, to, children }: { label: string; to: string; children?: ReactNode }) { return <Link to={to} className="divider flex min-h-13 items-center gap-3"><span className="min-w-0 flex-1 text-body">{label}</span>{children}<ChevronRight size={17} className="muted"/></Link>; }
+export function MenuRow({ label, to, children }: { label: string; to: string; children?: ReactNode }) { return <Link to={to} className="divider flex min-h-13 items-center gap-3"><span className="min-w-0 flex-1 text-body">{label}</span>{children}<Icon name="Caret" size={18} className="muted shrink-0"/></Link>; }
 const signedUrl = (u: string) => /[?&]X-Amz-(Expires|Signature)=/i.test(u);
 export function ProductImage({ src, alt, className = '' }: { src: string; alt: string; className?: string }) {
   const reported = useRef('');
@@ -190,7 +221,7 @@ function Sheet({ label, onClose, restoreOnUnmount = true, padding, children }: {
     roots.forEach(({ element }) => element.classList.add('overflow-hidden'));
     return () => roots.forEach(({ element, locked }) => { if (!locked) element.classList.remove('overflow-hidden'); });
   }, []);
-  return <SheetClose.Provider value={requestClose}><AxBottomSheet ref={panel} label={label} onOpenChange={next => { if (!next) requestClose(); }} isOpen={open} finalFocusRef={opener} height="hug" padding={padding} className="mx-auto max-w-[390px] border-0 text-ink">{children}</AxBottomSheet></SheetClose.Provider>;
+  return <SheetClose.Provider value={requestClose}><AxBottomSheet ref={panel} label={label} onOpenChange={next => { if (!next) requestClose(); }} isOpen={open} finalFocusRef={opener} height="hug" padding={padding} className="mx-auto max-w-[390px] border-0 text-text">{children}</AxBottomSheet></SheetClose.Provider>;
 }
 /** 시트 안의 닫기 버튼이 내려가는 움직임과 함께 닫도록 */
 const SheetClose = createContext<(() => void) | null>(null);
@@ -203,15 +234,25 @@ export const useFromTab = () => !!(useLocation().state as { tab?: boolean } | nu
 export function BottomNav() {
   const { pathname } = useLocation();
   // 지금 보고 있는 탭을 다시 누르면 맨 위로 올리고 그 화면을 새로 그려 데이터를 다시 받는다
-  const items = [['/', '홈', Home], ['/schedule', '판매 일정', CalendarDays], ['/orders', '주문', Package], ['/my', '마이', UserRound]] as const;
-  return <nav aria-label="하단 메뉴" className="fixed bottom-0 left-1/2 z-30 w-full max-w-[390px] -translate-x-1/2 border-t border-line bg-surface px-1 pb-[max(14px,env(safe-area-inset-bottom))] pt-2"><div className="flex">{items.map(([to, label, Icon]) => <NavLink end key={to} to={to} state={{ tab: true }} onClick={e => { if (pathname === to) { e.preventDefault(); window.scrollTo(0, 0); window.dispatchEvent(new Event(TAB_REFRESH)); } }} className={({ isActive }) => `flex min-h-11 flex-1 flex-col items-center justify-center gap-1 text-[9px] ${isActive ? 'font-bold text-ink' : 'text-muted'}`}><Icon size={20} strokeWidth={1.5}/>{label}</NavLink>)}</div></nav>;
+  const items = [['/', '홈', 'Home'], ['/schedule', '판매 일정', 'Calendar'], ['/orders', '주문', 'Package'], ['/my', '마이', 'User']] as const;
+  const active = items.findIndex(([to]) => to === pathname);
+  // 시안 Tab Bar: 높이 66 알약, 선택 칸(tint)이 고른 탭으로 미끄러진다. 바닥에서 max(14px, 안전 영역)
+  return <nav aria-label="하단 메뉴" className="fixed bottom-0 left-1/2 z-30 w-full max-w-[390px] -translate-x-1/2 px-4 pb-[max(14px,env(safe-area-inset-bottom))]"><div className="tab-bar relative flex h-16.5 rounded-pill border border-border p-[5px]">
+    {active >= 0 && <span aria-hidden className="tab-indicator absolute inset-y-[5px] left-[5px] w-[calc((100%-10px)/4)] rounded-pill bg-tint" style={{ transform: `translateX(${active * 100}%)` }}/>}
+    {items.map(([to, label, icon]) => <NavLink end key={to} to={to} state={{ tab: true }} onClick={e => { if (pathname === to) { e.preventDefault(); window.scrollTo(0, 0); window.dispatchEvent(new Event(TAB_REFRESH)); } }} className={({ isActive }) => `relative flex h-14 flex-1 flex-col items-center justify-center gap-[3px] text-[11px] ${isActive ? 'font-extrabold text-ink' : 'font-medium text-text'}`}>{({ isActive }) => <><Icon name={`${icon}${isActive ? 'On' : 'Off'}`} size={25}/>{label}</>}</NavLink>)}
+  </div></nav>;
 }
 export async function copyText(text: string) { if (!navigator.clipboard) throw new Error('클립보드를 사용할 수 없습니다. 번호를 길게 눌러 복사해 주세요.'); await navigator.clipboard.writeText(text); }
-export function CopyButton({ value }: { value: string }) { const toast = useToast(); return <button aria-label="복사" className="grid h-8 w-8 place-items-center" onClick={() => copyText(value).then(() => toast('복사했습니다.')).catch(e => toast(e.message))}><Copy size={16} className="muted"/></button>; }
+/** 복사 버튼: 복사하면 잠시 체크 표시로 바뀐다 */
+export function CopyButton({ value }: { value: string }) {
+  const toast = useToast(); const [done, setDone] = useState(false);
+  useEffect(() => { if (!done) return; const t = setTimeout(() => setDone(false), 1500); return () => clearTimeout(t); }, [done]);
+  return <button aria-label="복사" className="press grid h-8 w-8 place-items-center" onClick={() => copyText(value).then(() => { setDone(true); toast('복사했습니다.'); }).catch(e => toast(e.message))}>{done ? <Check size={16} className="text-ink"/> : <Copy size={16} className="muted"/>}</button>;
+}
 export function Unavailable({ message = '접근할 수 없는 화면입니다.' }: { message?: string }) { return <><Header title="접근 안내"/><Empty title={message} message="이 화면을 사용할 수 있는 계정으로 전환해 주세요."><Button to="/my">마이페이지로</Button></Empty></>; }
 export function Loading({ text = '확인하고 있어요…' }: { text?: string }) { return <div className="muted flex items-center justify-center gap-2 py-10 text-label"><Info size={16}/>{text}</div>; }
 
-/** 바텀시트 — 상단 모서리 16, 손잡이, 뒤 배경 어둡게(Astryx BottomSheet) */
+/** 바텀시트 — 상단 모서리 28, 손잡이, 뒤 배경 어둡게(Astryx BottomSheet) */
 export function BottomSheet({ title, children, onClose }: { title?: string; children: ReactNode; onClose: () => void }) {
   return <Sheet label={title ?? '선택'} onClose={onClose} padding={4}>{title && <div className="-mx-4 mb-4 mt-1 flex items-center justify-between border-b border-line px-4 pb-3"><h2 className="text-headline font-bold">{title}</h2><SheetCloseButton onClose={onClose} className="-mr-3 grid h-11 w-11 place-items-center" iconClassName="muted"/></div>}{children}</Sheet>;
 }
@@ -220,28 +261,28 @@ export function BottomSheet({ title, children, onClose }: { title?: string; chil
 export function QuantityStepper({ value, min = 0, max, onChange }: { value: number; min?: number; max: number; onChange: (n: number) => void }) {
   return (
     <div className="inline-flex items-center gap-3">
-      <button aria-label="수량 감소" onClick={() => onChange(Math.max(min, value - 1))} disabled={value <= min} className="grid h-8 w-8 place-items-center rounded-full border border-border text-title font-bold disabled:opacity-30">−</button>
+      <button aria-label="수량 감소" onClick={() => onChange(Math.max(min, value - 1))} disabled={value <= min} className="press grid h-8 w-8 place-items-center rounded-full border border-border text-title font-bold disabled:opacity-30">−</button>
       <span className="font-number w-6 text-center text-subhead font-bold">{value}</span>
-      <button aria-label="수량 증가" onClick={() => onChange(Math.min(max, value + 1))} disabled={value >= max} className="grid h-8 w-8 place-items-center rounded-full border border-border text-title font-bold disabled:opacity-30">+</button>
+      <button aria-label="수량 증가" onClick={() => onChange(Math.min(max, value + 1))} disabled={value >= max} className="press grid h-8 w-8 place-items-center rounded-full border border-border text-title font-bold disabled:opacity-30">+</button>
     </div>
   );
 }
 
-/** 칩 — 선택 시 ink 바탕 흰 글자, 기본 흰 바탕 border */
+/** 칩(시안 Chip): 높이 44 알약. 선택은 주색 바탕 흰 글자, 기본은 흰 바탕 테두리 */
 export function Chip({ selected, onClick, children }: { selected: boolean; onClick: () => void; children: ReactNode }) {
   return (
-    <button onClick={onClick} aria-pressed={selected} className={`inline-flex h-8 items-center rounded-full px-3.5 text-label font-medium transition-colors ${selected ? 'bg-ink text-surface' : 'border border-border bg-surface text-ink'}`}>
+    <button onClick={onClick} aria-pressed={selected} className={`press inline-flex h-11 items-center rounded-pill px-4 text-callout transition-colors ${selected ? 'bg-ink font-bold text-surface' : 'border border-border bg-surface font-medium text-aux-strong'}`}>
       {children}
     </button>
   );
 }
 
 /**
- * 가운데 대화상자(Astryx Dialog, native dialog). 폭 318, 모서리 8, 안쪽 여백 24, 그림자 없음은 지금 디자인 그대로.
+ * 가운데 대화상자(Astryx Dialog, native dialog). 폭 318, 모서리 28(시안 Popup), 안쪽 여백 24, 그림자 없음.
  * onDismiss가 있으면 Esc로 닫히고(form), dismissOnBackdrop이면 바깥 누르기로도 닫힌다(info). 없으면 버튼으로만 닫힌다(required)
  */
 function CenterDialog({ title, onDismiss, dismissOnBackdrop = false, children }: { title: string; onDismiss?: () => void; dismissOnBackdrop?: boolean; children: ReactNode }) {
-  return <AxDialog isOpen onOpenChange={open => { if (!open) onDismiss?.(); }} purpose={!onDismiss ? 'required' : dismissOnBackdrop ? 'info' : 'form'} width={318} maxHeight="92dvh" padding={6} aria-label={title} className="max-w-[calc(100%-32px)] rounded-dialog bg-surface text-ink shadow-none">
+  return <AxDialog isOpen onOpenChange={open => { if (!open) onDismiss?.(); }} purpose={!onDismiss ? 'required' : dismissOnBackdrop ? 'info' : 'form'} width={318} maxHeight="92dvh" padding={6} aria-label={title} className="max-w-[calc(100%-32px)] rounded-dialog bg-surface text-text shadow-none">
     <div className="space-y-4"><h2 className="text-headline font-bold">{title}</h2>{children}</div>
   </AxDialog>;
 }
@@ -328,7 +369,7 @@ export function LoginRequired({ returnTo, onClose }: { returnTo: string; onClose
   </CenterDialog>;
 }
 
-/** 토글 스위치 — 48×28, 켜짐 #222222 */
+/** 토글 스위치(시안 Toggle) — 52×32, 손잡이 26, 켜짐 주색, 꺼짐 테두리 색 */
 export function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
-  return <button type="button" role="switch" aria-label={label} aria-checked={checked} onClick={() => onChange(!checked)} className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${checked ? 'bg-ink' : 'bg-border'}`}><span className={`absolute top-[3px] h-5.5 w-5.5 rounded-full bg-white shadow-sm transition-all ${checked ? 'left-[23px]' : 'left-[3px]'}`}/></button>;
+  return <button type="button" role="switch" aria-label={label} aria-checked={checked} onClick={() => onChange(!checked)} className={`relative h-8 w-13 shrink-0 rounded-full transition-colors ${checked ? 'bg-ink' : 'bg-border'}`}><span className={`absolute top-[3px] h-6.5 w-6.5 rounded-full bg-surface transition-all ${checked ? 'left-[23px]' : 'left-[3px]'}`}/></button>;
 }

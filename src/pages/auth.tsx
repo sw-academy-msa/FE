@@ -333,7 +333,7 @@ export function NotificationSettingsPage() {
       <button className="muted py-2 text-body" onClick={() => proceed()}>건너뛰기</button>
     </header>
     <div className="mb-1 h-[3px] w-full bg-line"><div className="h-[3px] w-full rounded-r-full bg-ink"/></div>
-    <div className="flex justify-end py-2 text-footnote text-muted"><span className="font-bold text-ink">1</span><span> / 1</span></div></>}
+    <div className="flex justify-end py-2 text-footnote text-muted"><span className="font-bold text-text">1</span><span> / 1</span></div></>}
     <div className="flex-1 space-y-5 pt-2">
       <div className="flex flex-col items-center gap-3 py-6">
         <div className="flex h-14 w-14 items-center justify-center rounded-full bg-line"><Bell size={22} strokeWidth={1.5}/></div>

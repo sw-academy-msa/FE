@@ -155,7 +155,7 @@ const Label = ({ children, hint }: { children: ReactNode; hint?: string }) => <p
 /** AI 분석 상태 상자. 색에만 기대지 않게 아이콘과 제목이 상태를 말한다: 진행 중 회색(반짝), 완료 초록(체크), 미완료 노랑(주의) */
 type AiTone = 'progress' | 'done' | 'warn';
 const AI_TONE: Record<AiTone, { box: string; head: string; Icon: typeof Sparkles }> = {
-  progress: { box: 'bg-soft', head: 'text-ink', Icon: Sparkles },
+  progress: { box: 'bg-soft', head: 'text-text', Icon: Sparkles },
   done: { box: 'bg-positive-soft', head: 'text-positive-strong', Icon: CheckCircle2 },
   warn: { box: 'border border-gauge-warning bg-caution-soft', head: 'text-caution', Icon: AlertTriangle },
 };

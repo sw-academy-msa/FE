@@ -180,18 +180,18 @@ test('상자 색은 상태별: 진행 중 회색, 완료 초록, 판매 분류 �
   await fillStep1(page); await next(page); await expect(stepGroup(page, 2)).toBeVisible();
   const top = page.locator('[data-tone]').first();
   await expect(top).toHaveAttribute('data-tone', 'progress'); await expect(top).toHaveText('AI가 사진을 분석하고 있어요');
-  expect(await top.evaluate(el => getComputedStyle(el).backgroundColor)).toBe('rgb(245, 245, 245)');
+  expect(await top.evaluate(el => getComputedStyle(el).backgroundColor)).toBe('rgb(240, 242, 244)');
   await expect(top).toHaveAttribute('data-tone', 'done', { timeout: 15000 }); await expect(top).toHaveText('AI 분석 결과를 반영했어요');
   await page.goto('/#/seller/new?step=3'); await expect(stepGroup(page, 3)).toBeVisible(); await expect(page.locator('[data-tone="done"]')).toBeVisible();
   await page.goto('/#/seller/new?step=4'); await expect(box(page)).toHaveAttribute('data-tone', 'done');
-  expect(await bg(page)).toBe('rgb(238, 248, 243)');
+  expect(await bg(page)).toBe('rgb(224, 242, 236)');
   for (const [o, text] of [['unsupported', '판매 가능한 분류가 아닌 사진으로 보여요'], ['uncertain', '사진이 선명하지 않아 판단하지 못했어요'], ['failed', 'AI가 사진을 분석하지 못했어요']] as const) {
     await seller(page, o); await fillStep1(page); await next(page);
     await page.goto('/#/seller/new?step=4');
     await expect(box(page)).toHaveAttribute('data-tone', 'warn', { timeout: 15000 });
     // 상자 글은 아이콘과 한 줄뿐(설명 줄 없음), 버튼은 유지
     await expect(box(page).locator('p')).toHaveCount(1); await expect(box(page).locator('p')).toHaveText(text);
-    expect(await bg(page)).toBe('rgb(255, 247, 224)');
+    expect(await bg(page)).toBe('rgb(251, 240, 220)');
     await expect(box(page).getByRole('button', { name: '사진 바꾸기' })).toBeVisible(); await expect(box(page).getByRole('button', { name: '카테고리 직접 선택' })).toBeVisible();
     for (const b of await box(page).getByRole('button').all()) expect((await b.boundingBox())!.height).toBeGreaterThanOrEqual(44);
   }
