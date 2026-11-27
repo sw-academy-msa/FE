@@ -25,7 +25,7 @@ export interface Product {
   /** 타 플랫폼 판매가 확인 결과 — 백엔드 요청 필드 */ reference?: ReferenceListing;
   /** 판매자 API 상품: 낙관적 잠금 version, 심사 상태, 서버 이미지 id(images와 같은 순서) */ version?: number; reviewStatus?: 'DRAFT' | 'IN_REVIEW' | 'REJECTED' | 'APPROVED'; imageIds?: string[]; /** 서버 이미지 바이트 수(imageIds와 같은 순서) */ imageSizes?: number[];
   /** 판매자 관리 목록 요약(옵션 없이 받은 목록 항목): 한정 수량 합계·판매(확정) 수량 */ listQuantity?: { total: number; sold: number };
-  /** 서버(실제 API)에서 받은 상품의 재고 요약. 있으면 options[].stock은 서버의 남은 수량이고 로컬 주문·확보로 다시 빼지 않는다 */ live?: { initial: number; available: number };
+  /** 서버(실제 API)에서 받은 상품의 재고 요약. 있으면 options[].stock은 서버의 남은 수량이고 로컬 주문·확보로 다시 빼지 않는다 */ live?: { initial: number; available: number; confirmed?: number; approximate?: boolean };
 }
 export interface User { id: string; name: string; email: string; phone: string; seller: boolean; admin: boolean }
 export interface AuthData {

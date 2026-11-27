@@ -1,0 +1,32 @@
+[
+  {
+    "name": "결제 대기는 일시 품절이며 재조회 후 구매 가능",
+    "temporary": true,
+    "stock": {
+      "initialQuantity": 10,
+      "confirmedQuantity": 9,
+      "availableQuantity": 0,
+      "approximate": false
+    }
+  },
+  {
+    "name": "확정 완판은 기존 품절",
+    "temporary": false,
+    "stock": {
+      "initialQuantity": 10,
+      "confirmedQuantity": 10,
+      "availableQuantity": 0,
+      "approximate": false
+    }
+  },
+  {
+    "name": "근사 재고는 기존 품절",
+    "temporary": false,
+    "stock": {
+      "initialQuantity": 10,
+      "confirmedQuantity": 9,
+      "availableQuantity": 0,
+      "approximate": true
+    }
+  }
+]

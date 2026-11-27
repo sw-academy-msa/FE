@@ -7,6 +7,7 @@ import { Link, NavLink, useBlocker, useHref, useLocation, useNavigate } from 're
 import { ArrowLeft, Bell, Timer, X, Home, CalendarDays, Package, UserRound, ChevronRight, Info, Copy } from 'lucide-react';
 import type { Product, Order } from '../domain';
 import { money, saleState, stockTotal } from '../domain';
+import { temporarySoldOut, TEMPORARY_SOLD_OUT_NOTE } from './stockPresentation';
 import { IMAGE_EXPIRED } from '../config';
 import { IMAGE_START, imageView, onImageError, onImageLoad } from '../productImage';
 import { useStore } from '../store';
@@ -91,6 +92,7 @@ export function ProductCard({ product: p, now, availableCount, notified, onNotif
   const status = saleState(p, now);
   const total = stockTotal(p), left = availableCount ?? total;
   const soldOut = (status === '판매 중' && availableCount === 0) || (status === '판매 종료' && !!p.soldOutAt);
+  const temporary = temporarySoldOut(p, now);
   const urgent = status === '판매 중' && !soldOut && p.endsAt - now <= 3_600_000;
   // 내가 재고를 확보해 결제 중이거나 이미 산 상품은 품절 대신 내 상태를 보여 준다
   const st = useStore(), mine = st.activeUserId;
@@ -105,7 +107,7 @@ export function ProductCard({ product: p, now, availableCount, notified, onNotif
       {urgent && <span className="absolute bottom-2 left-2 rounded-inner bg-urgent px-1.5 py-1 text-footnote font-bold text-white">마감 임박</span>}
       {myHold ? <span className="absolute inset-x-2 bottom-2 rounded-inner bg-ink px-2 py-1.5 text-center text-label font-bold text-white">확보한 재고 · 결제 이어하기</span>
         : myOrder && soldOut ? <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-inner bg-ink px-3 py-1.5 text-label font-bold text-white">구매 완료</span>
-        : soldOut && <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-inner bg-sold-out px-3 py-1.5 text-label font-bold text-white">SOLD OUT</span>}
+        : soldOut && <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-inner bg-sold-out px-3 py-1.5 text-label font-bold text-white">{temporary ? '일시 품절' : 'SOLD OUT'}</span>}
     </div>
     <p className="mt-2.5 text-footnote font-bold text-aux">{p.brand}</p>
     <h3 className={`mt-0.5 text-callout ${soldOut ? 'text-meta' : ''}`}>{p.name}</h3>
@@ -114,7 +116,7 @@ export function ProductCard({ product: p, now, availableCount, notified, onNotif
     {status === '판매 예정' && <><p className="mt-2 text-label text-aux">{total}개 한정 · 1인 {p.maxPerAccount}개</p>{onNotify && <button type="button" onClick={e => { e.preventDefault(); onNotify(); }} className={`mt-2 flex h-8 w-full items-center justify-center gap-1 rounded-inner text-label font-bold ${notified ? 'bg-ink text-white' : 'border border-border'}`}><Bell size={13}/>{notified ? '알림 설정됨' : '오픈 알림 받기'}</button>}</>}
     {/* 판매 중에도 신청한 상품은 가격 인하·수량 임박 알림을 받으므로 끌 수 있게 둔다 */}
     {status === '판매 중' && notified && onNotify && <button type="button" onClick={e => { e.preventDefault(); onNotify(); }} className="mt-2 flex h-8 w-full items-center justify-center gap-1 rounded-inner border border-border text-label font-bold"><Bell size={13}/>상품 알림 끄기</button>}
-    {soldOut && <p className="mt-2 text-label text-aux">{soldOutLabel(p)}</p>}
+    {soldOut && <p className="mt-2 text-label text-aux">{temporary ? TEMPORARY_SOLD_OUT_NOTE : soldOutLabel(p)}</p>}
     {status === '판매 종료' && !soldOut && <p className="mt-2 text-label text-aux">판매 종료</p>}
   </Link>;
 }
