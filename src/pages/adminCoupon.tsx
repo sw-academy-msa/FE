@@ -22,6 +22,9 @@ import { AdminReviewThumbnail } from '../components/AdminReviewThumbnail';
 import { ymd } from './membershipCoupon';
 
 const period = (a: string, b: string) => `${ymd(a)} – ${ymd(b)}`;
+const claimHint = (productId?: string | null) => productId
+  ? '이 상품에서만 쓰는 쿠폰이에요. 만든 뒤 상품 링크를 복사해 공유하면 링크로 들어온 구매자가 받아요. 상품 전용 쿠폰은 알림 보내기를 쓸 수 없어요.'
+  : '구매자가 직접 받는 쿠폰이에요. 상품 링크에 ?campaign=코드를 붙여 공유하거나, 만든 뒤 [알림 보내기]로 광고 수신 동의 구매자에게 알림을 보낼 수 있어요.';
 const shortPeriod = (a: string, b: string) => `${ymd(a).slice(5)}–${ymd(b).slice(5)}`;
 const won = (n: number | null | undefined) => (n == null ? '-' : money(n));
 
@@ -98,7 +101,7 @@ function CampaignItem({ campaign: c, onChanged }: { campaign: CampaignDto; onCha
     {confirm && <ConfirmSheet title={active ? '캠페인을 일시정지할까요?' : '캠페인을 활성화할까요?'} action={active ? '일시정지' : '활성화'} done={active ? '일시정지했어요.' : '활성화했어요.'}
       run={() => active ? pauseCampaign(c.id) : activateCampaign(c.id)} onClose={() => setConfirm(false)} onDone={onChanged}>
       {active ? <>새 발급을 멈춰요. 이미 받은 쿠폰은 그대로 쓸 수 있어요. 다시 활성화하면 발급을 이어 가요.</>
-        : <>발급 기간({period(c.startsAt, c.endsAt)}) 안에서 발급을 시작해요. {c.kind === 'CLAIM' ? '링크로 들어온 구매자가 쿠폰을 받을 수 있어요.' : c.kind === 'MEMBER' ? '멤버십 결제가 되면 회원에게 자동으로 발급돼요.' : 'AI 대상 이벤트가 오면 맞춤 쿠폰을 발급해요.'}</>}
+        : <>발급 기간({period(c.startsAt, c.endsAt)}) 안에서 발급을 시작해요. {c.kind === 'CLAIM' ? claimHint(c.productId) : c.kind === 'MEMBER' ? '멤버십 결제가 되면 회원에게 자동으로 발급돼요.' : 'AI 대상 이벤트가 오면 맞춤 쿠폰을 발급해요.'}</>}
     </ConfirmSheet>}
     {stats && <StatsSheet campaign={c} onClose={() => setStats(false)}/>}
   </ItemRow>;
@@ -226,7 +229,7 @@ function CampaignSheet({ definitions, definitionsLoading, onClose, onCreated }: 
   };
   return <Modal title={pickProduct ? '적용 상품 고르기' : '캠페인 만들기'} onClose={onClose}>
     {pickProduct ? <CampaignProductPicker onClose={() => setPickProduct(false)} onSelect={p => { setProduct(p); set({ productId: p.id, definitionId: '' }); setPickProduct(false); }}/> : <div className="space-y-5">
-      <Field label="종류" hint={f.kind === 'CLAIM' ? '링크(?campaign=코드)로 들어온 구매자가 직접 받아요.' : f.kind === 'MEMBER' ? '멤버십 결제가 될 때마다 회원에게 자동으로 발급돼요.' : 'AI 대상 이벤트(규칙)가 오면 그 상품용 쿠폰을 발급해요.'}>
+      <Field label="종류" hint={f.kind === 'CLAIM' ? claimHint(f.productId) : f.kind === 'MEMBER' ? '멤버십 결제가 될 때마다 회원에게 자동으로 발급돼요.' : 'AI 대상 이벤트(규칙)가 오면 그 상품용 쿠폰을 발급해요.'}>
         <div className="flex flex-wrap gap-2">{KINDS.map(k => <Chip key={k} selected={f.kind === k} onClick={() => set({ kind: k, definitionId: '', ruleCode: k === 'TARGETED' ? f.ruleCode : '' })}>{KIND_LABEL[k]}</Chip>)}</div>
       </Field>
       {f.kind === 'CLAIM' && <Field label="적용 상품" hint="선택하지 않으면 전체 상품에서 쓸 수 있어요.">
