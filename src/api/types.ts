@@ -57,7 +57,7 @@ export interface OrderAmountsDto { itemsAmount?: number | null; couponIssueId?: 
 export interface OrderCommandDto extends OrderAmountsDto {
   orderId: string; orderNumber: string; version: number; state: OrderState; delivery: DeliveryState | null; productId: string | null; sellerId: string | null;
   productName: string | null; brandOrStore: string | null; items: OrderItemDto[]; address: OrderAddressDto | null; unitPrice: number | null; shippingFee: number | null; totalAmount: number | null;
-  dispatchBusinessDays: number | null; expiresAt: Iso | null; serverTime: Iso; paymentAttemptId: string | null; confirmedAt: Iso | null; carrier: string | null; trackingNumber: string | null; failureCode: string | null; termsVersion: string | null;
+  dispatchBusinessDays: number | null; expiresAt: Iso | null; serverTime: Iso; paymentAttemptId: string | null; confirmedAt: Iso | null; carrier: string | null; trackingNumber: string | null; failureCode: string | null; purchaseLimit?: number | null; remainingPurchaseQuantity?: number | null; termsVersion: string | null;
   purchaseConfirmedAt?: Iso | null;
   /** 서버가 내려주면 토스 결제창 orderId로 그대로 쓴다(없으면 "SD-" + orderId) */ tossOrderId?: string | null;
 }

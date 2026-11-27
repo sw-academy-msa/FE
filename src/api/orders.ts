@@ -29,7 +29,7 @@ export function expiresLocal(expiresAt: string | null, serverTime: string | null
 /** 주문 생성·checkout·배송지 변경 응답 → Hold */
 export function holdFromApi(d: OrderCommandDto, userId: string): Hold {
   const expiresAt = expiresLocal(d.expiresAt, d.serverTime);
-  return { id: d.orderId, userId, productId: d.productId ?? '', lines: lines(d.items), createdAt: expiresAt === undefined ? undefined : expiresAt - 300_000, expiresAt, status: holdStatus(d.state), orderId: d.state === 'CONFIRMED' ? d.orderId : undefined, failureCode: d.state === 'FAILED' ? d.failureCode || 'UNKNOWN' : undefined, ...amountsFromApi(d) };
+  return { id: d.orderId, userId, productId: d.productId ?? '', lines: lines(d.items), createdAt: expiresAt === undefined ? undefined : expiresAt - 300_000, expiresAt, status: holdStatus(d.state), orderId: d.state === 'CONFIRMED' ? d.orderId : undefined, failureCode: d.state === 'FAILED' ? d.failureCode || 'UNKNOWN' : undefined, purchaseLimit: d.purchaseLimit, remainingPurchaseQuantity: d.remainingPurchaseQuantity, ...amountsFromApi(d) };
 }
 /** 확정된 checkout 응답 → Order (조회 모델 반영 전에도 완료 화면을 보여 주기 위해) */
 export function orderFromCommand(d: OrderCommandDto, userId: string): Order {
