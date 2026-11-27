@@ -15,7 +15,7 @@ const detail: ProductDetailDto = {
 };
 describe('공개 상품 → Product', () => {
   it('목록과 상세에 일시 품절 판단용 원본 재고를 보존한다', () => {
-    for (const mapped of [productFromApi(detail), productSummaryFromApi(detail)]) {
+    for (const mapped of [productFromApi(detail), productSummaryFromApi({ ...detail, image: null })]) {
       expect(mapped.live).toEqual({ initial: 10, confirmed: 10, available: 0, approximate: true });
     }
   });
