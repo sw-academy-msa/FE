@@ -52,7 +52,7 @@ export interface Application {
 }
 export interface Line { optionId: string; name: string; quantity: number }
 /** expiresAt이 없으면 서버가 아직 만료 시각을 주지 않은 것(다시 조회). failureCode가 있으면 만료가 아니라 주문 실패(state FAILED) */
-export interface Hold { id: string; userId: string; productId: string; lines: Line[]; createdAt?: number; expiresAt?: number; status: 'reserved' | 'pending' | 'consumed' | 'released'; orderId?: string; failureCode?: string; /** 서버 금액 요약(실제 모드) */ amounts?: OrderAmounts }
+export interface Hold { id: string; userId: string; productId: string; lines: Line[]; createdAt?: number; expiresAt?: number; status: 'reserved' | 'pending' | 'consumed' | 'released'; orderId?: string; failureCode?: string; purchaseLimit?: number | null; remainingPurchaseQuantity?: number | null; /** 서버 금액 요약(실제 모드) */ amounts?: OrderAmounts }
 /** 서버가 계산한 주문 금액 요약(쿠폰 할인, 멤버십 배송 할인 포함). 값이 없는 예전 주문은 undefined */
 export interface OrderAmounts { itemsAmount?: number; couponIssueId?: string; couponState?: string; couponRejectCode?: string; couponDiscount: number; originalShippingFee?: number; membershipShippingDiscount: number; effectiveShippingFee?: number; totalAmount?: number }
 export type OrderStatus = 'paid' | 'preparing' | 'shipping' | 'delivered' | 'cancelled' | 'refunded';

@@ -103,3 +103,7 @@ describe('판매 시작 직후 ORDER_UNAVAILABLE 재시도', () => {
     expect(run).toHaveBeenCalledTimes(1);
   });
 });
+
+it('한도 실패의 수량 정보는 체크아웃 Hold에도 보존한다', () => {
+  expect(holdFromApi(cmd({ state: 'FAILED', failureCode: 'PRODUCT_PURCHASE_LIMIT_EXCEEDED', purchaseLimit: 3, remainingPurchaseQuantity: 1 }), 'u')).toMatchObject({ failureCode: 'PRODUCT_PURCHASE_LIMIT_EXCEEDED', purchaseLimit: 3, remainingPurchaseQuantity: 1 });
+});
