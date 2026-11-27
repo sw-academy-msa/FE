@@ -25,6 +25,46 @@ async function signIn(page: Page, next: string) {
 }
 const noOverflow = async (page: Page) => expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
 const PDF = Buffer.from('%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n');
+for (const role of ['BUYER', 'SELLER'] as const) {
+  test(`${role} 마이페이지에서 관심사 메뉴를 숨기고 옛 주소를 마이페이지로 보낸다`, async ({ page }) => {
+    const removedRequests: string[] = [];
+    await mockApi(page, role, path => {
+      if (/signup-options|\/interests$|\/ai\/analytics\/profile$/.test(path)) removedRequests.push(path);
+    });
+    await signIn(page, '/my/interests');
+    await expect(page).toHaveURL(/#\/my$/);
+    await expect(page.getByRole('heading', { name: role === 'BUYER' ? '구매자 마이페이지' : '마이페이지', exact: true })).toBeVisible();
+    await expect(page.getByText('관심사와 맞춤 추천', { exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /^알림 설정/ }).or(page.getByRole('link', { name: /^알림 설정/ }))).toBeVisible();
+    expect(removedRequests).toEqual([]);
+    await noOverflow(page);
+  });
+}
+
+test('회원가입은 관심사 선택 없이 완료하고 요청에 관심 카테고리를 보내지 않는다', async ({ page }) => {
+  const signups: Record<string, unknown>[] = [];
+  await mockApi(page, 'BUYER', (path, route) => {
+    if (path.endsWith('/email-verifications')) return { challengeId: 'c1', expiresAt: new Date(Date.now() + 180000).toISOString(), resendAvailableAt: new Date(Date.now() + 60000).toISOString() };
+    if (path.endsWith('/email-verifications/confirm')) return { verificationToken: 'verified-token' };
+    if (path.endsWith('/auth/signup')) signups.push(route.request().postDataJSON());
+  });
+  await page.goto('/#/signup');
+  await page.getByLabel('이름', { exact: true }).fill('테스트 사용자');
+  await page.getByLabel('이메일', { exact: true }).fill('new@example.com');
+  await page.getByRole('button', { name: '인증번호 요청', exact: true }).click();
+  await page.getByRole('textbox', { name: '인증번호' }).fill('123456');
+  await page.getByRole('button', { name: '인증 확인', exact: true }).click();
+  await expect(page.getByRole('heading', { name: '가입 정보 입력' })).toBeVisible();
+  await expect(page.getByText(/관심사|관심 카테고리/)).toHaveCount(0);
+  await page.getByLabel('휴대폰 번호', { exact: true }).fill('01012345678');
+  await page.getByLabel('비밀번호', { exact: true }).fill('Password1!');
+  await page.getByLabel('비밀번호 확인', { exact: true }).fill('Password1!');
+  await page.getByLabel('약관 전체 동의').check();
+  await page.getByRole('button', { name: '가입하기', exact: true }).click();
+  await expect(page).toHaveURL(/#\/signup\/done/);
+  expect(signups).toHaveLength(1);
+  expect(signups[0]).not.toHaveProperty('interestCategories');
+});
 const app = (o: object = {}) => ({ applicationId: 'ap1', accountId: 'real-user', attemptNumber: 1, sellerDisplayName: '스토어', contactName: '홍길동', contactEmail: 'user@example.com', contactPhone: '01012345678', bankName: '신한은행', maskedBankAccount: '***789', dispatchAddress: { postalCode: '04066', roadAddress: '서울 도로 1', detailAddress: null }, returnAddress: { postalCode: '04066', roadAddress: '서울 도로 1', detailAddress: null }, status: 'PENDING', submittedAt: '2026-01-01T00:00:00Z', reviewedAt: '2026-01-02T00:00:00Z', reviewedBy: null, rejectionReason: null, certificateReviewed: true, certificateRecheck: false, previousApplicationId: null, ...o });
 const correction = (items: { field: string; reason: string }[], state = 'OPEN') => ({ id: 'c1', applicationId: 'ap1', deadline: '2099-01-08T14:59:59Z', state, items, submittedApplicationId: null });
 
@@ -137,40 +177,4 @@ test('판매 제한 판매자는 마이페이지에서 안내를 보고 사업�
   await expect(page.getByRole('status', { name: '재심사 상태' })).toContainText('사업자등록증 재심사 중이에요');
   await expect(page.getByRole('button', { name: '재심사 신청하기' })).toHaveCount(0);
   await noOverflow(page);
-});
-
-test('관심 카테고리를 서버 선택지에서 고르고 저장하며 맞춤 추천 프로필을 본다', async ({ page }) => {
-  const saved: unknown[] = [];
-  await mockApi(page, 'BUYER', (path, route) => {
-    if (path.endsWith('/signup-options')) return { categories: [{ code: 'FASHION', label: '패션' }, { code: 'LIVING', label: '리빙' }, { code: 'STATIONERY', label: '문구' }], notificationTypes: [], marketingConsentRequiredForPromotionalNotifications: true };
-    if (path.endsWith('/accounts/me/interests')) { saved.push(route.request().postDataJSON()); return {}; }
-    if (path.endsWith('/accounts/me')) return { accountId: 'real-user', email: 'user@example.com', name: '테스트 사용자', roles: ['BUYER'], interestCategories: ['FASHION'], notificationSettings: { saleStart: true, personalizedRecommendation: true }, marketingConsent: { agreed: false } };
-    if (path.endsWith('/ai/analytics/profile')) return { analyticsEnabled: true, categoryName: '패션', views: 12, lastViewedAt: '2026-01-04T03:00:00Z', profileAsOf: '2026-01-05' };
-  });
-  await signIn(page, '/my');
-  await page.getByRole('button', { name: /관심사와 맞춤 추천/ }).click();
-  await expect(page).toHaveURL(/#\/my\/interests$/);
-  const chips = page.getByRole('region', { name: '관심 카테고리' });
-  await expect(chips.getByRole('button', { name: '패션' })).toHaveAttribute('aria-pressed', 'true'); // 선택된 칩
-  await expect(chips.getByRole('button', { name: '리빙' })).toHaveAttribute('aria-pressed', 'false');
-  await expect(page.getByRole('button', { name: '관심 카테고리 저장' })).toBeDisabled();
-  await chips.getByRole('button', { name: '리빙' }).click();
-  await page.getByRole('button', { name: '관심 카테고리 저장' }).click();
-  await expect(page.getByText('관심 카테고리를 저장했어요.')).toBeVisible();
-  expect(saved).toEqual([{ interestCategories: ['FASHION', 'LIVING'] }]);
-  const profile = page.getByRole('region', { name: '맞춤 추천 프로필' });
-  await expect(profile).toContainText('패션');
-  await expect(profile).toContainText('최근 12번 살펴봤어요');
-  await noOverflow(page);
-});
-
-test('맞춤 추천 분석에 참여하지 않았으면(404) 참여 방법을 안내한다', async ({ page }) => {
-  await mockApi(page, 'BUYER', async (path, route) => {
-    if (path.endsWith('/signup-options')) return { categories: [{ code: 'FASHION', label: '패션' }], notificationTypes: [], marketingConsentRequiredForPromotionalNotifications: true };
-    if (path.endsWith('/ai/analytics/profile')) { await route.fulfill({ status: 404, json: { code: 'PERSONALIZATION_NOT_FOUND', message: '분석 참여 정보가 없습니다.' } }); return null; }
-  });
-  await signIn(page, '/my/interests');
-  await expect(page.getByRole('region', { name: '맞춤 추천 프로필' })).toContainText('맞춤 추천 분석에 참여하지 않았어요');
-  await expect(page.getByRole('link', { name: '알림 설정에서 맞춤 상품 알림 켜기' })).toBeVisible();
-  await expect(page.getByText('분석 참여 정보가 없습니다.')).toHaveCount(0);
 });

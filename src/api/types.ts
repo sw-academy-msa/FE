@@ -14,7 +14,6 @@ export interface VerificationTokenDto { verificationToken: string; expiresAt: Is
 export interface ResetTokenDto { resetToken: string; expiresAt: Iso }
 export interface LoginDto { accessToken: string; tokenType: 'Bearer'; expiresAt: Iso; accountId: string; roles: Role[] }
 export interface SignupDto { accountId: string; email: string; name: string; emailVerifiedAt: Iso; status: string; roles: Role[] }
-export interface SignupOptionsDto { categories: { code: string; label: string }[]; notificationTypes: string[]; marketingConsentRequiredForPromotionalNotifications: boolean }
 export interface AccountDto {
   accountId: string; email: string; name: string; roles: Role[]; interestCategories: string[];
   notificationSettings: { saleStart: boolean; personalizedRecommendation: boolean };
