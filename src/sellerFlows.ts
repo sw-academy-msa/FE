@@ -1,14 +1,11 @@
 /**
- * 입점 보완, 판매 제한 재심사, 관심사·맞춤 추천 프로필 화면의 판단 로직(화면 없이 테스트할 수 있게 분리).
- * 화면: pages/sellerCorrection.tsx, pages/adminCorrection.tsx, pages/sellerReview.tsx, pages/interests.tsx
+ * 입점 보완, 판매 제한 재심사 화면의 판단 로직(화면 없이 테스트할 수 있게 분리).
+ * 화면: pages/sellerCorrection.tsx, pages/adminCorrection.tsx, pages/sellerReview.tsx
  */
-import type { AnalyticsProfileDto, CorrectionField, CorrectionPatch, SellerApplicationDto, fetchReviewStatus } from './api';
+import type { CorrectionField, CorrectionPatch, SellerApplicationDto, fetchReviewStatus } from './api';
 import { FIELD_LABEL } from './api/seller';
-import { kstDay } from './dates';
 import { normalizePhone } from './sellerApply';
 
-/** hooks.ts의 dateTime과 같은 형식(hooks.ts는 store를 불러와 여기서 쓰지 않는다) */
-const dateTime = (value: number) => new Intl.DateTimeFormat('ko-KR', { timeZone: 'Asia/Seoul', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).format(value);
 
 export const CORRECTION_FIELDS: CorrectionField[] = ['CERTIFICATE', 'STORE_NAME', 'CONTACT', 'BANK_ACCOUNT', 'DISPATCH_ADDRESS', 'RETURN_ADDRESS'];
 export interface CorrectionValues {
@@ -75,12 +72,3 @@ export function reviewSummary(r: ReviewStatus): { title: string; body: string; t
   if (r.salesRestricted) return { title: '판매가 제한돼 있어요', body: '사업자등록증을 다시 제출해 재심사를 받으면 판매 제한이 풀려요.', tone: 'red', canSubmit: !busy };
   return { title: '정상적으로 판매할 수 있어요', body: '사업자 정보가 바뀌었다면 사업자등록증을 다시 제출해 재심사를 받아 주세요.', tone: 'green', canSubmit: !busy };
 }
-
-
-/** 프로필을 화면 문구로: 미참여, 집계 전, 결과 */
-export function profileView(p: AnalyticsProfileDto): { kind: 'off' | 'empty' | 'ready'; title: string; body: string } {
-  if (!p.analyticsEnabled) return { kind: 'off', title: '맞춤 추천 분석에 참여하지 않았어요', body: '알림 설정에서 맞춤 상품 알림을 켜면 조회 기록을 분석해 관심 카테고리를 알려드려요.' };
-  if (!p.categoryName) return { kind: 'empty', title: '아직 분석된 관심 카테고리가 없어요', body: `상품을 둘러보면 다음 집계에 반영돼요.${p.profileAsOf ? ` (${kstDay(Date.parse(p.profileAsOf))} 기준)` : ''}` };
-  return { kind: 'ready', title: p.categoryName, body: `최근 ${p.views ?? 0}번 살펴봤어요${p.lastViewedAt ? ` · 마지막 ${dateTime(Date.parse(p.lastViewedAt))}` : ''}` };
-}
-

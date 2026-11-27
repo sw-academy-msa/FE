@@ -1,10 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { api } from './api/client';
-import { fetchAnalyticsProfile, fetchSignupOptions, saveInterests } from './api/account';
 import { requestCorrection } from './api/admin';
 import { applicationFromApi } from './api/seller';
 import type { SellerApplicationDto } from './api/types';
-import { correctionPatch, correctionProblems, correctionRequestProblem, deadlineOf, profileView, reviewSummary } from './sellerFlows';
+import { correctionPatch, correctionProblems, correctionRequestProblem, deadlineOf, reviewSummary } from './sellerFlows';
 import type { CorrectionValues } from './sellerFlows';
 
 type Call = { url: string; method: string; body?: unknown; auth: string | null };
@@ -62,23 +61,5 @@ describe('판매 제한과 재심사', () => {
     expect(reviewSummary({ salesRestricted: true, application: dto({ status: 'REJECTED', rejectionReason: '서류 불명확' }), correction: null })).toMatchObject({ body: expect.stringContaining('서류 불명확'), canSubmit: true, tone: 'red' });
     expect(reviewSummary({ salesRestricted: true, application: dto({ status: 'CHANGES_REQUESTED' }), correction: null }).canSubmit).toBe(false);
     expect(reviewSummary({ salesRestricted: false, application: dto({ status: 'APPROVED' }), correction: null })).toMatchObject({ tone: 'green', canSubmit: true });
-  });
-});
-
-describe('관심사와 개인화 프로필', () => {
-  it('선택지는 로그인 없이 받고, 관심사는 중복 없이 전체 교체로 저장한다', async () => {
-    api.setAccessToken('tok');
-    const calls = fake(c => ({ data: c.method === 'GET' ? { categories: [{ code: 'FASHION', label: '패션' }], notificationTypes: [], marketingConsentRequiredForPromotionalNotifications: true } : null }));
-    expect((await fetchSignupOptions()).categories).toEqual([{ code: 'FASHION', label: '패션' }]);
-    await saveInterests(['FASHION', 'FASHION', 'LIVING']);
-    expect(calls[0].auth).toBeNull(); expect(calls[0].url).toMatch(/\/api\/v1\/signup-options$/);
-    expect(calls[1]).toMatchObject({ method: 'PUT', body: { interestCategories: ['FASHION', 'LIVING'] } }); expect(calls[1].url).toMatch(/\/accounts\/me\/interests$/);
-  });
-  it('프로필: 미참여(404 포함), 집계 전, 결과를 구분한다', async () => {
-    fake(() => ({ status: 404, error: { code: 'PERSONALIZATION_NOT_FOUND' } }));
-    const off = await fetchAnalyticsProfile();
-    expect(profileView(off).kind).toBe('off');
-    expect(profileView({ analyticsEnabled: true, categoryName: null, views: null, lastViewedAt: null, profileAsOf: '2026-01-05' }).kind).toBe('empty');
-    expect(profileView({ analyticsEnabled: true, categoryName: '패션', views: 12, lastViewedAt: '2026-01-04T03:00:00Z', profileAsOf: '2026-01-05' })).toMatchObject({ kind: 'ready', title: '패션', body: expect.stringContaining('12번') });
   });
 });

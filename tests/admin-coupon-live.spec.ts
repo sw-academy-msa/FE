@@ -68,6 +68,9 @@ test('상품을 검색해 고른 캠페인은 PRODUCT 정의와 링크만 제공
   await page.getByRole('button', { name: '쿠폰 관리' }).click();
   await page.getByRole('button', { name: '캠페인 만들기' }).click();
   const form = sheet(page, '캠페인 만들기');
+  const allHint = '구매자가 직접 받는 쿠폰이에요. 상품 링크에 ?campaign=코드를 붙여 공유하거나, 만든 뒤 [알림 보내기]로 광고 수신 동의 구매자에게 알림을 보낼 수 있어요.';
+  const productHint = '이 상품에서만 쓰는 쿠폰이에요. 만든 뒤 상품 링크를 복사해 공유하면 링크로 들어온 구매자가 받아요. 상품 전용 쿠폰은 알림 보내기를 쓸 수 없어요.';
+  await expect(form.getByText(allHint, { exact: true })).toBeVisible();
   await form.getByRole('button', { name: '상품 고르기' }).click();
   await sheet(page, '적용 상품 고르기').getByRole('button', { name: '닫기', exact: true }).last().click();
   await expect(form).toBeVisible();
@@ -77,9 +80,11 @@ test('상품을 검색해 고른 캠페인은 PRODUCT 정의와 링크만 제공
   await expect(picker.getByText('품절 상품')).toHaveCount(0);
   await picker.getByRole('textbox', { name: '상품명 검색' }).fill('셔츠');
   await picker.getByRole('button', { name: /광고용 셔츠/ }).click();
+  await expect(form.getByText(productHint, { exact: true })).toBeVisible();
   await expect(form.getByRole('radio', { name: /맞춤 10%/ })).toBeVisible();
   await expect(form.getByRole('radio', { name: /회원 전용/ })).toHaveCount(0);
   await form.getByRole('button', { name: '선택 해제' }).click();
+  await expect(form.getByText(allHint, { exact: true })).toBeVisible();
   await expect(form.getByRole('radio', { name: /회원 전용/ })).toBeVisible();
   await form.getByRole('button', { name: '상품 고르기' }).click();
   await sheet(page, '적용 상품 고르기').getByRole('button', { name: /광고용 셔츠/ }).click();
@@ -94,6 +99,15 @@ test('상품을 검색해 고른 캠페인은 PRODUCT 정의와 링크만 제공
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.getByRole('button', { name: '링크 복사' }).click();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(link);
+  await page.getByRole('button', { name: '활성화', exact: true }).click();
+  const confirm = sheet(page, '캠페인을 활성화할까요?');
+  await expect(confirm.getByText(productHint, { exact: false })).toBeVisible();
+  await confirm.getByRole('button', { name: '닫기', exact: true }).last().click();
+  await page.getByRole('button', { name: /PRODUCT_LINK/ }).click();
+  await page.getByRole('button', { name: /WELCOME_1000/ }).click();
+  await page.getByRole('button', { name: '활성화', exact: true }).click();
+  await expect(confirm.getByText(allHint, { exact: false })).toBeVisible();
+  await confirm.getByRole('button', { name: '닫기', exact: true }).last().click();
   expect(sv.posts.find(x => x.path.endsWith('/campaigns'))?.body).toMatchObject({ productId: sv.products[0].id, definitionId: sv.defs[1].id });
   await noOverflow(page);
 });

@@ -543,7 +543,6 @@ export function SellerMyPage() {
       <section className="mb-4">
         <p className="muted mb-2 mt-4 text-body font-bold">설정</p>
         <MenuRow to={SETTINGS_HREF('/my')} label="알림 설정"/>
-        {!USE_MOCK && <MenuRow to="/my/interests" label="관심사와 맞춤 추천"/>}
         <MenuRow to="/seller/support" label="이용 안내 · 고객지원"/>
       </section>
       <div className="text-center"><LogoutButton/></div>
