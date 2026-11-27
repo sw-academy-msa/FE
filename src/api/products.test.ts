@@ -14,6 +14,11 @@ const detail: ProductDetailDto = {
   stock: { initialQuantity: 10, confirmedQuantity: 10, availableQuantity: 0, approximate: true }, metadata: { version: 1, occurredAt: '2030-01-01T00:59:58Z', projectedAt: '2030-01-01T00:59:59Z' },
 };
 describe('공개 상품 → Product', () => {
+  it('목록과 상세에 일시 품절 판단용 원본 재고를 보존한다', () => {
+    for (const mapped of [productFromApi(detail), productSummaryFromApi({ ...detail, image: null })]) {
+      expect(mapped.live).toEqual({ initial: 10, confirmed: 10, available: 0, approximate: true });
+    }
+  });
   it('배송과 구매 안내를 판매 전에도 보존한다', () => {
     expect(productFromApi({ ...detail, status: 'UPCOMING', shippingNotice: '배송 안내', purchaseNotice: '구매 안내' })).toMatchObject({ shippingNotice: '배송 안내', purchaseNotice: '구매 안내' });
   });
