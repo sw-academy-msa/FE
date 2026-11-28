@@ -43,8 +43,11 @@ export function Button({ children, outline, buy, className = '', disabled, type 
   return <AxButton {...props} {...native} label={label} type={type as 'button' | 'submit' | 'reset'} href={link ? href : undefined} onClick={click} variant={outline ? 'secondary' : buy ? 'buy' : 'primary'} size="lg" isDisabled={disabled} className={`ax-btn ${className}`}>{children}</AxButton>;
 }
 
-/** 오류 흔들림(한 번). 움직임 줄이기 설정이면 흔들지 않는다 */
-function shake(el: HTMLElement | null) { if (!el || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return; el.classList.remove('sd-shake'); void el.offsetWidth; el.classList.add('sd-shake'); }
+/** 한 번 움직이는 효과(오류 흔들림 sd-shake, 알림 종 흔들림 sd-ring). 움직임 줄이기 설정이면 움직이지 않는다 */
+function play(el: Element | null, name: string) { if (!el || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return; el.classList.remove(name); void (el as HTMLElement).getBoundingClientRect(); el.classList.add(name); }
+const shake = (el: HTMLElement | null) => play(el, 'sd-shake');
+/** 상품 알림을 켜는 순간 종 아이콘을 흔든다(알림 신청 동작은 그대로) */
+export const ringBell = (button: Element) => play(button.querySelector('svg'), 'sd-ring');
 let focusQueued = false;
 /** 새로 틀린 칸들 중 화면 맨 위 칸의 입력으로 포커스를 옮긴다. 이미 입력칸에 있으면(입력 중) 옮기지 않는다 */
 function focusFirstInvalid() {
@@ -119,6 +122,8 @@ const pad = (n: number) => String(n).padStart(2, '0');
 export const clockLeft = (ms: number) => { const s = Math.max(0, Math.floor(ms / 1000)); return `${pad(Math.floor(s / 3600))}:${pad(Math.floor(s % 3600 / 60))}:${pad(s % 60)}`; };
 export const openLabel = (t: number, now: number) => { const d = new Date(t), n = new Date(now); const same = d.toDateString() === n.toDateString(); return `${same ? '오늘' : `${d.getMonth() + 1}월 ${d.getDate()}일`} ${pad(d.getHours())}:${pad(d.getMinutes())} 오픈`; };
 export const soldOutLabel = (p: Product) => { if (!p.soldOutAt) return '판매 종료'; const m = Math.max(1, Math.round((p.soldOutAt - p.startsAt) / 60_000)); return `${m >= 60 ? `${Math.floor(m / 60)}시간 ${m % 60}분` : `${m}분`} 만에 완판됐어요`; };
+/** 숫자가 바뀌면 그 자리 숫자만 아래에서 올라온다(숫자 굴러가기). 글자 자체는 그대로라 읽기·검색 결과가 같다 */
+export function RollingText({ text }: { text: string }) { return <>{[...text].map((ch, i) => /\d/.test(ch) ? <span key={`${i}-${ch}`} className="sd-roll">{ch}</span> : ch)}</>; }
 export function ProductCard({ product: p, now, availableCount, notified, onNotify }: { product: Product; now: number; availableCount?: number; notified?: boolean; onNotify?: () => void }) {
   const status = saleState(p, now);
   const total = stockTotal(p), left = availableCount ?? total;
@@ -130,25 +135,32 @@ export function ProductCard({ product: p, now, availableCount, notified, onNotif
   const myHold = !!mine && st.holds.some(h => h.userId === mine && h.productId === p.id && (h.status === 'pending' || h.status === 'reserved' && (h.expiresAt ?? Infinity) > now));
   const myOrder = !!mine && !myHold && st.orders.some(o => o.userId === mine && o.productId === p.id && !['cancelled', 'refunded'].includes(o.status));
   const pct = total ? Math.min(100, Math.max(0, (1 - left / total) * 100)) : 0;
-  return <Link to={`/product/${p.id}`} className="block min-w-0">
-    <div className="relative">
-      <ProductImage src={p.images[0]} alt={p.name} className={`aspect-square w-full ${soldOut && !myHold ? 'opacity-50' : ''}`}/>
-      {status === '판매 중' && !soldOut && <span className="absolute left-2 top-2 flex items-center gap-1 rounded-inner bg-black/75 px-1.5 py-1 text-footnote font-bold tabular-nums text-white"><Timer size={12}/>{clockLeft(p.endsAt - now)}</span>}
-      {status === '판매 예정' && <span className="absolute left-2 top-2 flex items-center gap-1 rounded-inner bg-black/75 px-1.5 py-1 text-footnote font-bold text-white"><Bell size={12}/>{openLabel(p.startsAt, now)}</span>}
-      {urgent && <span className="absolute bottom-2 left-2 rounded-inner bg-urgent px-1.5 py-1 text-footnote font-bold text-white">마감 임박</span>}
-      {myHold ? <span className="absolute inset-x-2 bottom-2 rounded-inner bg-ink px-2 py-1.5 text-center text-label font-bold text-white">확보한 재고 · 결제 이어하기</span>
-        : myOrder && soldOut ? <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-inner bg-ink px-3 py-1.5 text-label font-bold text-white">구매 완료</span>
-        : soldOut && <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-inner bg-sold-out px-3 py-1.5 text-label font-bold text-white">{temporary ? '일시 품절' : 'SOLD OUT'}</span>}
+  // 시안 최종 색 · 홈 새로 올라온 상품 줄: 사진 112(아래 시간 띠), 카테고리·이름·가격, 오른쪽 알림 종(44). 예전 카드의 상태 표시와 문구는 그대로 둔다
+  const bell = (label: string, on: boolean) => <button type="button" aria-label={label} onClick={e => { e.preventDefault(); if (!on) ringBell(e.currentTarget); onNotify?.(); }} className={`press grid h-11 w-11 shrink-0 place-items-center rounded-full ${on ? 'text-ink' : 'text-text'}`}><Icon name={on ? 'AlertOn' : 'AlertOff'} size={24}/></button>;
+  return <Link to={`/product/${p.id}`} className="flex min-w-0 items-center gap-4 border-b border-line py-4">
+    <div className="relative h-28 w-28 shrink-0">
+      <ProductImage src={p.images[0]} alt={p.name} className={`h-28 w-28 ${soldOut && !myHold ? 'opacity-50' : ''}`}/>
+      {status === '판매 중' && !soldOut && <span className="absolute inset-x-1.5 bottom-1.5 flex h-7 items-center justify-center gap-1 rounded-[14px] bg-overlay text-label font-bold tabular-nums text-white"><Timer size={12}/><span><RollingText text={clockLeft(p.endsAt - now)}/></span></span>}
+      {status === '판매 예정' && <span className="absolute inset-x-1.5 bottom-1.5 flex h-7 items-center justify-center gap-[5px] rounded-[14px] bg-overlay text-footnote font-medium text-white">{openLabel(p.startsAt, now)}</span>}
+      {urgent && <span className="absolute left-1.5 top-1.5 rounded-pill bg-urgent px-2 py-0.5 text-footnote font-bold text-white">마감 임박</span>}
+      {myHold ? <span className="absolute inset-x-1.5 top-1/2 -translate-y-1/2 rounded-inner bg-ink px-1 py-1.5 text-center text-footnote font-bold leading-tight text-white">확보한 재고 · 결제 이어하기</span>
+        : myOrder && soldOut ? <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-inner bg-ink px-3 py-1.5 text-label font-bold text-white">구매 완료</span>
+        : soldOut && <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-inner bg-sold-out px-3 py-1.5 text-label font-bold text-white">{temporary ? '일시 품절' : 'SOLD OUT'}</span>}
     </div>
-    <p className="mt-2.5 text-footnote font-bold text-aux">{p.brand}</p>
-    <h3 className={`mt-0.5 text-callout ${soldOut ? 'text-meta' : ''}`}>{p.name}</h3>
-    <p className={`mt-0.5 text-headline font-bold ${soldOut ? 'text-meta' : ''}`}>{money(p.price)}</p>
-    {status === '판매 중' && !soldOut && <><div className="mt-2 h-1 w-full rounded-full bg-line"><div className={`h-1 rounded-full ${urgent ? 'bg-urgent' : 'bg-ink'}`} style={{ width: `${pct}%` }}/></div><p className={`mt-1.5 text-label ${urgent ? 'font-bold text-urgent' : 'text-aux'}`}>{urgent ? `서두르세요! ${left}개 남음` : `${total}개 중 ${left}개 남음`}</p></>}
-    {status === '판매 예정' && <><p className="mt-2 text-label text-aux">{total}개 한정 · 1인 {p.maxPerAccount}개</p>{onNotify && <button type="button" onClick={e => { e.preventDefault(); onNotify(); }} className={`mt-2 flex h-8 w-full items-center justify-center gap-1 rounded-inner text-label font-bold ${notified ? 'bg-ink text-white' : 'border border-border'}`}><Bell size={13}/>{notified ? '알림 설정됨' : '오픈 알림 받기'}</button>}</>}
+    <div className="min-w-0 flex-1 space-y-2.5">
+      <div className="space-y-[3px]">
+        <p className="text-label font-medium text-muted">{p.category}</p>
+        <h3 className={`text-headline font-semibold leading-[21px] ${soldOut ? 'text-meta' : ''}`}>{p.name}</h3>
+        <p className={`text-[19px] font-extrabold ${soldOut ? 'text-meta' : ''}`}>{money(p.price)}</p>
+      </div>
+      {status === '판매 중' && !soldOut && <div className="space-y-1.5"><div className="h-1 w-full rounded-[2px] bg-line"><div className={`h-1 rounded-[2px] ${urgent ? 'bg-urgent' : 'bg-ink'}`} style={{ width: `${pct}%` }}/></div><p className={`text-label ${urgent ? 'font-bold text-urgent' : 'text-muted'}`}><RollingText text={urgent ? `서두르세요! ${left}개 남음` : `${total}개 중 ${left}개 남음`}/></p></div>}
+      {status === '판매 예정' && <p className="text-label text-muted">{total}개 한정 · 1인 {p.maxPerAccount}개</p>}
+      {soldOut && <p className="text-label text-muted">{temporary ? TEMPORARY_SOLD_OUT_NOTE : soldOutLabel(p)}</p>}
+      {status === '판매 종료' && !soldOut && <p className="text-label text-muted">판매 종료</p>}
+    </div>
+    {status === '판매 예정' && onNotify && bell(notified ? '알림 설정됨' : '오픈 알림 받기', !!notified)}
     {/* 판매 중에도 신청한 상품은 가격 인하·수량 임박 알림을 받으므로 끌 수 있게 둔다 */}
-    {status === '판매 중' && notified && onNotify && <button type="button" onClick={e => { e.preventDefault(); onNotify(); }} className="mt-2 flex h-8 w-full items-center justify-center gap-1 rounded-inner border border-border text-label font-bold"><Bell size={13}/>상품 알림 끄기</button>}
-    {soldOut && <p className="mt-2 text-label text-aux">{temporary ? TEMPORARY_SOLD_OUT_NOTE : soldOutLabel(p)}</p>}
-    {status === '판매 종료' && !soldOut && <p className="mt-2 text-label text-aux">판매 종료</p>}
+    {status === '판매 중' && notified && onNotify && bell('상품 알림 끄기', true)}
   </Link>;
 }
 export function Progress({ step }: { step: number }) { return <div aria-label={`상품 등록 ${step} / 7단계`} className="mb-5 flex gap-[5px]">{Array.from({ length: 7 }, (_, i) => <div key={i} className={`h-1 flex-1 rounded-[2px] ${i < step ? 'bg-ink' : 'bg-line'}`}/>)}</div>; }

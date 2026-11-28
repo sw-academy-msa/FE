@@ -3,9 +3,9 @@ import { isPurchaseLimitFailure, purchaseLimitNotice } from '../purchaseLimit';
 import type { PurchaseLimitDetails } from '../purchaseLimit';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, CalendarDays, Timer, Camera, ChevronDown, Info, Search, Bell, List as ListIcon, ExternalLink, Clock3, Plus, Minus, Truck, CheckCircle2, ChevronRight, PackageCheck, Calendar } from 'lucide-react';
+import { ArrowLeft, CalendarDays, Timer, Camera, ChevronDown, Info, Bell, ExternalLink, Clock3, Plus, Minus, Truck, CheckCircle2, ChevronRight, PackageCheck, Calendar } from 'lucide-react';
 import { Drawer, DrawerHeader } from '@astryxdesign/core/Drawer';
-import { clockLeft, useFromTab, LiveStatus, Badge, BottomSheet, Button, Chip, CopyButton, DeliveryProgress, Empty, ErrorBox, Field, Header, InfoRow, Modal, Note, ORDER_LABELS, ProductCard, ProductImage, ProductSummary, useLeaveGuard, useToast } from '../components/ui';
+import { clockLeft, ringBell, useFromTab, LiveStatus, Badge, BottomSheet, Button, Chip, CopyButton, DeliveryProgress, Empty, ErrorBox, Field, Header, InfoRow, Modal, Note, ORDER_LABELS, ProductCard, ProductImage, ProductSummary, useLeaveGuard, useToast } from '../components/ui';
 import { CATEGORIES, categoryGroup, activeUser, purchaseBlock, PURCHASE_BLOCK_TEXT, available, stockLeft, stockTotal, beginPayment, DomainError, formatPhone, money, nowOf, orderNo, reserve, resolvePayment, saleState, uid } from '../domain';
 import type { Address, Hold, Product, Order } from '../domain';
 import { atomic, getState, mutate, useStore } from '../store';
@@ -29,6 +29,11 @@ import { FALLBACK_CATALOG, catalogMajorOf, catalogTabs } from '../categoryCatalo
 import type { SavedAddress } from './address';
 import { retryable } from '../api/live';
 import { BrandLogo } from '../components/BrandLogo';
+import { HomeHero } from '../components/HomeHero';
+import { Icon } from '../components/icons';
+/** 홈 카테고리 그림(시안 최종 색 · 홈 Categories). 그림이 없는 새 대분류는 빈 원과 이름만 */
+const CATEGORY_IMAGES: Record<string, string> = { 전체: 'all', 의류: 'clothing', 패션잡화: 'fashion', 문구: 'stationery', 생활잡화: 'living' };
+const SALE_STATES = ['전체', '판매 중', '마감 임박', '판매 예정', '판매 종료'];
 import { AmountRows, CheckoutCoupon, ProductBenefits, SoldOutSeen, hasDiscount, useListTracking, useOrderCoupon } from './membershipCoupon';
 
 /** 홈 — 구매자 홈. 판매자 권한이 있으면 Figma "판매자 홈"처럼 판매 등록 버튼이 함께 보인다 */
@@ -52,7 +57,8 @@ export function HomePage() {
   // 8개씩(HOME_PAGE_SIZE) 좌우로 넘기는 페이지. 보던 페이지는 주소(p, 1부터)에 남겨 상세에 갔다 뒤로 와도 그대로
   const page = homePage(params.get('p'), pageCount(products.length));
   const showHero = !query && category === '전체' && filter === '전체';
-  const urgent = s.products.filter(p => p.published && isUrgent(p));
+  const onSale = s.products.filter(p => p.published && saleState(p, now) === '판매 중' && left(p) > 0);
+  const hero = [...onSale.filter(isUrgent).sort((a, b) => a.endsAt - b.endsAt), ...newestFirst(onSale.filter(p => !isUrgent(p)))].slice(0, 5);
   const seller = signedIn(s) && !!s.users.find(u => u.id === s.activeUserId)?.seller;
   const unreadState = useApi(signal => (!USE_MOCK && signedIn(s) ? fetchUnreadCount(signal) : Promise.resolve(0)), [s.activeUserId]), unread = unreadState.data ?? 0;
   // 알림 목록은 오른쪽에서 밀려 들어와 화면 전체를 덮는 패널. 열림은 주소(?inbox=1)에 남겨, 알림을 눌러 간 화면에서 뒤로 오면 패널로 돌아온다
@@ -67,19 +73,16 @@ export function HomePage() {
   useListTracking(query ? 'search_results' : 'home_new', query ? '검색 결과' : '새로 올라온 상품', query, products); // 회원제·쿠폰 플래그와 분석 동의가 있을 때만 보낸다
   const pushOn = useBackgroundPush(signedIn(s)); // 아이콘을 채우면 이 기기의 백그라운드 알림이 켜진 상태(기준은 알림 설정 화면과 같다)
   return <div className="space-y-4">
-    <header className="flex items-center justify-between pt-1"><h1 className="text-text"><span className="sr-only">STOCKDROP</span><BrandLogo width={96}/></h1><div className="flex items-center"><button type="button" aria-label={`백그라운드 알림 ${pushOn ? '켜짐' : '꺼짐'}`} data-push={pushOn ? 'on' : 'off'} onClick={() => toast(pushOn ? '백그라운드 알림이 켜져 있습니다.' : '백그라운드 알림이 꺼져 있습니다. 마이 > 알림 설정에서 켤 수 있어요.')} className="grid h-9 w-9 place-items-center"><Bell size={21} strokeWidth={1.6} fill={pushOn ? 'currentColor' : 'none'} aria-hidden/></button><button type="button" aria-label="알림 목록" onClick={openInbox} className="relative grid h-9 w-9 place-items-center"><ListIcon size={21} strokeWidth={1.6} aria-hidden/>{unread > 0 && <span aria-label={`안 읽은 알림 ${unread}개`} className="absolute right-0 top-0 h-2 w-2 rounded-full bg-red ring-2 ring-surface"/>}</button></div></header><Drawer isOpen={inboxOpen} onOpenChange={open => { if (!open) closeInbox(); }} label="알림 목록" width="100%" experimental={{ isFullWidthOnMobile: true }} padding={3}>{/* 홈 화면 앱은 상태 표시줄 밑까지 그리므로(black-translucent) 그 높이만큼 비우고 검게 칠한다. 안 비우면 제목이 겹치고 닫기 버튼이 눌리지 않는다 */}<div aria-hidden className="fixed inset-x-0 top-0 z-10 h-[env(safe-area-inset-top)] bg-[#0E0E0F]"/><div className="pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)]"><DrawerHeader title="알림" onOpenChange={open => { if (!open) closeInbox(); }}/>{inboxOpen && <NotificationsPage onClose={closeInbox}/>}</div></Drawer>
-    <label className="flex h-12 items-center gap-2.5 rounded-element bg-soft px-4"><Search size={18} className="text-meta"/><CompositionInput aria-label="상품 검색" value={query} onValueChange={value => setParam('q', value)} placeholder="상품명·카테고리·판매처 검색" className="min-w-0 flex-1 bg-transparent text-callout outline-none placeholder:text-placeholder"/></label>
-    <div role="group" aria-label="상품 카테고리" className={`-mx-4 flex overflow-x-auto border-b border-line px-4 ${categoryTabs.length <= 5 ? 'justify-between' : 'gap-5'}`}>{categoryTabs.map(c => <button key={c} onClick={() => setParam('category', c)} className={`shrink-0 whitespace-nowrap border-b-2 pb-2.5 text-callout ${category === c ? 'border-ink font-bold' : 'border-transparent text-aux'}`}>{c}</button>)}{cats.loading && <span className="sr-only" role="status">카테고리를 불러오는 중</span>}</div>
+    <header className="flex items-center gap-2.5 pb-1 pt-1.5"><h1 className="shrink-0 text-text"><span className="sr-only">STOCKDROP</span><BrandLogo width={96}/></h1><label className="search-pill flex h-12 min-w-0 flex-1 items-center rounded-pill border border-border bg-surface pl-4.5 pr-0.5"><CompositionInput aria-label="상품 검색" value={query} onValueChange={value => setParam('q', value)} placeholder="상품 검색" className="min-w-0 flex-1 bg-transparent text-callout outline-none placeholder:text-muted"/><span className="grid h-11 w-11 shrink-0 place-items-center"><Icon name="Search" size={22}/></span></label><div className="search-pill flex h-12 shrink-0 items-center rounded-pill border border-border bg-surface px-0.5"><button type="button" aria-label={`백그라운드 알림 ${pushOn ? '켜짐' : '꺼짐'}`} data-push={pushOn ? 'on' : 'off'} onClick={() => toast(pushOn ? '백그라운드 알림이 켜져 있습니다.' : '백그라운드 알림이 꺼져 있습니다. 마이 > 알림 설정에서 켤 수 있어요.')} className={`press grid h-11 w-11 place-items-center ${pushOn ? 'text-ink' : 'text-text'}`}><Icon name="Bell" size={24}/></button><button type="button" aria-label="알림 목록" onClick={openInbox} className="press relative grid h-11 w-11 place-items-center"><Icon name="List" size={24}/>{unread > 0 && <span aria-label={`안 읽은 알림 ${unread}개`} className="absolute right-2 top-2 h-2 w-2 rounded-full bg-red ring-2 ring-surface"/>}</button></div></header><Drawer isOpen={inboxOpen} onOpenChange={open => { if (!open) closeInbox(); }} label="알림 목록" width="100%" experimental={{ isFullWidthOnMobile: true }} padding={3}>{/* 홈 화면 앱은 상태 표시줄 밑까지 그리므로(black-translucent) 그 높이만큼 비우고 검게 칠한다. 안 비우면 제목이 겹치고 닫기 버튼이 눌리지 않는다 */}<div aria-hidden className="fixed inset-x-0 top-0 z-10 h-[env(safe-area-inset-top)] bg-[#0E0E0F]"/><div className="pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)]"><DrawerHeader title="알림" onOpenChange={open => { if (!open) closeInbox(); }}/>{inboxOpen && <NotificationsPage onClose={closeInbox}/>}</div></Drawer>
+    <div role="group" aria-label="판매 상태" className="-mx-4 flex justify-between border-b border-line px-5 pt-1">{SALE_STATES.map(f => <button key={f} aria-pressed={filter === f} onClick={() => setParam('state', f)} className={`h-12 border-b-2 text-subhead ${filter === f ? 'border-ink font-extrabold text-text' : 'border-transparent font-medium text-muted'}`}>{f}</button>)}</div>
+    {showHero && <HomeHero products={hero} now={now} left={left}/>}
+    <div role="group" aria-label="상품 카테고리" style={{ scrollbarWidth: 'none' }} className="-mx-4 flex gap-1 overflow-x-auto px-4 py-7">{categoryTabs.map(c => { const on = category === c, img = CATEGORY_IMAGES[c]; return <button key={c} aria-pressed={on} onClick={() => setParam('category', c)} className="press flex min-w-16 flex-1 shrink-0 flex-col items-center gap-2.5">{img ? <img src={`./images/categories/${img}.png`} alt="" className="h-16 w-16"/> : <span aria-hidden className="h-16 w-16 rounded-full bg-soft"/>}<span className={`whitespace-nowrap text-body ${on ? 'font-extrabold text-ink' : 'font-semibold text-text'}`}>{c}</span></button>; })}{cats.loading && <span className="sr-only" role="status">카테고리를 불러오는 중</span>}</div>
     {(cats.error || cats.data?.fallback) && <p className="text-label text-meta">카테고리를 불러오지 못해 대분류만 보여요. <button type="button" className="font-bold underline" onClick={cats.reload}>다시 시도</button></p>}
-    <div className="flex gap-1.5 overflow-x-auto">{['전체', '마감 임박', '판매 중', '판매 예정', '판매 종료'].map(f => <button key={f} onClick={() => setParam('state', f)} className={`flex h-7.5 shrink-0 items-center gap-1 rounded-inner px-2.5 text-label ${filter === f ? 'bg-ink font-bold text-white' : f === '마감 임박' ? 'bg-soft font-bold text-urgent' : 'bg-soft text-aux'}`}>{f === '마감 임박' && <span className={`h-1.5 w-1.5 rounded-full ${filter === f ? 'bg-white' : 'bg-urgent'}`}/>}{f}</button>)}</div>
-    {showHero && <div className="rounded-element bg-ink px-4.5 py-5 text-white"><p className="text-caption font-bold">STOCKDROP 시간 한정 판매</p><h2 className="mt-1.5 text-heading font-bold tracking-[-.6px]">단 3시간, 한정 판매</h2></div>}
-    {showHero && urgent.length > 0 && <section className="space-y-3 pt-3"><div className="flex items-center justify-between"><h2 className="flex items-center gap-1.5 text-title font-bold"><Timer size={19} className="text-urgent"/>곧 마감돼요</h2><span className="text-label text-aux">마감 임박 {urgent.length}</span></div>
-      {urgent.slice(0, 1).map(p => { const total = stockTotal(p), l = left(p); return <Link key={p.id} to={`/product/${p.id}`} className="block"><div className="relative"><ProductImage src={p.images[0]} alt={p.name} className="h-[240px] w-full"/><span className="absolute left-3 top-3 rounded-inner bg-urgent px-2 py-1 text-footnote font-bold text-white">마감 임박</span><span className="absolute right-3 top-3 flex items-center gap-1 rounded-inner bg-black/75 px-2 py-1 text-label font-bold tabular-nums text-white"><Timer size={13}/>{clockLeft(p.endsAt - now)} 남음</span></div><p className="mt-3 text-label font-bold text-aux">{p.brand}</p><div className="mt-1 flex items-center justify-between"><h3 className="text-headline">{p.name}</h3><p className="text-title font-bold">{money(p.price)}</p></div><div className="mt-2 flex items-center justify-between"><p className="text-body font-bold text-urgent">서두르세요! {l}개 남았어요</p><p className="text-label text-meta">{total}개 중 {total - l}개 판매</p></div><div className="mt-2 h-1 w-full rounded-full bg-line"><div className="h-1 rounded-full bg-urgent" style={{ width: `${total ? (total - l) / total * 100 : 0}%` }}/></div></Link>; })}
-    </section>}
-    <div className="flex items-end justify-between pt-6"><div><h2 className="text-title font-bold">{query ? `검색 결과 ${products.length}개` : '새로 올라온 상품'}</h2><p className="mt-1 text-label text-meta">의류 · 패션잡화 · 문구 · 생활잡화</p></div>{showHero && <button className="text-label text-aux" onClick={() => setParam('state', '판매 예정')}>더보기</button>}</div>
+    <div className="-mx-4 h-px bg-soft"/>
+    <div className="flex items-end justify-between pt-2"><div><h2 className="text-title-lg font-extrabold tracking-[-.4px]">{query ? `검색 결과 ${products.length}개` : '새로 올라온 상품'}</h2></div>{showHero && <button className="text-label text-aux" onClick={() => setParam('state', '판매 예정')}>더보기</button>}</div>
     {products.length ? <HomePager items={products} page={page} onPage={i => setParam('p', i ? String(i + 1) : '')} render={p => <ProductCard key={p.id} product={p} now={now} availableCount={left(p)} notified={notified.includes(p.id)} onNotify={() => toggleNotify(p.id)}/>}/> : live.loading || live.error ? <LiveStatus state={live}/> : (!query && filter === '전체' && category !== '전체' ? <Empty title={`아직 ${category} 상품이 없어요`} message="새 상품이 올라오면 여기에 보여요. 다른 카테고리도 둘러보세요."><Button outline onClick={() => setParam('category', '전체')}>전체 상품 보기</Button></Empty> : <Empty title="검색 결과가 없어요" message="검색어나 카테고리를 바꿔 보세요."><Button outline onClick={() => setParams({})}>필터 초기화</Button></Empty>)}
     <p className="py-4 text-footnote text-meta">미판매 새 상품만 판매합니다. 중고·전시·하자 상품은 제외돼요.</p>
-    {seller && <Link to="/seller/new" className="fixed bottom-[calc(88px+env(safe-area-inset-bottom,0px))] right-[max(16px,calc(50%-179px))] z-30 flex h-12 items-center gap-2 rounded-full bg-ink pl-3 pr-5 text-subhead font-bold text-white shadow-lg"><span className="grid h-6 w-6 place-items-center rounded-full bg-positive"><Plus size={16} strokeWidth={2.5}/></span>판매 등록</Link>}
+    {seller && <Link to="/seller/new" className="press fixed bottom-[calc(96px+env(safe-area-inset-bottom,0px))] right-[max(16px,calc(50%-179px))] z-30 flex h-13 items-center gap-1.5 rounded-pill bg-ink pl-4 pr-5 text-headline font-bold text-white shadow-lg"><Icon name="Plus" size={24}/>판매 등록</Link>}
   </div>;
 }
 
@@ -113,17 +116,18 @@ export function SchedulePage() {
     <ProductImage src={i.image} alt={i.name} className="h-24 w-24 shrink-0"/>
     <div className="flex min-w-0 flex-1 flex-col justify-between py-0.5">
       <div><div className="flex items-center gap-2"><span className={`rounded-badge px-1.5 py-0.5 text-footnote font-bold ${live ? 'bg-positive-soft text-positive' : 'bg-soft text-aux'}`}>{live ? '판매 중' : '오픈 예정'}</span><span className="text-label font-bold">{live ? `${hm(i.startsAt)} – ${hm(i.endsAt)}` : `${hm(i.startsAt)} 오픈`}</span></div><p className="mt-1.5 text-subhead font-bold">{i.name}</p><p className="mt-0.5 text-label text-meta">{i.category}</p></div>
-      <div className="flex items-center justify-between"><p className="text-subhead font-bold">{money(i.price)}</p>{live ? <span className="flex items-center gap-2 text-label text-aux"><span className="flex items-center gap-1"><Timer size={13}/>{leftLabel(i.endsAt)}</span>{notified.includes(i.productId) && <button type="button" aria-label="상품 알림 끄기" onClick={e => { e.preventDefault(); void toggleNotify(i.productId); }} className="flex h-7 items-center gap-1 rounded-[14px] border border-border px-2.5 text-label font-bold"><Bell size={12}/>알림 끄기</button>}</span> : <button type="button" onClick={e => { e.preventDefault(); toggleNotify(i.productId); }} className={`flex h-7 items-center gap-1 rounded-[14px] px-2.5 text-label font-bold ${notified.includes(i.productId) ? 'bg-ink text-white' : 'border border-border'}`}><Bell size={12}/>{notified.includes(i.productId) ? '알림 설정됨' : '알림 받기'}</button>}</div>
+      <div className="flex items-center justify-between"><p className="text-subhead font-bold">{money(i.price)}</p>{live ? <span className="flex items-center gap-2 text-label text-aux"><span className="flex items-center gap-1"><Timer size={13}/>{leftLabel(i.endsAt)}</span>{notified.includes(i.productId) && <button type="button" aria-label="상품 알림 끄기" onClick={e => { e.preventDefault(); void toggleNotify(i.productId); }} className="flex h-7 items-center gap-1 rounded-[14px] border border-border px-2.5 text-label font-bold"><Bell size={12}/>알림 끄기</button>}</span> : <button type="button" onClick={e => { e.preventDefault(); if (!notified.includes(i.productId)) ringBell(e.currentTarget); toggleNotify(i.productId); }} className={`flex h-7 items-center gap-1 rounded-[14px] px-2.5 text-label font-bold ${notified.includes(i.productId) ? 'bg-ink text-white' : 'border border-border'}`}><Bell size={12}/>{notified.includes(i.productId) ? '알림 설정됨' : '알림 받기'}</button>}</div>
     </div>
   </Link>;
   const group = (label: string, list: typeof items, live: boolean) => list.length ? <section key={label}><p className="pt-2 text-label font-bold text-meta">{label} <span className="text-text">{list.length}</span></p>{list.map((i, k) => row(i, live, k === list.length - 1))}</section> : null;
   return <div>
-    <header className="flex items-start gap-3 pt-1">{!fromTab && <button aria-label="이전 화면" onClick={() => window.history.state?.idx > 0 ? navigate(-1) : navigate('/')} className="-ml-1 grid h-9 w-9 shrink-0 place-items-center"><ArrowLeft size={20}/></button>}<div><h1 className="text-title-lg font-bold">판매 일정</h1><p className="mt-1 text-label text-aux">모든 판매는 오픈 후 3시간 동안만 진행돼요</p></div></header>
-    <div className="-mx-4 mt-4 flex items-center justify-between border-b border-line px-4"><div className="flex gap-5">{(['이번 주', '다음 주'] as const).map((t, i) => <button key={t} onClick={() => { setWeekOffset(i as 0 | 1); setSelected(i ? 'all' : todayMs); }} className={`border-b-2 pb-2.5 text-subhead ${weekOffset === i ? 'border-ink font-bold' : 'border-transparent text-meta'}`}>{t}</button>)}</div><div className="flex items-center gap-2 pb-2"><span className="text-label text-meta">{md(days[0])} – {md(days[6])}</span><Link to="/schedule/calendar" className="flex h-7 items-center gap-1 rounded-inner border border-border px-2 text-label font-bold"><CalendarDays size={13}/>전체 일정</Link></div></div>
-    <div className="flex items-center gap-1 py-3"><button onClick={() => setSelected('all')} className={`w-10 shrink-0 text-body font-bold ${selected === 'all' ? 'text-ink' : 'text-aux'}`}>전체</button>{days.map(t => { const isToday = t === todayMs, on = selected === t, past = t < todayMs; return <button key={t} onClick={() => setSelected(t)} aria-label={`${md(t)} ${WEEKDAY[new Date(t).getDay()]}요일`} className={`flex h-13.5 flex-1 flex-col items-center justify-center rounded-element ${on ? 'bg-ink text-white' : ''}`}><span className={`text-footnote ${on ? 'font-bold' : 'text-meta'}`}>{isToday ? '오늘' : WEEKDAY[new Date(t).getDay()]}</span><span className={`text-headline font-bold ${on ? '' : past ? 'text-placeholder' : ''}`}>{new Date(t).getDate()}</span></button>; })}</div>
-    <div className="-mx-4 h-2 bg-divider"/>
-    <div className="flex items-center justify-between pb-2 pt-5"><h2 className="text-headline font-bold">{selected === 'all' ? `${md(days[0])} – ${md(days[6])}` : `${new Date(selected).getMonth() + 1}월 ${new Date(selected).getDate()}일 ${WEEKDAY[new Date(selected).getDay()]}요일`}</h2><span className="text-label text-meta">판매 {visible.length}개</span></div>
-    {visible.length ? <>{group('지금 판매 중', selling, true)}<div className="h-4"/>{group('오픈 예정', upcoming, false)}</> : live.loading || live.error ? <LiveStatus state={live}/> : <Empty title="선택한 날의 판매 일정이 없어요" message="다른 요일을 선택하거나 전체 일정을 확인해 보세요."/>}
+    {/* 시안 최종 색 · 판매 일정: 큰 제목과 전체 일정 알약, 이번 주·다음 주 칸, 날짜 줄(판매 있는 날 점), 선택한 날 제목 */}
+    <header className="space-y-2 pt-2">{!fromTab && <button aria-label="이전 화면" onClick={() => window.history.state?.idx > 0 ? navigate(-1) : navigate('/')} className="press -ml-3 grid h-11 w-11 shrink-0 place-items-center"><Icon name="Back" size={24}/></button>}<div className="flex items-center justify-between"><h1 className="text-[30px] font-black tracking-[-1px]">판매 일정</h1><Link to="/schedule/calendar" className="press flex h-11 items-center gap-1.5 rounded-pill bg-soft px-3.5 text-callout font-bold"><Icon name="CalendarMonth" size={20}/>전체 일정</Link></div><p className="text-callout leading-[21px] text-muted">모든 판매는 오픈 후 3시간 동안만 진행돼요</p></header>
+    <div className="flex items-center justify-between pt-3.5"><div className="flex gap-0.5 rounded-inner bg-soft p-1">{(['이번 주', '다음 주'] as const).map((t, i) => <button key={t} aria-pressed={weekOffset === i} onClick={() => { setWeekOffset(i as 0 | 1); setSelected(i ? 'all' : todayMs); }} className={`h-9 w-22 rounded-[10px] text-callout ${weekOffset === i ? 'border border-border bg-surface font-extrabold' : 'font-medium text-muted'}`}>{t}</button>)}</div><span className="text-body font-medium text-muted">{md(days[0])} – {md(days[6])}</span></div>
+    <div className="-mx-1 flex pb-4 pt-4.5"><div className="flex flex-1 flex-col items-center gap-1.5"><span className="text-label font-semibold text-muted">주간</span><button onClick={() => setSelected('all')} aria-pressed={selected === 'all'} className={`grid h-10 w-10 place-items-center rounded-full text-body font-bold ${selected === 'all' ? 'bg-ink text-white' : ''}`}>전체</button></div>{days.map(t => { const isToday = t === todayMs, on = selected === t, past = t < todayMs, has = items.some(x => x.startsAt >= t && x.startsAt < t + DAY_MS && x.endsAt > now); return <div key={t} className="flex flex-1 flex-col items-center gap-1.5"><span className={`text-label font-semibold ${on ? 'text-ink' : 'text-muted'}`}>{isToday ? '오늘' : WEEKDAY[new Date(t).getDay()]}</span><button onClick={() => setSelected(t)} aria-label={`${md(t)} ${WEEKDAY[new Date(t).getDay()]}요일`} aria-pressed={on} className={`press grid h-10 w-10 place-items-center rounded-full text-headline font-bold ${on ? 'bg-ink text-white' : past ? 'text-muted' : ''}`}>{new Date(t).getDate()}</button><span aria-hidden className={`h-1 w-1 rounded-full ${has && !on ? 'bg-ink' : ''}`}/></div>; })}</div>
+    <div className="-mx-4 h-px bg-soft"/>
+    <div className="space-y-1 pb-1.5 pt-5.5"><h2 className="text-title-lg font-extrabold tracking-[-.4px]">{selected === 'all' ? `${md(days[0])} – ${md(days[6])}` : `${new Date(selected).getMonth() + 1}월 ${new Date(selected).getDate()}일 ${WEEKDAY[new Date(selected).getDay()]}요일`}</h2><p className="text-body font-medium text-muted">판매 {visible.length}개</p></div>
+    {visible.length ? <>{group('지금 판매 중', selling, true)}<div className="h-4"/>{group('오픈 예정', upcoming, false)}</> : live.loading || live.error ? <LiveStatus state={live}/> : <div className="flex flex-col items-center gap-4 pt-12 text-center"><span className="grid h-22 w-22 place-items-center rounded-full bg-soft"><Icon name="EventBusy" size={38}/></span><div className="space-y-1.5 px-5"><h3 className="text-title-sm font-bold">선택한 날의 판매 일정이 없어요</h3><p className="text-callout leading-[21px] text-muted">다른 요일을 선택하거나 전체 일정을 확인해 보세요.</p></div></div>}
   </div>;
 }
 
@@ -485,16 +489,16 @@ export function CalendarPage() {
   const selectedSales = selected ? salesOnDay(selected) : [];
   return (
     <div className="space-y-4">
-      <Header title="전체 일정" subtitle="판매 있는 날 · 오늘 · 이번 주 일정은 다음 주까지 공개돼요" back={true}/><LiveStatus state={live}/>
+      {/* 시안 최종 색 · 전체 일정: 큰 연월과 둥근 이전·다음 버튼, 칸 높이 50, 고른 날 주색 원 */}
+      <Header title="전체 일정" subtitle="판매 있는 날 · 오늘 · 이번 주 일정은 다음 주까지 공개돼요" back={true} bare/><LiveStatus state={live}/>
       <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <button type="button" onClick={prevMonth} className="muted px-2 py-2 text-footnote">← 이전달</button>
-          <b className="text-body">{year}년 {month + 1}월</b>
-          <button type="button" onClick={nextMonth} className="muted px-2 py-2 text-footnote">다음달 →</button>
+        <div className="flex items-center justify-between pb-2">
+          <b className="text-[28px] font-black tracking-[-.8px]">{year}년 {month + 1}월</b>
+          <div className="flex gap-2"><button type="button" aria-label="이전달" onClick={prevMonth} className="press grid h-11 w-11 place-items-center rounded-full border border-border"><Icon name="ChevronLeft" size={24}/></button><button type="button" aria-label="다음달" onClick={nextMonth} className="press grid h-11 w-11 place-items-center rounded-full border border-border"><Icon name="ChevronRight" size={24}/></button></div>
         </div>
-        <div className="grid grid-cols-7 gap-0">
+        <div className="-mx-1 grid grid-cols-7 gap-0">
           {['월','화','수','목','금','토','일'].map(d => (
-            <div key={d} className="py-2 text-center text-footnote font-semibold text-muted">{d}</div>
+            <div key={d} className="grid h-7.5 place-items-center text-label font-semibold text-muted">{d}</div>
           ))}
           {cells.map((day, i) => (
             <button
@@ -502,11 +506,11 @@ export function CalendarPage() {
               type="button"
               disabled={!day}
               onClick={() => day && setSelected(selected === day ? null : day)}
-              className={`relative flex flex-col items-center py-2 text-label ${!day ? '' : 'hover:bg-blue-soft'} ${day && isToday(day) ? 'font-bold text-red' : ''} ${day && selected === day ? 'rounded bg-ink text-surface!' : ''}`}
+              className={`relative flex h-12.5 flex-col items-center justify-center text-subhead font-semibold ${day && selected === day ? '' : day && isToday(day) ? 'font-extrabold text-ink' : ''}`}
             >
-              {day && <span>{day}</span>}
+              {day && <span className={`grid h-9.5 w-9.5 place-items-center rounded-full ${selected === day ? 'bg-ink text-surface' : ''}`}>{day}</span>}
               {day && hasSale(day) && (
-                <span className={`mt-0.5 h-1 w-1 rounded-full ${selected === day ? 'bg-surface' : 'bg-ink'}`}/>
+                <span className="absolute bottom-0.5 h-1 w-1 rounded-full bg-ink"/>
               )}
             </button>
           ))}
@@ -519,7 +523,7 @@ export function CalendarPage() {
         return (
           <div className="space-y-2">
             <div className="flex items-center justify-between py-1">
-              <h2 className="text-callout font-bold">{month + 1}월 {selected}일 {dayNames[selDate.getDay()]}</h2>
+              <h2 className="text-title-lg font-extrabold tracking-[-.4px]">{month + 1}월 {selected}일 {dayNames[selDate.getDay()]}</h2>
               {selectedSales.length > 0 && <span className="muted text-footnote">판매 {selectedSales.length}개 · 첫 오픈 {firstOpen}</span>}
             </div>
             {selectedSales.length ? selectedSales.sort((a, b) => a.startsAt - b.startsAt).map(p => (
@@ -605,21 +609,22 @@ export function NotificationsPage({ onClose }: { onClose?: () => void } = {}) {
   return (
     <div className="space-y-4">
       {!onClose && <Header title="알림" back={true}/>}
-      <div className={`divider flex pb-2 gap-5`}>
+      {/* 시안 최종 색 · 알림 목록: 칸 나눈 밑줄 탭, 모두 읽음, 종류 타일(44)과 굵은 제목·안 읽음 점 */}
+      <div className="-mx-4 flex border-b border-line px-5 pt-3">
         {tabs.map(t => (
-          <button key={t} onClick={() => setTab(t)} className={`border-b-2 py-2 text-label ${tab === t ? 'border-ink font-bold' : 'muted border-transparent'}`}>{t}</button>
+          <button key={t} onClick={() => setTab(t)} className={`h-12 flex-1 border-b-2 text-subhead ${tab === t ? 'border-ink font-extrabold' : 'border-transparent font-medium text-muted'}`}>{t}</button>
         ))}
       </div>
       {!USE_MOCK && <LiveStatus state={inbox}/>}
-      {!USE_MOCK && notifications.some(n => n.read === false) && <button className="muted text-footnote underline" onClick={readAll}>모두 읽음</button>}
+      {!USE_MOCK && notifications.some(n => n.read === false) && <div className="flex justify-end"><button className="press flex h-11 items-center gap-1.5 text-body font-semibold text-aux-strong" onClick={readAll}><Icon name="Check" size={20}/>모두 읽음</button></div>}
       {filtered.length ? filtered.map(n => (
-        <article key={n.id} className={`divider py-4 space-y-1 ${n.path ? 'cursor-pointer' : ''}`} {...(n.path ? { role: 'button', tabIndex: 0, onClick: () => open(n), onKeyDown: (e: React.KeyboardEvent) => { if (e.key === 'Enter') open(n); } } : {})}>
-          <div className="flex items-center justify-between">
-            <span className={`rounded px-2 py-0.5 text-caption font-semibold ${n.type === '맞춤 추천' ? 'bg-[var(--green-soft,#EEF8F3)] text-green' : 'bg-blue-soft'}`}>{n.type}</span>
-            <span className="muted text-caption">{n.time}</span>
+        <article key={n.id} className={`-mx-4 flex gap-3.5 border-b border-line px-5 py-4.5 ${n.path ? 'cursor-pointer' : ''}`} {...(n.path ? { role: 'button', tabIndex: 0, onClick: () => open(n), onKeyDown: (e: React.KeyboardEvent) => { if (e.key === 'Enter') open(n); } } : {})}>
+          <span aria-hidden className={`grid h-11 w-11 shrink-0 place-items-center rounded-inner ${n.type === '판매' ? 'bg-ink text-white' : 'bg-soft'}`}><Icon name={n.type === '판매' ? 'Sell' : n.type === '구매' ? 'Bag' : 'Bell'} size={22}/></span>
+          <div className="min-w-0 flex-1 space-y-[5px]">
+            <div className="flex items-center justify-between"><span className={`text-label font-extrabold ${n.type === '판매' ? 'text-ink' : 'text-aux-strong'}`}>{n.type}</span><span className="text-label font-medium text-muted">{n.time}</span></div>
+            <p className={`flex items-center gap-1.5 text-headline ${n.read === false ? 'font-extrabold' : 'font-semibold'}`}>{n.title}{n.read === false && <span aria-label="안 읽음" className="h-[7px] w-[7px] shrink-0 rounded-full bg-ink"/>}</p>
+            <p className="text-body leading-5 text-muted">{n.desc}</p>
           </div>
-          <p className={`text-body ${n.read === false ? 'font-bold' : 'font-semibold'}`}>{n.title}{n.read === false && <span className="ml-1 text-red">·</span>}</p>
-          <p className="muted text-label leading-relaxed">{n.desc}</p>
         </article>
       )) : !USE_MOCK && inbox.loading ? null : (
         <Empty title="새로운 알림이 없어요" message="상품 상세에서 알림 받기를 누르면 판매 소식을 알려드려요."/>

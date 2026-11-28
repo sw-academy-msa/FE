@@ -40,6 +40,7 @@ export const stockdropPalette = {
   'tab-bar': '#FFFFFF8C', // 하단 메뉴 바탕(시안 Tab Bar)
   'tab-shadow': '#0B142729', // 하단 메뉴 그림자(시안 Tab Bar)
   'tab-glow': '#FFFFFF73', // 하단 메뉴 안쪽 빛(시안 Tab Bar)
+  'search-shadow': '#1416190F', // 홈 검색·알림 알약 그림자(시안 홈 Search)
   // 상태
   red: '#B9201A', // 오류(시안 error). 구매 버튼은 주색
   'red-soft': '#FFF2F0', // 시안 없음
