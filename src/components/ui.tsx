@@ -97,7 +97,8 @@ export function Header({ title, subtitle, back = true, action, bare = false, bac
   return <header className={bare ? 'mb-5 pb-3' : 'divider mb-5 pb-3'}><div className="flex min-h-9.5 items-center gap-3">{back && <button type="button" aria-label="이전 화면" onClick={() => onBack ? onBack() : backTo ? navigate(backTo, { replace: true }) : window.history.state?.idx > 0 ? navigate(-1) : navigate('/')} className="press -ml-3 grid h-11 w-11 shrink-0 place-items-center"><Icon name="Back" size={24}/></button>}<h1 className="min-w-0 flex-1 text-title font-bold tracking-[-.5px]">{title}</h1>{action}</div>{subtitle && <p className="muted mt-1 text-footnote leading-relaxed">{subtitle}</p>}</header>;
 }
 export function Badge({ children, live = false, red = false }: { children: ReactNode; live?: boolean; red?: boolean }) { return <span className={`inline-flex w-fit items-center rounded-badge px-2 py-1 text-caption font-semibold ${live ? 'bg-green-soft text-green' : red ? 'bg-red-soft text-red' : 'bg-blue-soft text-text'}`}>{children}</span>; }
-export function InfoRow({ label, value, strong = false }: { label: string; value: ReactNode; strong?: boolean }) { return <div className="flex items-start justify-between gap-4 py-1"><span className="muted shrink-0 text-label">{label}</span><span className={`min-w-0 text-right text-label leading-relaxed ${strong ? 'font-bold' : ''}`}>{value}</span></div>; }
+/** 정보 한 줄(시안 결제 금액 Row): 이름 14 보조색, 값 14 굵게. strong은 합계 줄(위 구분선, 값 20 가장 굵게) */
+export function InfoRow({ label, value, strong = false }: { label: string; value: ReactNode; strong?: boolean }) { return <div className={`flex items-center justify-between gap-4 ${strong ? 'mt-1 border-t border-line pt-4' : 'py-2'}`}><span className="muted shrink-0 text-callout">{label}</span><span className={`min-w-0 text-right leading-relaxed ${strong ? 'text-title-lg font-black' : 'text-callout font-semibold'}`}>{value}</span></div>; }
 export function MenuRow({ label, to, children }: { label: string; to: string; children?: ReactNode }) { return <Link to={to} className="divider flex min-h-13 items-center gap-3"><span className="min-w-0 flex-1 text-body">{label}</span>{children}<Icon name="Caret" size={18} className="muted shrink-0"/></Link>; }
 const signedUrl = (u: string) => /[?&]X-Amz-(Expires|Signature)=/i.test(u);
 export function ProductImage({ src, alt, className = '' }: { src: string; alt: string; className?: string }) {
@@ -117,7 +118,8 @@ export function ProductImage({ src, alt, className = '' }: { src: string; alt: s
     {spinner}
   </span>;
 }
-export function ProductSummary({ product, option, amount }: { product: { name: string; brand: string; image: string }; option?: ReactNode; amount?: number }) { return <div className="divider flex items-center gap-3 pb-4"><ProductImage src={product.image} alt={product.name} className="h-21.5 w-19 shrink-0"/><div className="min-w-0 flex-1 space-y-1.5"><p className="muted text-caption">{product.brand}</p><p className="text-callout font-semibold">{product.name}</p>{option && <div className="muted whitespace-pre-line text-footnote leading-relaxed">{option}</div>}{amount !== undefined && <p className="font-number text-callout font-bold">{money(amount)}</p>}</div></div>; }
+/** 상품 요약 줄(시안 주문 결제 Product): 사진 76, 이름 17 굵게, 옵션 13, 금액 18 가장 굵게 */
+export function ProductSummary({ product, option, amount }: { product: { name: string; brand: string; image: string }; option?: ReactNode; amount?: number }) { return <div className="flex items-center gap-3.5 pb-2"><ProductImage src={product.image} alt={product.name} className="h-19 w-19 shrink-0"/><div className="min-w-0 flex-1 space-y-1"><p className="text-title-sm font-bold">{product.name}</p>{option && <div className="whitespace-pre-line text-body font-medium leading-relaxed text-muted">{option}</div>}{amount !== undefined && <p className="text-title font-black">{money(amount)}</p>}</div></div>; }
 const pad = (n: number) => String(n).padStart(2, '0');
 export const clockLeft = (ms: number) => { const s = Math.max(0, Math.floor(ms / 1000)); return `${pad(Math.floor(s / 3600))}:${pad(Math.floor(s % 3600 / 60))}:${pad(s % 60)}`; };
 export const openLabel = (t: number, now: number) => { const d = new Date(t), n = new Date(now); const same = d.toDateString() === n.toDateString(); return `${same ? '오늘' : `${d.getMonth() + 1}월 ${d.getDate()}일`} ${pad(d.getHours())}:${pad(d.getMinutes())} 오픈`; };
@@ -165,7 +167,16 @@ export function ProductCard({ product: p, now, availableCount, notified, onNotif
 }
 export function Progress({ step }: { step: number }) { return <div aria-label={`상품 등록 ${step} / 7단계`} className="mb-5 flex gap-[5px]">{Array.from({ length: 7 }, (_, i) => <div key={i} className={`h-1 flex-1 rounded-[2px] ${i < step ? 'bg-ink' : 'bg-line'}`}/>)}</div>; }
 export const ORDER_LABELS: Record<Order['status'], string> = { paid: '결제 완료', preparing: '배송 준비', shipping: '배송 중', delivered: '배송 완료', cancelled: '취소 완료', refunded: '환불 완료' };
-export function DeliveryProgress({ status }: { status: Order['status'] }) { const active = ['paid', 'preparing', 'shipping', 'delivered'].indexOf(status); return <div className="divider grid grid-cols-4 gap-1 pb-5">{['결제 완료', '배송 준비', '배송 중', '배송 완료'].map((label, i) => <div key={label} className="flex flex-col items-center gap-2"><span className={`font-number grid h-7.5 w-7.5 place-items-center rounded-full text-footnote ${i <= active ? 'bg-ink text-surface' : 'bg-blue-soft text-muted'}`}>{i < active || status === 'delivered' && i === active ? '✓' : i + 1}</span><span className={`text-caption ${i === active ? 'font-bold' : 'muted'}`}>{label}</span></div>)}</div>; }
+/** 배송 현황(시안 배송 현황 · 상태별): 회색 상자 안 네 단계. 지난 단계는 흰 원, 지금 단계는 주색 큰 원, 이후는 회색 원. 단계 사이 선은 지난 곳까지 주색 */
+const DELIVERY_STEPS = [['결제 완료', 'Payments'], ['배송 준비', 'Inventory'], ['배송 중', 'Shipping'], ['배송 완료', 'DeliveredHome']] as const;
+export function DeliveryProgress({ status }: { status: Order['status'] }) {
+  const active = ['paid', 'preparing', 'shipping', 'delivered'].indexOf(status);
+  const line = (on: boolean, hidden: boolean) => <span className={`h-[3px] flex-1 ${hidden ? '' : on ? 'bg-ink' : 'bg-border'}`}/>;
+  return <div className="flex rounded-card bg-soft px-2 pb-4.5 pt-5.5">{DELIVERY_STEPS.map(([label, icon], i) => <div key={label} aria-current={i === active ? 'step' : undefined} className="flex flex-1 flex-col items-center gap-2.5">
+    <div className="flex h-14 w-full items-center">{line(i <= active, i === 0)}<span className="grid h-11 w-11 place-items-center">{i === active ? <span className="grid h-10 w-10 place-items-center rounded-full bg-ink text-white"><Icon name={icon} size={22}/></span> : <span className={`grid h-9 w-9 place-items-center rounded-full ${i < active ? 'border border-line bg-surface text-text' : 'bg-line text-placeholder'}`}><Icon name={icon} size={20}/></span>}</span>{line(i < active, i === DELIVERY_STEPS.length - 1)}</div>
+    <span className={`text-body ${i === active ? 'font-extrabold text-text' : i < active ? 'font-semibold text-aux-strong' : 'font-medium text-placeholder'}`}>{label}</span>
+  </div>)}</div>;
+}
 /**
  * 열린 창(모달·시트·사진 보기)을 브라우저 뒤로 가기(아이폰 스와이프 포함)로 닫는다.
  * 열 때 같은 주소로 기록을 하나 쌓고, 뒤로 가기가 오면 페이지 대신 창만 닫는다. 버튼으로 닫으면 쌓은 기록을 되돌린다
