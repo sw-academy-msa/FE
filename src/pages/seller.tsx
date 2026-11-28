@@ -140,7 +140,7 @@ export function SellerProductPage() {
         <div className="relative overflow-hidden rounded-dialog">
           <ProductImage src={p.images[0]} alt={p.name} className="h-[180px] w-full object-cover"/>
           <div className="absolute inset-0 flex flex-col items-center justify-end bg-black/65 pb-6 text-white">
-            <div className="mb-3 flex h-13.5 w-13.5 items-center justify-center rounded-full border border-red/80"><svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M15 7L7 15M7 7l8 8" stroke="#EF6253" strokeWidth="2" strokeLinecap="round"/></svg></div>
+            <div className="mb-3 flex h-13.5 w-13.5 items-center justify-center rounded-full border border-red/80"><svg width="22" height="22" viewBox="0 0 22 22" fill="none" className="text-red"><path d="M15 7L7 15M7 7l8 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg></div>
             <p className="text-title-lg font-bold">판매 심사 반려</p>
             <p className="mt-1 text-body text-white/80">{p.brand} {p.name}</p>
           </div>
@@ -153,7 +153,7 @@ export function SellerProductPage() {
         </div>
         <div className="space-y-3">
           {saleItems.map(card)}
-          {checkItems.length > 0 && <><div className="flex items-center justify-between pt-2"><h3 className="text-subhead font-bold">물품 확인</h3><span className="rounded-inner bg-[#FDEFED] px-2 py-0.5 text-footnote font-bold text-urgent">{checkItems.length}개 항목 미통과</span></div><p className="text-label text-aux">운영팀이 상품 상태·구성품 등을 직접 확인한 결과예요.</p>{checkItems.map((r, i) => card(r, saleItems.length + i))}</>}
+          {checkItems.length > 0 && <><div className="flex items-center justify-between pt-2"><h3 className="text-subhead font-bold">물품 확인</h3><span className="rounded-inner bg-red-soft px-2 py-0.5 text-footnote font-bold text-urgent">{checkItems.length}개 항목 미통과</span></div><p className="text-label text-aux">운영팀이 상품 상태·구성품 등을 직접 확인한 결과예요.</p>{checkItems.map((r, i) => card(r, saleItems.length + i))}</>}
         </div>
         <div className="flex gap-2"><Button outline className="flex-1" onClick={() => navigate('/seller')}>나중에 하기</Button><Button className="flex-1" onClick={() => navigate(`/seller/new?edit=${p.id}`)}>수정하고 다시 요청</Button></div>
       </div>;
@@ -223,7 +223,7 @@ export function SellerProductPage() {
     return <div className="space-y-5">
       <Header title="판매 현황" action={<button aria-label="상품 링크 공유" onClick={() => copyText(`${window.location.origin}${window.location.pathname}#/product/${p.id}`).then(() => toast('상품 링크를 복사했습니다.')).catch(e => toast(e.message))}><Share2 size={20}/></button>}/>
       <div className="flex items-center gap-3">
-        <div className="shrink-0 rounded-inner" style={soldOut ? undefined : {outline:'2px solid #E5484D', outlineOffset:'2px'}}><ProductImage src={p.images[0]} alt={p.name} className="h-14 w-14"/></div>
+        <div className="shrink-0 rounded-inner" style={soldOut ? undefined : {outline:'2px solid var(--sd-color-urgent)', outlineOffset:'2px'}}><ProductImage src={p.images[0]} alt={p.name} className="h-14 w-14"/></div>
         <div className="min-w-0 flex-1">
           <div className="mb-1 flex items-center gap-2">
             {soldOut ? <><span className="rounded-badge bg-ink px-2 py-0.5 text-footnote font-bold text-white">완판</span><span className="muted text-footnote font-bold">{endTime} 종료 예정이었어요</span></>
@@ -839,7 +839,7 @@ function SellerSettingsFormPage() {
           {logoUrl ? <img src={logoUrl} alt="스토어 로고" className="h-16 w-16 rounded-dialog object-cover"/> : <div className="grid h-16 w-16 place-items-center rounded-dialog bg-ink text-heading-lg font-bold text-white">{(form.displayName || user.name).trim().charAt(0) || 'S'}</div>}
           {!USE_MOCK && <input id="seller-logo-file" type="file" accept="image/png,image/jpeg" hidden onChange={e => { changeLogo(e.target.files?.[0]); e.target.value = ''; }}/>}
           <button type="button" aria-label="로고 변경" onClick={() => document.getElementById('seller-logo-file')?.click()} className="absolute -bottom-1 -right-1 grid h-6.5 w-6.5 place-items-center rounded-full border border-line bg-surface">
-            <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="1" y="2.5" width="11" height="8.5" rx="1.5" stroke="#7B7B7B" strokeWidth="1.2"/><path d="M4.5 2.5V2a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v.5" stroke="#7B7B7B" strokeWidth="1.2"/><circle cx="6.5" cy="6.75" r="1.75" stroke="#7B7B7B" strokeWidth="1.2"/></svg>
+            <svg className="muted" width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="1" y="2.5" width="11" height="8.5" rx="1.5" stroke="currentColor" strokeWidth="1.2"/><path d="M4.5 2.5V2a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v.5" stroke="currentColor" strokeWidth="1.2"/><circle cx="6.5" cy="6.75" r="1.75" stroke="currentColor" strokeWidth="1.2"/></svg>
           </button>
         </div>
         <div className="space-y-1">
@@ -851,7 +851,7 @@ function SellerSettingsFormPage() {
       <Field label="스토어 이름" required>
         <div className="relative">
           <input aria-label="스토어 이름" className="field-line pr-10" value={form.displayName ?? ''} onChange={e => change('displayName', e.target.value)}/>
-          <button type="button" aria-label="지우기" onClick={() => change('displayName', '')} className="absolute right-3 top-1/2 -translate-y-1/2"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="#949494" strokeWidth="1.2"/><path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="#949494" strokeWidth="1.2" strokeLinecap="round"/></svg></button>
+          <button type="button" aria-label="지우기" onClick={() => change('displayName', '')} className="absolute right-3 top-1/2 -translate-y-1/2"><svg className="muted" width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.2"/><path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg></button>
         </div>
         <p className="muted mt-1 text-label">이름 변경은 30일에 한 번 가능해요</p>
       </Field>
@@ -870,7 +870,7 @@ function SellerSettingsFormPage() {
         <span className="text-subhead">로그인 이메일</span>
         <div className="flex items-center gap-2">
           <span className="muted text-label">{user.email}</span>
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="4" width="11" height="8" rx="1.5" stroke="#949494" strokeWidth="1.2"/><path d="M3 4V3a3 3 0 0 1 6 0v1" stroke="#949494" strokeWidth="1.2"/></svg>
+          <svg className="muted" width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="4" width="11" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.2"/><path d="M3 4V3a3 3 0 0 1 6 0v1" stroke="currentColor" strokeWidth="1.2"/></svg>
         </div>
       </div>
       <div className="divider flex items-center justify-between py-4">
@@ -898,7 +898,7 @@ export function SellerSupportPage() {
     <div className="space-y-0">
       <Header title="이용 안내 · 고객지원"/>
       <label className="mb-5 flex h-10 items-center gap-2.5 rounded-element bg-canvas px-3.5">
-        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" className="muted shrink-0"><circle cx="8" cy="8" r="6" stroke="#949494" strokeWidth="1.5"/><path d="M13 13l3 3" stroke="#949494" strokeWidth="1.5" strokeLinecap="round"/></svg>
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" className="muted shrink-0"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5"/><path d="M13 13l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
         <input aria-label="고객지원 검색" placeholder="정산, 출고, 판매 심사 기준 검색" className="min-w-0 flex-1 bg-transparent text-subhead outline-none placeholder:text-muted" readOnly/>
       </label>
       <section className="mb-5 space-y-3">

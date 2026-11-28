@@ -125,6 +125,17 @@ const pad = (n: number) => String(n).padStart(2, '0');
 export const clockLeft = (ms: number) => { const s = Math.max(0, Math.floor(ms / 1000)); return `${pad(Math.floor(s / 3600))}:${pad(Math.floor(s % 3600 / 60))}:${pad(s % 60)}`; };
 export const openLabel = (t: number, now: number) => { const d = new Date(t), n = new Date(now); const same = d.toDateString() === n.toDateString(); return `${same ? '오늘' : `${d.getMonth() + 1}월 ${d.getDate()}일`} ${pad(d.getHours())}:${pad(d.getMinutes())} 오픈`; };
 export const soldOutLabel = (p: Product) => { if (!p.soldOutAt) return '판매 종료'; const m = Math.max(1, Math.round((p.soldOutAt - p.startsAt) / 60_000)); return `${m >= 60 ? `${Math.floor(m / 60)}시간 ${m % 60}분` : `${m}분`} 만에 완판됐어요`; };
+/** 금액 올라가기(판매자 매출): 0에서 값까지 0.6초 동안 센다. 화면에는 숫자 하나만 그리고, 세는 동안 aria-busy. 움직임 줄이기면 바로 값 */
+export function CountUp({ value, format }: { value: number; format: (n: number) => string }) {
+  const [shown, setShown] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches ? value : 0);
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { setShown(value); return; }
+    const start = performance.now(); let frame = 0;
+    const step = (t: number) => { const k = Math.min(1, (t - start) / 600); setShown(Math.round(value * (1 - (1 - k) ** 3))); if (k < 1) frame = requestAnimationFrame(step); };
+    frame = requestAnimationFrame(step); return () => cancelAnimationFrame(frame);
+  }, [value]);
+  return <span aria-busy={shown !== value}>{format(shown)}</span>;
+}
 /** 숫자가 바뀌면 그 자리 숫자만 아래에서 올라온다(숫자 굴러가기). 글자 자체는 그대로라 읽기·검색 결과가 같다 */
 export function RollingText({ text }: { text: string }) { return <>{[...text].map((ch, i) => /\d/.test(ch) ? <span key={`${i}-${ch}`} className="sd-roll">{ch}</span> : ch)}</>; }
 export function ProductCard({ product: p, now, availableCount, notified, onNotify }: { product: Product; now: number; availableCount?: number; notified?: boolean; onNotify?: () => void }) {

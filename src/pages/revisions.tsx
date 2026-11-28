@@ -29,7 +29,7 @@ export function RevisionList({ items }: { items: ProductRevisionDto[] }) {
 function Row({ label, before, after }: { label: string; before?: ReactNode; after: ReactNode }) {
   const same = before !== undefined && before === after;
   return <div className="space-y-1.5 border-b border-line py-3">
-    <p className="flex items-center gap-2 text-label font-bold">{label}{!same && before !== undefined && <span className="rounded-badge bg-[#FFF3E0] px-1.5 text-caption text-[#B25E09]">변경</span>}{same && <span className="muted text-caption font-normal">변경 없음</span>}</p>
+    <p className="flex items-center gap-2 text-label font-bold">{label}{!same && before !== undefined && <span className="rounded-badge bg-warning-soft px-1.5 text-caption text-warning">변경</span>}{same && <span className="muted text-caption font-normal">변경 없음</span>}</p>
     <div className="grid grid-cols-2 gap-2 text-label">
       <div className="rounded-inner bg-soft p-2"><p className="muted mb-1 text-caption">변경 전</p><div className="whitespace-pre-wrap break-words">{before === undefined ? <span className="muted">확인할 수 없어요</span> : before || '-'}</div></div>
       <div className={`rounded-inner p-2 ${same ? 'bg-soft' : 'bg-positive-soft'}`}><p className="muted mb-1 text-caption">변경 후</p><div className="whitespace-pre-wrap break-words">{after || '-'}</div></div>

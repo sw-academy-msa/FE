@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
-import { Bell, Check, Eye, EyeOff, ShieldCheck } from 'lucide-react';
+import { Bell, Check, Eye, EyeOff, Info, ShieldCheck } from 'lucide-react';
 import { BrandLogo } from '../components/BrandLogo';
 import { Icon } from '../components/icons';
 import { CodeInput } from '../components/CodeInput';
@@ -337,31 +337,32 @@ export function NotificationSettingsPage() {
     <div className="mb-1 h-[3px] w-full bg-line"><div className="h-[3px] w-full rounded-r-full bg-ink"/></div>
     <div className="flex justify-end py-2 text-footnote text-muted"><span className="font-bold text-text">1</span><span> / 1</span></div></>}
     <div className="flex-1 space-y-5 pt-2">
-      <div className="flex flex-col items-center gap-3 py-6">
-        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-line"><Bell size={22} strokeWidth={1.5}/></div>
-        <h1 className="text-headline font-bold">나에게 딱 맞는 알림을 받아보세요</h1>
-        <p className="text-center text-label text-muted">구매 이력을 분석해 꼭 필요한 판매 알림만 보내드려요.</p>
+      {/* 시안 최종 색 · 알림 설정: 연파랑 원 아이콘(64)과 24px 제목, 토글 줄, 회색 동의 상자, 테두리 푸시 안내 */}
+      <div className="flex flex-col items-center gap-4 pb-2 pt-4">
+        <div className="grid h-16 w-16 place-items-center rounded-full bg-info-soft text-ink"><Bell size={30} strokeWidth={1.8}/></div>
+        <div className="w-full space-y-1.5"><h1 className="text-heading-lg font-black leading-[31px] tracking-[-.6px]">나에게 딱 맞는 알림을 받아보세요</h1>
+        <p className="text-callout leading-[21px] text-muted">구매 이력을 분석해 꼭 필요한 판매 알림만 보내드려요.</p></div>
       </div>
       <div className="h-[1px] bg-line"/>
       {load === 'loading' && <p role="status" className="muted text-center text-label">현재 알림 설정을 불러오고 있어요.</p>}
       {load === 'failed' && <div role="alert" className="space-y-2 rounded-element bg-soft p-3.5 text-center"><p className="text-body font-bold">알림 설정을 불러오지 못했어요.</p><p className="muted text-label">지금 설정이 바뀌지 않도록 저장을 잠시 막아 두었어요. 다시 시도해 주세요.</p><Button outline className="w-full text-body!" onClick={() => setAttempt(n => n + 1)}>다시 시도</Button></div>}
-      <div>{NOTIFS.map(n => <div key={n.id} className="divider flex items-center justify-between gap-4 py-4">
-        <div className="flex-1"><p className="text-callout font-bold">{n.title}</p><p className="muted mt-0.5 text-label">{n.desc}</p></div>
-        <button role="switch" aria-label={n.title} aria-checked={!!enabled[n.id]} disabled={!ready} onClick={() => toggle(n.id)} className={`relative h-7 w-12 shrink-0 rounded-full transition-colors disabled:opacity-40 ${enabled[n.id] ? 'bg-ink' : 'bg-line'}`}><span className={`absolute top-[3px] h-5.5 w-5.5 rounded-full bg-white shadow-sm transition-all ${enabled[n.id] ? 'left-[23px]' : 'left-[3px]'}`}/></button>
+      <div>{NOTIFS.map(n => <div key={n.id} className="divider flex items-center justify-between gap-4 py-4.5">
+        <div className="flex-1 space-y-1.5"><p className="text-headline font-bold">{n.title}</p><p className="muted text-label leading-[19px]">{n.desc}</p></div>
+        <button role="switch" aria-label={n.title} aria-checked={!!enabled[n.id]} disabled={!ready} onClick={() => toggle(n.id)} className={`relative h-8 w-13 shrink-0 rounded-full transition-colors disabled:opacity-40 ${enabled[n.id] ? 'bg-ink' : 'bg-border'}`}><span className={`absolute top-[3px] h-6.5 w-6.5 rounded-full bg-white transition-all ${enabled[n.id] ? 'left-[23px]' : 'left-[3px]'}`}/></button>
       </div>)}</div>
       <div className="h-[1px] bg-line"/>
-      <label className="flex items-start gap-3 rounded-element bg-infobar p-4 text-body font-bold">
-        <input type="checkbox" checked={marketing} disabled={!ready} onChange={e => setMarketing(e.target.checked)} className="mt-0.5 h-5 w-5 shrink-0 rounded-inner"/>
-        <div><p>광고성 정보 수신 동의 (선택)</p><p className="muted mt-1 text-footnote font-normal leading-relaxed">개인 맞춤 알림 서비스를 위해 마케팅 정보 수신에 동의합니다.</p></div>
+      <label className="flex items-start gap-3.5 rounded-card bg-soft p-4.5 text-subhead font-bold">
+        <input type="checkbox" checked={marketing} disabled={!ready} onChange={e => setMarketing(e.target.checked)} className="h-6 w-6 shrink-0"/>
+        <div className="space-y-1"><p>광고성 정보 수신 동의 (선택)</p><p className="text-body font-normal leading-5 text-aux-strong">개인 맞춤 알림 서비스를 위해 마케팅 정보 수신에 동의합니다.</p></div>
       </label>
-      <p className="muted text-label">맞춤 알림을 받으려면 위 두 가지 모두 동의가 필요해요</p>
+      <p className="muted flex items-start gap-2 px-0.5 text-body leading-5"><Info size={18} className="mt-px shrink-0"/>맞춤 알림을 받으려면 위 두 가지 모두 동의가 필요해요</p>
       {logged && push === 'denied' && <Note title="백그라운드 알림이 꺼져 있어요"><p>{PUSH_DENIED_TEXT} 켠 뒤 이 화면으로 돌아오면 다시 연결할 수 있어요.</p></Note>}
       {logged && (push === 'ask' || push === 'reconnect') && <div role="status" className="space-y-2 rounded-element bg-soft p-4">
         <p className="text-body font-bold">백그라운드 알림이 연결되어 있지 않아요</p>
         <p className="text-label text-aux">앱을 닫아도 알림을 받으려면 알림을 허용해 주세요. 앱 안 알림함은 그대로 받을 수 있어요.</p>
         <Button outline className="w-full text-body!" disabled={pushBusy} onClick={connectPush}>{pushBusy ? '연결 중…' : push === 'ask' ? '알림 허용하기' : '백그라운드 알림 다시 연결'}</Button>
       </div>}
-      {!pushReady && <Note title="푸시 알림"><p>홈 화면에 추가하면 알림을 받을 수 있어요. 사파리 공유 버튼 → ‘홈 화면에 추가’ 후 홈 화면의 STOCKDROP 앱으로 열어 주세요.</p></Note>}
+      {!pushReady && <div className="space-y-1.5 rounded-card border border-border p-4.5"><h3 className="text-subhead font-bold">푸시 알림</h3><p className="text-body leading-[21px] text-aux-strong">홈 화면에 추가하면 알림을 받을 수 있어요. 사파리 공유 버튼 → ‘홈 화면에 추가’ 후 홈 화면의 STOCKDROP 앱으로 열어 주세요.</p></div>}
       {PUSH_DEBUG && <PushDebug/>}
     </div>
     <div className="pb-6 pt-4"><Button className="w-full" disabled={saving || !ready} onClick={() => proceed(pushReady)}>{settingsMode ? (saving ? '저장 중…' : '저장') : pushReady ? '알림 받기 시작' : '설정 저장하고 시작'}</Button></div>
