@@ -15,9 +15,9 @@ describe('apple-touch-startup-image', () => {
     const png = readFileSync(`public/${l!.file}`); // PNG 헤더의 폭·높이
     expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([w * r, h * r]);
   });
-  it('첫 프레임: html·body 인라인 배경과 #boot, 상태 표시줄·theme-color·manifest가 모두 #0E0E0F 계열', () => {
-    expect(html).toMatch(/<html[^>]*style="background:#0E0E0F"/); expect(html).toMatch(/<body[^>]*style="background:#0E0E0F"/); expect(html).toMatch(/id="boot"[^>]*background:#0E0E0F/);
-    expect(html).toContain('<meta name="theme-color" content="#0E0E0F"/>'); expect(html).toContain('status-bar-style" content="black-translucent"');
-    const m = JSON.parse(readFileSync('public/manifest.webmanifest', 'utf-8')); expect([m.background_color, m.theme_color]).toEqual(['#0E0E0F', '#0E0E0F']);
+  it('첫 프레임: html·body 인라인 배경과 #boot, manifest 바탕은 #023EB5(주색, 시작 화면), 상태 표시줄·theme-color는 흰 화면에 맞춘 밝은 줄', () => {
+    expect(html).toMatch(/<html[^>]*style="background:#023EB5"/); expect(html).toMatch(/<body[^>]*style="background:#023EB5"/); expect(html).toMatch(/id="boot"[^>]*background:#023EB5/);
+    expect(html).toContain('<meta name="theme-color" content="#FFFFFF"/>'); expect(html).toContain('status-bar-style" content="default"');
+    const m = JSON.parse(readFileSync('public/manifest.webmanifest', 'utf-8')); expect([m.background_color, m.theme_color]).toEqual(['#023EB5', '#FFFFFF']);
   });
 });

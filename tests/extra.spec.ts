@@ -39,9 +39,8 @@ test('시작 화면: 처음 켤 때 한 번만 나오고, 화면 이동에서는
   await page.addInitScript(() => Object.defineProperty(navigator, 'webdriver', { get: () => false })); // 자동화 감지로 건너뛰는 것을 끈다
   await page.goto('about:blank'); await page.goto('/#/welcome'); // 새로 열기(해시만 바꾸면 같은 페이지라 다시 안 나온다)
   const splash = page.getByRole('img', { name: 'STOCKDROP' }); await expect(splash).toBeVisible();
-  expect(await splash.evaluate(el => getComputedStyle(el).backgroundColor)).toBe('rgb(14, 14, 15)');
-  const art = splash.locator('img'); await expect(art).toHaveAttribute('src', /splash\/logo-3x\.png$/); // 받은 시작 화면 그림(정지 화면과 같은 그림)
-  await expect.poll(() => art.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth === 879)).toBe(true);
+  expect(await splash.evaluate(el => getComputedStyle(el).backgroundColor)).toBe('rgb(2, 62, 181)'); // 시안 스플래시 주색
+  await expect(splash.locator('svg')).toBeVisible(); await expect(splash.getByText('EVERY DROP, 3 HOURS ONLY', { exact: true })).toBeVisible(); // 시안 로고와 문구
   await expect(splash).toHaveCount(0, { timeout: 5000 });
   await page.goto('/#/login'); await page.waitForTimeout(400); await expect(page.getByRole('img', { name: 'STOCKDROP' })).toHaveCount(0); // 같은 페이지 안 이동: 다시 안 나온다
   await page.emulateMedia({ reducedMotion: 'reduce' }); await page.reload();
@@ -49,15 +48,15 @@ test('시작 화면: 처음 켤 때 한 번만 나오고, 화면 이동에서는
   await expect(calm).toHaveCount(0, { timeout: 4000 });
 });
 
-test('첫 프레임: 검은 #boot가 스플래시에 이어지고, 스플래시 뒤에는 앱 배경(흰색)으로 넘어간다', async ({ page }) => {
+test('첫 프레임: 주색 #boot가 스플래시에 이어지고, 스플래시 뒤에는 앱 배경(흰색)으로 넘어간다', async ({ page }) => {
   await page.addInitScript(() => Object.defineProperty(navigator, 'webdriver', { get: () => false }));
   // 앱 스크립트를 늦춰 첫 프레임(스크립트 전)을 붙잡는다
   await page.route('**/src/main.tsx*', async route => { await new Promise(r => setTimeout(r, 1500)); await route.continue(); });
   await page.goto('about:blank'); const nav = page.goto('/#/welcome', { waitUntil: 'commit' }); await nav;
   await expect(page.locator('#boot')).toBeAttached();
-  expect(await page.evaluate(() => [getComputedStyle(document.documentElement).backgroundColor, getComputedStyle(document.body).backgroundColor, getComputedStyle(document.getElementById('boot')!).backgroundColor])).toEqual(['rgb(14, 14, 15)', 'rgb(14, 14, 15)', 'rgb(14, 14, 15)']);
+  expect(await page.evaluate(() => [getComputedStyle(document.documentElement).backgroundColor, getComputedStyle(document.body).backgroundColor, getComputedStyle(document.getElementById('boot')!).backgroundColor])).toEqual(['rgb(2, 62, 181)', 'rgb(2, 62, 181)', 'rgb(2, 62, 181)']);
   const splash = page.getByRole('img', { name: 'STOCKDROP' }); await expect(splash).toBeVisible(); await expect(page.locator('#boot')).toHaveCount(0); // 스플래시가 뜬 같은 시점에 첫 프레임을 걷는다
   await expect(splash).toHaveCount(0, { timeout: 6000 });
   expect(await page.evaluate(() => [document.documentElement.style.background, document.body.style.background])).toEqual(['', '']);
-  expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).not.toBe('rgb(14, 14, 15)');
+  expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).not.toBe('rgb(2, 62, 181)');
 });
