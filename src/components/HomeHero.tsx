@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useViewTransitionState } from 'react-router-dom';
 import { Pause, Play } from 'lucide-react';
 import type { Product } from '../domain';
 import { money, stockTotal } from '../domain';
@@ -27,9 +27,19 @@ export function HomeHero({ products, now, left }: { products: Product[]; now: nu
   return <section aria-label="지금 판매 중인 상품" className="relative -mx-4">
     <div ref={ref} style={{ scrollbarWidth: 'none' }} className="flex snap-x snap-mandatory scroll-pl-5 gap-2.5 overflow-x-auto px-5 pt-4">
       {products.map((p, i) => {
-        const urgent = p.endsAt - now <= 3_600_000, l = left(p), total = stockTotal(p);
-        return <Link key={p.id} to={`/product/${p.id}`} className="w-[336px] shrink-0 snap-start overflow-hidden rounded-card border border-border bg-surface">
-          <div className="relative h-[308px]">
+        return <HeroCard key={p.id} product={p} index={i} count={count} now={now} left={left}/>;
+      })}
+    </div>
+    {count > 1 && <button type="button" aria-label={playing ? '슬라이드 정지' : '슬라이드 재생'} onClick={() => setPlaying(v => !v)} className="press absolute left-[310px] top-[30px] grid h-8 w-8 place-items-center rounded-full bg-overlay text-surface">{playing ? <Pause size={14} fill="currentColor"/> : <Play size={14} fill="currentColor"/>}</button>}
+  </section>;
+}
+
+/** 슬라이드 카드 한 장. 확대 전환으로 상세 큰 사진에 이어진다 */
+function HeroCard({ product: p, index: i, count, now, left }: { product: Product; index: number; count: number; now: number; left: (p: Product) => number }) {
+  const zooming = useViewTransitionState(`/product/${p.id}`);
+  const urgent = p.endsAt - now <= 3_600_000, l = left(p), total = stockTotal(p);
+  return <Link to={`/product/${p.id}`} viewTransition className="w-[336px] shrink-0 snap-start overflow-hidden rounded-card border border-border bg-surface">
+          <div className="relative h-[308px]" style={{ viewTransitionName: zooming ? 'product-photo' : undefined }}>
             <ProductImage src={p.images[0]} alt={p.name} className="absolute! inset-0 h-full w-full rounded-none!"/>
             <span className={`absolute left-3.5 top-3.5 flex items-center gap-1.5 rounded-pill bg-surface px-3 py-2 text-body font-bold ${urgent ? 'text-urgent' : 'text-green'}`}><span className="h-[7px] w-[7px] rounded-full bg-current"/>{urgent ? '마감 임박' : '판매 중'}</span>
             <span className="absolute bottom-3.5 right-3.5 rounded-pill bg-overlay px-[11px] py-1.5 text-label font-semibold text-surface">{i + 1} / {count}</span>
@@ -43,8 +53,4 @@ export function HomeHero({ products, now, left }: { products: Product[]; now: nu
             <div className="h-1 w-full rounded-[2px] bg-line"><div className={`h-1 rounded-[2px] ${urgent ? 'bg-urgent' : 'bg-ink'}`} style={{ width: `${total ? Math.min(100, (1 - l / total) * 100) : 0}%` }}/></div>
           </div>
         </Link>;
-      })}
-    </div>
-    {count > 1 && <button type="button" aria-label={playing ? '슬라이드 정지' : '슬라이드 재생'} onClick={() => setPlaying(v => !v)} className="press absolute left-[310px] top-[30px] grid h-8 w-8 place-items-center rounded-full bg-overlay text-surface">{playing ? <Pause size={14} fill="currentColor"/> : <Play size={14} fill="currentColor"/>}</button>}
-  </section>;
 }

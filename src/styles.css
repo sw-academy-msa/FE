@@ -254,6 +254,9 @@ main { padding-top: calc(12px + env(safe-area-inset-top, 0px)); }
 /* 판매 등록 사진 미리보기: 받는 동안 흐리게 보이다가 다 받으면 선명하게 */
 .photo-reveal img { transition: opacity 200ms ease, filter 400ms ease; }
 .photo-reveal img[data-fallback="loading"] { opacity: .6 !important; filter: blur(8px); }
+/* 확대 전환(홈 → 상품 상세): 사진이 제자리에서 커지는 시간과 곡선. 움직임 줄이기면 끈다 */
+::view-transition-group(product-photo) { animation-duration: 320ms; animation-timing-function: var(--ease-standard); }
+@media (prefers-reduced-motion: reduce) { ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; } }
 .tab-indicator { transition: transform 320ms var(--ease-move); }
 
 /* 누름 효과: 누르는 동안 0.97배(100ms). 아이폰 Safari는 문서에 touchstart가 걸려 있어야 :active가 터치에 반응한다(main.tsx) */

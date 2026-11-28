@@ -3,7 +3,7 @@ import { Button as AxButton } from '@astryxdesign/core/Button';
 import { BottomSheet as AxBottomSheet } from '@astryxdesign/core/BottomSheet';
 import { Dialog as AxDialog } from '@astryxdesign/core/Dialog';
 import type { ButtonHTMLAttributes, MouseEvent, ReactNode } from 'react';
-import { Link, NavLink, useBlocker, useHref, useLocation, useNavigate } from 'react-router-dom';
+import { Link, NavLink, useBlocker, useHref, useLocation, useNavigate, useViewTransitionState } from 'react-router-dom';
 import { Bell, Timer, X, Package, Info, Copy, Check } from 'lucide-react';
 import { Icon } from './icons';
 import type { Product, Order } from '../domain';
@@ -151,8 +151,10 @@ export function ProductCard({ product: p, now, availableCount, notified, onNotif
   const pct = total ? Math.min(100, Math.max(0, (1 - left / total) * 100)) : 0;
   // 시안 최종 색 · 홈 새로 올라온 상품 줄: 사진 112(아래 시간 띠), 카테고리·이름·가격, 오른쪽 알림 종(44). 예전 카드의 상태 표시와 문구는 그대로 둔다
   const bell = (label: string, on: boolean) => <button type="button" aria-label={label} onClick={e => { e.preventDefault(); if (!on) ringBell(e.currentTarget); onNotify?.(); }} className={`press grid h-11 w-11 shrink-0 place-items-center rounded-full ${on ? 'text-ink' : 'text-text'}`}><Icon name={on ? 'AlertOn' : 'AlertOff'} size={24}/></button>;
-  return <Link to={`/product/${p.id}`} className="flex min-w-0 items-center gap-4 border-b border-line py-4">
-    <div className="relative h-28 w-28 shrink-0">
+  // 확대 전환: 이 상품 상세로 가는 동안 사진에 이름을 붙여 상세 큰 사진으로 이어지게 한다
+  const zooming = useViewTransitionState(`/product/${p.id}`);
+  return <Link to={`/product/${p.id}`} viewTransition className="flex min-w-0 items-center gap-4 border-b border-line py-4">
+    <div className="relative h-28 w-28 shrink-0" style={{ viewTransitionName: zooming ? 'product-photo' : undefined }}>
       <ProductImage src={p.images[0]} alt={p.name} className={`h-28 w-28 ${soldOut && !myHold ? 'opacity-50' : ''}`}/>
       {status === '판매 중' && !soldOut && <span className="absolute inset-x-1.5 bottom-1.5 flex h-7 items-center justify-center gap-1 rounded-[14px] bg-overlay text-label font-bold tabular-nums text-white"><Timer size={12}/><span><RollingText text={clockLeft(p.endsAt - now)}/></span></span>}
       {status === '판매 예정' && <span className="absolute inset-x-1.5 bottom-1.5 flex h-7 items-center justify-center gap-[5px] rounded-[14px] bg-overlay text-footnote font-medium text-white">{openLabel(p.startsAt, now)}</span>}
