@@ -68,7 +68,7 @@ function useErrorCue(error: string | undefined, ref: { current: HTMLElement | nu
 export function Field({ label, hint, required, error, children }: { label: string; hint?: string; required?: boolean; error?: string; children: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
   useErrorCue(error, ref, true);
-  return <div ref={ref} data-invalid={error ? '' : undefined}><span className="label">{label}{required && <span className="muted ml-1 text-caption">· 필수</span>}</span>{children}{error && <p role="alert" className="mt-2 text-label text-red">{error}</p>}{hint && <p className="muted mt-2 text-caption leading-relaxed">{hint}</p>}</div>;
+  return <div ref={ref} data-invalid={error ? '' : undefined}><span className="label">{label}{required && <span className="muted ml-1.5 text-label font-medium">· 필수</span>}</span>{children}{error && <p role="alert" className="mt-2 text-label text-red">{error}</p>}{hint && <p className="muted mt-2 text-caption leading-relaxed">{hint}</p>}</div>;
 }
 export function Note({ title, children, green = false }: { title?: string; children: ReactNode; green?: boolean }) { return <div className={`note ${green ? 'bg-green-soft!' : ''}`}>{title && <h3 className="mb-1 font-bold">{title}</h3>}<div className="muted">{children}</div></div>; }
 export function ErrorBox({ message }: { message: string }) {

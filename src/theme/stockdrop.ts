@@ -160,8 +160,8 @@ export const SHEET_EXIT_MS = 240;
 /** 버튼 눌림: 100ms 동안 0.97배 */
 export const stockdropPress = { scale: '0.97', duration: '100ms' } as const;
 
-/** 버튼 높이와 글자 */
-export const stockdropButton = { height: '48px', fontSize: stockdropType.body } as const;
+/** 버튼 높이(결정: 48 유지)와 글자(시안 Button 16 굵게) */
+export const stockdropButton = { height: '48px', fontSize: stockdropType.headline } as const;
 
 /** 본문 글꼴. Astryx 부품과 화면 전체(body)가 같이 쓴다(--font-family-body) */
 const font = { family: 'Noto Sans KR', fallbacks: 'sans-serif' };
