@@ -40,7 +40,7 @@ async function openHome(page: Page) {
 test('비로그인 홈에서 전체 + 서버 대분류 탭(상품 없는 대분류 포함)이 보이고, 세부 카테고리 상품이 대분류 탭에 나온다', async ({ page }) => {
   const sv: Sv = { catalogFails: false, catalogCalls: 0, oldCategoriesCalls: 0, list: [summary('pad', '숏패딩 점퍼', '숏패딩'), summary('pen', '젤 볼펜', '볼펜'), summary('etc', '미분류 상품', '서버에 없는 이름'), summary('cloth', '대분류 이름 상품', '의류')] };
   await serve(page, sv); await openHome(page);
-  await expect(tabs(page)).toHaveText(['전체', '의류', '패션잡화', '문구', '일반 생활잡화']);
+  await expect(tabs(page)).toHaveText(['전체', '의류', '패션잡화', '문구', '생활잡화']);
   expect(await noOverflow(page)).toBe(true);
   await expect.poll(() => ids(page)).toHaveLength(4); // 전체에는 매핑 안 되는 상품도
   await tab(page, '의류').click(); await expect(page).toHaveURL(/category=%EC%9D%98%EB%A5%98/);
@@ -53,7 +53,7 @@ test('비로그인 홈에서 전체 + 서버 대분류 탭(상품 없는 대분�
   // 상세에 갔다 뒤로 오면 보던 탭 그대로
   await tab(page, '의류').click(); await expect.poll(async () => (await ids(page)).sort()).toEqual(['cloth', 'pad']);
   await page.getByTestId('home-products').locator('a[href="#/product/pad"]').first().click(); await expect(page).toHaveURL(/#\/product\/pad/);
-  await page.goBack(); await expect(tab(page, '의류')).toHaveClass(/font-bold/);
+  await page.goBack(); await expect(tab(page, '의류')).toHaveAttribute('aria-pressed', 'true'); // 리디자인: 선택 표시는 굵기 클래스 대신 선택 상태 속성으로 확인
   await expect.poll(async () => (await ids(page)).sort()).toEqual(['cloth', 'pad']);
   expect(sv.oldCategoriesCalls).toBe(0); // 예전 /categories는 더 쓰지 않는다
 });
@@ -71,7 +71,7 @@ test('대분류 탭을 바꾸면 스와이프 페이지가 첫 페이지로 돌�
 test('카탈로그를 못 받으면 고정 대분류 탭을 보여 주고, 대분류 이름과 같은 상품만 그 탭에, 다시 시도하면 서버 카탈로그로', async ({ page }) => {
   const sv: Sv = { catalogFails: true, catalogCalls: 0, oldCategoriesCalls: 0, list: [summary('pad', '숏패딩 점퍼', '숏패딩'), summary('cloth', '대분류 이름 상품', '의류')] };
   await serve(page, sv); await openHome(page);
-  await expect(tabs(page)).toHaveText(['전체', '의류', '패션잡화', '문구', '일반 생활잡화']);
+  await expect(tabs(page)).toHaveText(['전체', '의류', '패션잡화', '문구', '생활잡화']);
   await expect(page.getByText('카테고리를 불러오지 못해 대분류만 보여요.')).toBeVisible();
   await tab(page, '의류').click(); await expect.poll(() => ids(page)).toEqual(['cloth']); // 세부 이름(숏패딩)은 대체 목록으로 매핑할 수 없다
   sv.catalogFails = false; await page.getByRole('button', { name: '다시 시도' }).click();
