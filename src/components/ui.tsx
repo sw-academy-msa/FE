@@ -277,10 +277,10 @@ export function BottomNav() {
   // 마이 하위 화면(/my/membership, /my/selling 등)도 마이 탭이 선택된 상태
   const on = (to: string) => to === pathname || (to === '/my' && pathname.startsWith('/my/'));
   const active = items.findIndex(([to]) => on(to));
-  // 시안 Tab Bar: 높이 66 알약, 선택 칸(tint)이 고른 탭으로 미끄러진다. 바닥에서 max(14px, 안전 영역)
-  return <nav aria-label="하단 메뉴" className="fixed bottom-0 left-1/2 z-30 w-full max-w-[390px] -translate-x-1/2 px-4 pb-[max(14px,env(safe-area-inset-bottom))]"><div className="tab-bar relative flex h-16.5 rounded-pill border border-border p-[5px]">
-    {active >= 0 && <span aria-hidden className="tab-indicator absolute inset-y-[5px] left-[5px] w-[calc((100%-10px)/4)] rounded-pill bg-tint" style={{ transform: `translateX(${active * 100}%)` }}/>}
-    {items.map(([to, label, icon]) => <NavLink end={to !== '/my'} key={to} to={to} state={{ tab: true }} onClick={e => { if (pathname === to) { e.preventDefault(); window.scrollTo(0, 0); window.dispatchEvent(new Event(TAB_REFRESH)); } }} className={({ isActive }) => `relative flex h-14 flex-1 flex-col items-center justify-center gap-[3px] text-[11px] ${isActive ? 'font-extrabold text-ink' : 'font-medium text-text'}`}>{({ isActive }) => <><Icon name={`${icon}${isActive ? 'On' : 'Off'}`} size={25}/>{label}</>}</NavLink>)}
+  // 시안 Tab Bar(사용자 요청으로 높이 66 → 60, 아이콘 22, 글자 10으로 조금 줄임): 알약, 선택 칸(tint)이 고른 탭으로 미끄러진다. 바닥에서 max(14px, 안전 영역)
+  return <nav aria-label="하단 메뉴" className="fixed bottom-0 left-1/2 z-30 w-full max-w-[390px] -translate-x-1/2 px-4 pb-[max(14px,env(safe-area-inset-bottom))]"><div className="tab-bar relative flex h-15 rounded-pill border border-border p-1">
+    {active >= 0 && <span aria-hidden className="tab-indicator absolute inset-y-1 left-1 w-[calc((100%-8px)/4)] rounded-pill bg-tint" style={{ transform: `translateX(${active * 100}%)` }}/>}
+    {items.map(([to, label, icon]) => <NavLink end={to !== '/my'} key={to} to={to} state={{ tab: true }} onClick={e => { if (pathname === to) { e.preventDefault(); window.scrollTo(0, 0); window.dispatchEvent(new Event(TAB_REFRESH)); } }} className={({ isActive }) => `relative flex h-13 flex-1 flex-col items-center justify-center gap-0.5 text-[10px] ${isActive ? 'font-extrabold text-ink' : 'font-medium text-text'}`}>{({ isActive }) => <><Icon name={`${icon}${isActive ? 'On' : 'Off'}`} size={22}/>{label}</>}</NavLink>)}
   </div></nav>;
 }
 export async function copyText(text: string) { if (!navigator.clipboard) throw new Error('클립보드를 사용할 수 없습니다. 번호를 길게 눌러 복사해 주세요.'); await navigator.clipboard.writeText(text); }
