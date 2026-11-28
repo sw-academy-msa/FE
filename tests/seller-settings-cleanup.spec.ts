@@ -7,6 +7,7 @@ test('예전 판매자 알림 설정 주소는 마이페이지로 보내고 공�
   await page.goto('/#/seller/settings/notifications');
   await expect(page).toHaveURL(/#\/my$/);
   await expect(page.getByRole('switch', { name: /신규주문 알림|판매일정 알림/ })).toHaveCount(0);
+  await page.getByRole('link', { name: /설정/ }).filter({ hasText: '알림, 고객지원' }).click(); await expect(page).toHaveURL(/#\/my\/settings$/); // 판매자 마이 하위 화면 '설정'
   await page.getByRole('link', { name: '알림 설정', exact: true }).click();
   await expect(page).toHaveURL(/#\/notifications\/settings\?mode=settings/);
 });

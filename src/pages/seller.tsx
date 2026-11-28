@@ -9,7 +9,7 @@ import { FaqList, SELLER_FAQ_ITEMS } from './account';
 import { BankField } from '../components/BankField';
 import { useEffect, useRef, useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Check, ChevronRight, FileText, Info, Rocket, ScanSearch, Share2, Truck } from 'lucide-react';
+import { BadgeCheck, Check, ChevronRight, FileText, Info, Rocket, ScanSearch, Share2, Truck } from 'lucide-react';
 import { activeUser, feeFor, formatPhone, markDelivered, maskName, money, nowOf, orderNo, parseRejection, saleState, salesSoldOut, uid } from '../domain';
 import type { Order, Product, SellerSettings } from '../domain';
 import { atomic, mutate, useStore } from '../store';
@@ -27,6 +27,8 @@ import { USE_MOCK } from '../config';
 import { useProductPhotos } from '../productPhotos';
 import { retryable } from '../api/live';
 import { MembershipCouponSection } from './membershipCoupon';
+import { Icon } from '../components/icons';
+import type { IconName } from '../components/icons';
 const hm = (t: number) => new Date(t).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false });
 const md = (t: number) => { const d = new Date(t); return `${d.getMonth() + 1}.${d.getDate()} (${'일월화수목금토'[d.getDay()]})`; };
 export function SellerSalesPage() {
@@ -474,14 +476,14 @@ function DeliveredModal({ order, now, onClose }: { order: Order; now: number; on
 }
 
 /** 판매자 권한이 있는 사용자의 마이페이지 — 판매 관리와 구매 메뉴를 한 화면에 둔다(모드 전환 없음). 권한이 없으면 MyPage */
-export function SellerMyPage() {
+/** 판매자 마이페이지 데이터(허브와 하위 화면이 같이 쓴다). 수치는 서버 집계, 받기 전에는 '-' */
+function useSellerMy() {
   const s = useStore(), user = activeUser(s);
   // 수치는 서버 집계로 보여 준다(다른 화면에서 받아 둔 일부 데이터로 세면 볼 때마다 달라진다). 받기 전에는 '-'
   const month = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit' }).format(Date.now());
   const sales = useApi(async signal => (USE_MOCK || !user.seller ? null : getSalesSummary(month, signal)), [user.id, month]);
   const settle = useApi(async signal => (USE_MOCK || !user.seller ? null : getSellerSettlement(month, signal)), [user.id, month]);
   useLive(async signal => (USE_MOCK || !user.seller ? null : listSellerProducts(user.id, {}, signal)), (st, items) => { if (items) mergeProducts(st, items); }, [user.id]);
-  if (!user.seller) return <Unavailable/>;
   const settings = s.sellerSettings[user.id];
   const displayName = settings?.displayName ?? user.name;
   const initial = displayName.charAt(0).toUpperCase();
@@ -492,60 +494,76 @@ export function SellerMyPage() {
   const productCount = sd ? sd.productCount : products.length;
   const net = settle.data ? settlementNet(settle.data).net : undefined;
   const unanswered = s.inquiries.filter(q => q.sellerId === user.id && !q.answer).length;
-  const maskedBank = USE_MOCK ? (settings?.account ? `국민 ****${settings.account.slice(-4)}` : '국민 ****1024') : settings?.account ? `${settings.bank} ${settings.account}`.trim() : '';
+  const maskedBank = USE_MOCK ? (settings?.account ? `국민 ****${settings.account.slice(-4)}` : '국민 ****1024') : settings?.account ? `${settings.bank} ${settings.account}`.trim() : '';  return { s, user, displayName, initial, ready, activeDrops, settlement, productCount, net, unanswered, maskedBank };
+}
+type SellerSection = 'selling' | 'info' | 'purchases' | 'settings';
+/** 판매자 마이 하위 화면 네 개(시안 2단계 · 마이 › 판매 관리·판매자 정보·내 구매·설정). 주소는 /my/selling, /my/seller-info, /my/purchases, /my/settings */
+const SELLER_SECTIONS: Record<SellerSection, { title: string; desc: string; icon: IconName; to: string }> = {
+  selling: { title: '판매 관리', desc: '상품, 현황, 주문, 문의', icon: 'Store', to: '/my/selling' },
+  info: { title: '판매자 정보', desc: '서류, 재심사, 계좌, 출고지', icon: 'IdCard', to: '/my/seller-info' },
+  purchases: { title: '내 구매', desc: '주문·배송, 배송지, 문의', icon: 'Bag', to: '/my/purchases' },
+  settings: { title: '설정', desc: '알림, 고객지원', icon: 'Settings', to: '/my/settings' },
+};
+function SellerMenu({ section, d }: { section: SellerSection; d: ReturnType<typeof useSellerMy> }) {
+  if (section === 'selling') return <>
+    <MenuRow to="/seller/products" label="판매 상품 관리"><span className="muted mr-1 text-callout font-medium">{d.ready ? `${d.productCount}개` : '-'}</span></MenuRow>
+    <MenuRow to="/seller/sales" label="판매 현황"/>
+    <MenuRow to="/seller/orders" label="주문 관리"/>
+    <MenuRow to="/seller/inquiries" label="문의 답변"><span className={`mr-1 text-callout font-medium ${d.unanswered > 0 ? 'text-red' : 'muted'}`}>{d.unanswered > 0 ? `${d.unanswered}건 대기` : ''}</span></MenuRow>
+  </>;
+  if (section === 'info') return <>
+    <MenuRow to="/seller/settings/business" label="사업자 서류 · 담당자 정보"/>
+    {!USE_MOCK && <MenuRow to="/seller/review" label="사업자등록증 재심사"/>}
+    <MenuRow to="/seller/settings/bank" label="정산 계좌 관리"><span className="muted mr-1 text-callout font-medium">{d.maskedBank}</span></MenuRow>
+    <MenuRow to="/seller/settings/addresses" label="출고지 · 반품지 관리"/>
+  </>;
+  if (section === 'purchases') return <>
+    <MenuRow to="/orders" label="주문 · 배송 조회"/>
+    <MembershipCouponSection/>
+    <MenuRow to="/addresses" label="배송지 관리"/>
+    <MenuRow to="/inquiries" label="문의 내역"/>
+  </>;
+  return <>
+    <MenuRow to={SETTINGS_HREF('/my')} label="알림 설정"/>
+    <MenuRow to="/seller/support" label="이용 안내 · 고객지원"/>
+  </>;
+}
+/** 판매자 마이 하위 화면: 뒤로(마이페이지), 원 아이콘과 큰 제목, 메뉴 줄 */
+export function SellerMySection({ section }: { section: SellerSection }) {
+  const d = useSellerMy(); const meta = SELLER_SECTIONS[section];
+  if (!d.user.seller) return <Unavailable/>;
+  return <div className="space-y-5"><Header title="마이페이지" backTo="/my" bare/><div className="-mt-3 flex items-center gap-3.5"><span className="grid h-12 w-12 place-items-center rounded-full bg-soft text-ink"><Icon name={meta.icon} size={24}/></span><h1 className="text-[26px] font-extrabold tracking-[-.8px]">{meta.title}</h1></div><div><SellerMenu section={section} d={d}/></div></div>;
+}
+/** 판매자 마이페이지 허브(시안 최종 색 · 마이페이지): 프로필, 수치 상자, 카드 네 개, 멤버십 배너 */
+export function SellerMyPage() {
+  const d = useSellerMy(), { user } = d;
+  if (!user.seller) return <Unavailable/>;
   return (
-    <div className="space-y-0">
-      <Header title="마이페이지" subtitle="스토어 정보와 내 구매·계정을 한 곳에서 관리하세요." back={false}/>
-      <Link to="/seller/settings/account" aria-label="계정 설정" className="divider flex items-center gap-3 pb-5">
-        <div className="grid h-12 w-12 shrink-0 place-items-center rounded-dialog bg-ink text-title font-bold text-white">{initial}</div>
+    <div className="space-y-4">
+      <div className="space-y-1.5 pt-3"><h1 className="text-heading font-extrabold tracking-[-.4px]">마이페이지</h1><p className="muted text-body">스토어 정보와 내 구매·계정을 한 곳에서 관리하세요.</p></div>
+      <Link to="/seller/settings/account" aria-label="계정 설정" className="press flex items-center gap-4 pb-1 pt-4">
+        <div className="grid h-15 w-15 shrink-0 place-items-center rounded-card bg-ink text-title-lg font-extrabold text-white">{d.initial}</div>
         <div className="min-w-0 flex-1 space-y-1">
-          <div className="flex items-center gap-2">
-            <h2 className="text-headline font-bold">{displayName}</h2>
-            <span className="rounded-badge bg-green-soft px-2 py-0.5 text-caption font-bold text-green">승인 판매자</span>
-          </div>
-          <p className="muted text-label">{user.name} · {user.email}</p>
+          <div className="flex items-center gap-1.5"><h2 className="text-[19px] font-extrabold">{d.displayName}</h2><BadgeCheck aria-label="승인 판매자" size={19} className="shrink-0 fill-ink text-white"/></div>
+          <p className="muted break-all text-body">{user.name} · {user.email}</p>
         </div>
-        <ChevronRight size={17} className="muted shrink-0"/>
+        <Icon name="Caret" size={20} className="muted shrink-0"/>
       </Link>
-      <div className="mb-4 flex rounded-inner bg-canvas">
-        {([['진행 중 드롭', ready ? `${activeDrops}건` : '-', '/seller/products'], ['이번 달 정산 예정', USE_MOCK ? money(settlement) : net === undefined ? '-' : money(net), '/seller/sales'], ['미답변 문의', `${unanswered}건`, '/seller/inquiries', unanswered > 0]] as [string, string, string, boolean?][]).map(([label, value, to, red], i) => (
-          <Link key={label} to={to} className={`flex flex-1 flex-col items-center gap-1 py-4 ${i > 0 ? 'border-l border-line' : ''}`}>
-            <span className={`font-number text-subhead font-bold ${red ? 'text-red' : ''}`}>{value}</span>
-            <span className="muted text-footnote">{label}</span>
+      <SalesRestrictionBanner/>
+      <div className="flex rounded-card bg-soft py-4.5">
+        {([['진행 중 드롭', d.ready ? `${d.activeDrops}건` : '-', '/seller/products'], ['이번 달 정산 예정', USE_MOCK ? money(d.settlement) : d.net === undefined ? '-' : money(d.net), '/seller/sales'], ['미답변 문의', `${d.unanswered}건`, '/seller/inquiries', d.unanswered > 0]] as [string, string, string, boolean?][]).map(([label, value, to, red], i) => (
+          <Link key={label} to={to} className={`flex flex-1 flex-col items-center gap-[5px] ${i > 0 ? 'border-l border-line' : ''}`}>
+            <span className={`text-title-lg font-extrabold ${red ? 'text-red' : ''}`}>{value}</span>
+            <span className="muted text-label font-medium">{label}</span>
           </Link>
         ))}
       </div>
-      <SalesRestrictionBanner/>
-      <section className="mb-4">
-        <p className="muted mb-2 text-body font-bold">판매 관리</p>
-        <MenuRow to="/seller/products" label="판매 상품 관리"><span className="muted mr-1 text-label">{ready ? `${productCount}개` : '-'}</span></MenuRow>
-        <MenuRow to="/seller/sales" label="판매 현황"/>
-        <MenuRow to="/seller/orders" label="주문 관리"/>
-        <MenuRow to="/seller/inquiries" label="문의 답변"><span className={`mr-1 text-label ${unanswered > 0 ? 'text-red' : 'muted'}`}>{unanswered > 0 ? `${unanswered}건 대기` : ''}</span></MenuRow>
-      </section>
-      <div className="h-2 bg-canvas"/>
-      <section className="mb-4">
-        <p className="muted mb-2 mt-4 text-body font-bold">판매자 정보</p>
-        <MenuRow to="/seller/settings/business" label="사업자 서류 · 담당자 정보"/>
-        {!USE_MOCK && <MenuRow to="/seller/review" label="사업자등록증 재심사"/>}
-        <MenuRow to="/seller/settings/bank" label="정산 계좌 관리"><span className="muted mr-1 text-label">{maskedBank}</span></MenuRow>
-        <MenuRow to="/seller/settings/addresses" label="출고지 · 반품지 관리"/>
-      </section>
-      <div className="h-2 bg-canvas"/>
-      <section className="mb-4">
-        <p className="muted mb-2 mt-4 text-body font-bold">내 구매</p>
-        <MenuRow to="/orders" label="주문 · 배송 조회"/>
-        <MembershipCouponSection/>
-        <MenuRow to="/addresses" label="배송지 관리"/>
-        <MenuRow to="/inquiries" label="문의 내역"/>
-      </section>
-      <div className="h-2 bg-canvas"/>
-      <section className="mb-4">
-        <p className="muted mb-2 mt-4 text-body font-bold">설정</p>
-        <MenuRow to={SETTINGS_HREF('/my')} label="알림 설정"/>
-        <MenuRow to="/seller/support" label="이용 안내 · 고객지원"/>
-      </section>
-      <div className="text-center"><LogoutButton/></div>
+      <div className="grid grid-cols-2 gap-2.5">{(Object.keys(SELLER_SECTIONS) as SellerSection[]).map(k => { const m = SELLER_SECTIONS[k]; return <Link key={k} to={m.to} className="press flex h-37 flex-col justify-between rounded-card bg-soft p-4.5">
+        <span className="flex items-start justify-between"><span className="grid h-12 w-12 place-items-center rounded-full bg-surface text-ink"><Icon name={m.icon} size={24}/></span><Icon name="Caret" size={18} className="muted"/></span>
+        <span className="space-y-[5px]"><span className="block text-title-sm font-extrabold">{m.title}</span><span className="muted block text-label leading-[17px]">{m.desc}</span></span>
+      </Link>; })}</div>
+      <MembershipCouponSection/>
+      <div className="pt-2 text-center"><LogoutButton/></div>
     </div>
   );
 }

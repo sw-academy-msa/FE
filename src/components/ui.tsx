@@ -99,7 +99,8 @@ export function Header({ title, subtitle, back = true, action, bare = false, bac
 export function Badge({ children, live = false, red = false }: { children: ReactNode; live?: boolean; red?: boolean }) { return <span className={`inline-flex w-fit items-center rounded-badge px-2 py-1 text-caption font-semibold ${live ? 'bg-green-soft text-green' : red ? 'bg-red-soft text-red' : 'bg-blue-soft text-text'}`}>{children}</span>; }
 /** 정보 한 줄(시안 결제 금액 Row): 이름 14 보조색, 값 14 굵게. strong은 합계 줄(위 구분선, 값 20 가장 굵게) */
 export function InfoRow({ label, value, strong = false }: { label: string; value: ReactNode; strong?: boolean }) { return <div className={`flex items-center justify-between gap-4 ${strong ? 'mt-1 border-t border-line pt-4' : 'py-2'}`}><span className="muted shrink-0 text-callout">{label}</span><span className={`min-w-0 text-right leading-relaxed ${strong ? 'text-title-lg font-black' : 'text-callout font-semibold'}`}>{value}</span></div>; }
-export function MenuRow({ label, to, children }: { label: string; to: string; children?: ReactNode }) { return <Link to={to} className="divider flex min-h-13 items-center gap-3"><span className="min-w-0 flex-1 text-body">{label}</span>{children}<Icon name="Caret" size={18} className="muted shrink-0"/></Link>; }
+/** 메뉴 한 줄(시안 2단계 · 마이 하위 화면 Row): 높이 60, 16 굵게 */
+export function MenuRow({ label, to, children }: { label: string; to: string; children?: ReactNode }) { return <Link to={to} className="divider flex min-h-15 items-center gap-2.5"><span className="min-w-0 flex-1 text-headline font-semibold">{label}</span>{children}<Icon name="Caret" size={18} className="muted shrink-0"/></Link>; }
 const signedUrl = (u: string) => /[?&]X-Amz-(Expires|Signature)=/i.test(u);
 export function ProductImage({ src, alt, className = '' }: { src: string; alt: string; className?: string }) {
   const reported = useRef('');
@@ -260,11 +261,13 @@ export function BottomNav() {
   const { pathname } = useLocation();
   // 지금 보고 있는 탭을 다시 누르면 맨 위로 올리고 그 화면을 새로 그려 데이터를 다시 받는다
   const items = [['/', '홈', 'Home'], ['/schedule', '판매 일정', 'Calendar'], ['/orders', '주문', 'Package'], ['/my', '마이', 'User']] as const;
-  const active = items.findIndex(([to]) => to === pathname);
+  // 마이 하위 화면(/my/membership, /my/selling 등)도 마이 탭이 선택된 상태
+  const on = (to: string) => to === pathname || (to === '/my' && pathname.startsWith('/my/'));
+  const active = items.findIndex(([to]) => on(to));
   // 시안 Tab Bar: 높이 66 알약, 선택 칸(tint)이 고른 탭으로 미끄러진다. 바닥에서 max(14px, 안전 영역)
   return <nav aria-label="하단 메뉴" className="fixed bottom-0 left-1/2 z-30 w-full max-w-[390px] -translate-x-1/2 px-4 pb-[max(14px,env(safe-area-inset-bottom))]"><div className="tab-bar relative flex h-16.5 rounded-pill border border-border p-[5px]">
     {active >= 0 && <span aria-hidden className="tab-indicator absolute inset-y-[5px] left-[5px] w-[calc((100%-10px)/4)] rounded-pill bg-tint" style={{ transform: `translateX(${active * 100}%)` }}/>}
-    {items.map(([to, label, icon]) => <NavLink end key={to} to={to} state={{ tab: true }} onClick={e => { if (pathname === to) { e.preventDefault(); window.scrollTo(0, 0); window.dispatchEvent(new Event(TAB_REFRESH)); } }} className={({ isActive }) => `relative flex h-14 flex-1 flex-col items-center justify-center gap-[3px] text-[11px] ${isActive ? 'font-extrabold text-ink' : 'font-medium text-text'}`}>{({ isActive }) => <><Icon name={`${icon}${isActive ? 'On' : 'Off'}`} size={25}/>{label}</>}</NavLink>)}
+    {items.map(([to, label, icon]) => <NavLink end={to !== '/my'} key={to} to={to} state={{ tab: true }} onClick={e => { if (pathname === to) { e.preventDefault(); window.scrollTo(0, 0); window.dispatchEvent(new Event(TAB_REFRESH)); } }} className={({ isActive }) => `relative flex h-14 flex-1 flex-col items-center justify-center gap-[3px] text-[11px] ${isActive ? 'font-extrabold text-ink' : 'font-medium text-text'}`}>{({ isActive }) => <><Icon name={`${icon}${isActive ? 'On' : 'Off'}`} size={25}/>{label}</>}</NavLink>)}
   </div></nav>;
 }
 export async function copyText(text: string) { if (!navigator.clipboard) throw new Error('클립보드를 사용할 수 없습니다. 번호를 길게 눌러 복사해 주세요.'); await navigator.clipboard.writeText(text); }

@@ -6,7 +6,8 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { ReactNode } from 'react';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Ticket, Truck } from 'lucide-react';
-import { Badge, Button, Empty, ErrorBox, InfoRow, LiveStatus, Modal, Spinner, useToast } from '../components/ui';
+import { Badge, Button, Empty, ErrorBox, Header, InfoRow, LiveStatus, Modal, Spinner, useToast } from '../components/ui';
+import { Icon } from '../components/icons';
 import { api } from '../api/client';
 import { errorMessage } from '../api/errors';
 import { useApi } from '../api/hooks';
@@ -67,8 +68,9 @@ export function useMembership() {
 
 /* ── 공통 조각 ── */
 const CHEVRON = <ChevronRight size={17} className="muted shrink-0" aria-hidden/>;
+/** 목록 한 줄(시안 2단계 · 마이 하위 화면 Row): 높이 60, 16 굵게, 오른쪽 14 보조색과 › */
 function RowButton({ label, right, onClick }: { label: string; right?: ReactNode; onClick: () => void }) {
-  return <button type="button" onClick={onClick} className="divider flex min-h-13 w-full items-center gap-3 text-left"><span className="min-w-0 flex-1 text-body">{label}</span>{right && <span className="muted shrink-0 text-label">{right}</span>}{CHEVRON}</button>;
+  return <button type="button" onClick={onClick} className="divider flex min-h-15 w-full items-center gap-2.5 text-left"><span className="min-w-0 flex-1 text-headline font-semibold">{label}</span>{right && <span className="muted shrink-0 text-callout font-medium">{right}</span>}<Icon name="Caret" size={18} className="muted shrink-0"/></button>;
 }
 const MEMBER_COUPON_TEXT = '매달 3,000원 쿠폰';
 const MEMBER_COUPON_DETAIL = '1만 원 이상 구매 시';
@@ -78,7 +80,7 @@ type Sheet = '' | 'join' | 'card' | 'manage' | 'coupons' | 'result';
 /** 카드 인증 귀환 뒤 /my로 넘기는 결과(주소에 남기지 않고 화면 이동 state로만) */
 interface BillingResult { ok: boolean; purpose: BillingPurpose; message?: string; billingVersion?: number }
 /** 주문·배송 조회 바로 아래에 넣는다. 알림 딥링크: ?membership=manage|join, ?coupons=available|used|expired */
-export function MembershipCouponSection() {
+export function MembershipCouponSection({ page = false }: { page?: boolean } = {}) {
   const ms = useMembership(); const [params, setParams] = useSearchParams(); const loc = useLocation(), navigate = useNavigate();
   const [result, setResult] = useState<BillingResult | undefined>(() => (loc.state as { billing?: BillingResult } | null)?.billing);
   const [sheet, setSheet] = useState<Sheet>(() => (result ? 'result' : '')), [couponTab, setCouponTab] = useState<CouponTab>('AVAILABLE');
@@ -102,8 +104,8 @@ export function MembershipCouponSection() {
   const couponRight = first.loading ? '' : first.error ? '다시 보기' : list.length ? `${couponCountLabel(usable.length)}${soon ? ` · 곧 만료 ${soon}장` : ''}` : '0장';
   return <>
     {params.get('claim') && <ClaimCampaignSheet key={params.get('claim')} code={params.get('claim')!} onClaimed={first.reload} onClose={() => { const next = new URLSearchParams(params); next.delete('claim'); setParams(next, { replace: true }); }}/>}
-    <MembershipCard ms={ms} onJoin={() => setSheet('join')} onManage={() => setSheet('manage')} onCard={() => setSheet('card')}/>
-    <RowButton label="내 쿠폰" right={couponRight} onClick={() => { setCouponTab('AVAILABLE'); setSheet('coupons'); }}/>
+    {page ? <MembershipCard ms={ms} onJoin={() => setSheet('join')} onManage={() => setSheet('manage')} onCard={() => setSheet('card')}/> : <MembershipBanner ms={ms} onJoin={() => setSheet('join')}/>}
+    {(page || ms.view === 'none') && <RowButton label="내 쿠폰" right={couponRight} onClick={() => { setCouponTab('AVAILABLE'); setSheet('coupons'); }}/>}
     {shown === 'join' && <MembershipJoinSheet purpose="join" onClose={close}/>}
     {shown === 'card' && <MembershipJoinSheet purpose="card" onClose={close}/>}
     {shown === 'result' && result && <BillingResultSheet result={result} ms={ms} onClose={() => { setResult(undefined); close(); }} onRetry={() => { setSheet(result.purpose === 'card' ? 'card' : 'join'); setResult(undefined); }} onCoupons={() => { setResult(undefined); setCouponTab('AVAILABLE'); setSheet('coupons'); }}/>}
@@ -111,6 +113,20 @@ export function MembershipCouponSection() {
     {shown === 'manage' && !ms.membership && <Modal title="멤버십 관리" onClose={close}><LiveStatus state={{ loading: ms.loading, error: ms.error, reload: ms.reload }}/></Modal>}
     {shown === 'coupons' && <MyCouponsSheet initialTab={couponTab} onClose={() => { close(); first.reload(); }}/>}
   </>;
+}
+
+/** 마이페이지 멤버십 배너(시안 최종 색 · 마이페이지): 비회원은 가입 시트, 회원은 멤버십 화면(/my/membership) */
+function MembershipBanner({ ms, onJoin }: { ms: ReturnType<typeof useMembership>; onJoin: () => void }) {
+  const navigate = useNavigate(), view = ms.membership ? ms.view as MembershipView : undefined, m = ms.membership;
+  const state = view === 'active' ? '(이용 중)' : view === 'cancelScheduled' ? '(해지 예약)' : view === 'grace' ? '(결제 실패)' : view === 'pending' ? '(확인 중)' : '';
+  const sub = ms.error && !m ? '멤버십 상태를 확인하지 못했어요. 눌러서 다시 확인해요' : !m ? '확인하고 있어요' : view === 'none' ? '가입 후 다양한 쿠폰 및 혜택을 누려보세요' : view === 'active' ? `다음 결제 ${md(m.periodEnd)}` : view === 'cancelScheduled' ? `${md(m.entitlementUntil)}까지 이용` : view === 'grace' ? '카드를 다시 등록해 주세요' : '가입을 확인하고 있어요';
+  const go = () => { if (!m) { if (ms.error) ms.reload(); return; } if (view === 'none') onJoin(); else navigate('/my/membership'); };
+  return <button type="button" onClick={go} aria-busy={!m && !ms.error} className="press flex w-full items-center gap-3 rounded-card bg-soft p-4.5 text-left"><span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-surface text-ink"><Icon name="Star" size={24}/></span><span className="min-w-0 flex-1"><span className="block text-title-sm font-extrabold">STOCKDROP 멤버십{state}</span><span className={`mt-1 block text-label leading-[17px] ${view === 'grace' ? 'text-red' : 'text-muted'}`}>{sub}</span></span><Icon name="Caret" size={18} className="muted shrink-0"/></button>;
+}
+
+/** 멤버십 화면(시안 2단계 · 마이 › STOCKDROP 멤버십): 지금 멤버십 카드(가입·관리·카드 다시 등록·해지 취소)와 내 쿠폰 */
+export function MembershipPage() {
+  return <div className="space-y-5"><Header title="마이페이지" backTo="/my" bare/><div className="-mt-3 flex items-center gap-3.5"><span className="grid h-12 w-12 place-items-center rounded-full bg-soft text-ink"><Icon name="Star" size={24}/></span><h1 className="text-[26px] font-extrabold tracking-[-.8px]">STOCKDROP 멤버십</h1></div><MembershipCouponSection page/></div>;
 }
 
 function MembershipCard({ ms, onJoin, onManage, onCard }: { ms: ReturnType<typeof useMembership>; onJoin: () => void; onManage: () => void; onCard: () => void }) {
