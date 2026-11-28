@@ -222,9 +222,8 @@ input:focus, textarea:focus, select:focus { border-color: var(--ink); }
 }
 
 /* 시작 화면: transform·opacity만 쓴다 */
-.splash { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; background: #0E0E0F; transition: opacity 300ms ease; }
-/* 로고(BrandLogo) 오른쪽 위 빨간 점 뒤의 번진 빛(고정) */
-.logo-halo { opacity: .6; }
+.splash { position: fixed; inset: 0; z-index: 200; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; background: var(--sd-color-ink); transition: opacity 300ms ease; }
+.splash-tagline { font-size: 11px; font-weight: 500; letter-spacing: 1.6px; color: var(--sd-color-splash-tagline); white-space: nowrap; }
 
 /* 아이폰은 입력칸 글자가 16px보다 작으면 포커스 때 화면을 확대한다 — 디자인 글자 크기와 상관없이 입력칸은 16px(레이어 밖이라 유틸리티 클래스보다 우선) */
 input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]), textarea, select { font-size: 16px; }
@@ -239,9 +238,6 @@ main { padding-top: calc(12px + env(safe-area-inset-top, 0px)); }
 @keyframes toast-up { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
 
 .pb-safe { padding-bottom: max(16px, env(safe-area-inset-bottom, 0px)); }
-
-/* 상태 표시줄 뒤(홈 화면 앱, black-translucent)를 앱 시작 화면과 같은 검정으로 채운다 — 흰 글자 시계가 읽히고 흰 띠가 안 생긴다. 안전 영역이 없는 곳에서는 높이 0 */
-body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: env(safe-area-inset-top, 0px); background: #0E0E0F; z-index: 150; pointer-events: none; }
 
 /* iOS식 12선 로딩 표시(components/ui Spinner): 30도씩 끊어 돌아 선이 차례로 밝아지는 것처럼 보인다 */
 .ios-spinner { animation: ios-spin 1s steps(12) infinite; }

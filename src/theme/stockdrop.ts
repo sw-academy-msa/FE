@@ -36,6 +36,7 @@ export const stockdropPalette = {
   blue: '#023EB5', // 시안 primary
   'blue-soft': '#F0F2F4', // 옅은 회색 면(예전 이름 그대로, 시안 surface)
   tint: '#E3EAF8E6', // 하단 메뉴 선택 칸(시안 tint)
+  'splash-tagline': '#FFFFFFBB', // 시작 화면 문구(시안 스플래시 Tagline)
   'tab-bar': '#FFFFFF8C', // 하단 메뉴 바탕(시안 Tab Bar)
   'tab-shadow': '#0B142729', // 하단 메뉴 그림자(시안 Tab Bar)
   'tab-glow': '#FFFFFF73', // 하단 메뉴 안쪽 빛(시안 Tab Bar)
