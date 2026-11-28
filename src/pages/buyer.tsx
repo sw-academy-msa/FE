@@ -32,7 +32,8 @@ import { BrandLogo } from '../components/BrandLogo';
 import { HomeHero } from '../components/HomeHero';
 import { Icon } from '../components/icons';
 /** 홈 카테고리 그림(시안 최종 색 · 홈 Categories). 그림이 없는 새 대분류는 빈 원과 이름만 */
-const CATEGORY_IMAGES: Record<string, string> = { 전체: 'all', 의류: 'clothing', 패션잡화: 'fashion', 문구: 'stationery', 생활잡화: 'living' };
+// 실제 서버 대분류 이름은 '일반 생활잡화'(HOUSEHOLD), 목업은 '생활잡화'라 둘 다 같은 그림
+const CATEGORY_IMAGES: Record<string, string> = { 전체: 'all', 의류: 'clothing', 패션잡화: 'fashion', 문구: 'stationery', 생활잡화: 'living', '일반 생활잡화': 'living' };
 const SALE_STATES = ['전체', '판매 중', '마감 임박', '판매 예정', '판매 종료'];
 import { AmountRows, CheckoutCoupon, ProductBenefits, SoldOutSeen, hasDiscount, useListTracking, useOrderCoupon } from './membershipCoupon';
 
