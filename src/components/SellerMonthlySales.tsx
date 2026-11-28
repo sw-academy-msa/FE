@@ -1,4 +1,5 @@
-import { useState, type CSSProperties } from 'react';
+import { useState, type CSSProperties, type ReactNode } from 'react';
+import { CountUp } from './ui';
 import type { Order } from '../domain';
 import { money } from '../domain';
 import { getSellerSettlement, settlementNet, useApi } from '../api';
@@ -15,7 +16,7 @@ export function SellerMonthlySales({ sellerId, month, orders, now }: { sellerId:
   const data = rows?.find(r => r.month === selectedMonth);
   const net = data ? settlementNet(data) : undefined;
   const max = Math.max(1, ...rows?.map(r => r.confirmedAmount) ?? []);
-  const tile = (label: string, value: string) => <div className="rounded-element bg-canvas p-3"><p className="font-number break-words text-title font-bold">{value}</p><p className="muted mt-1 text-footnote">{label}</p></div>;
+  const tile = (label: string, value: ReactNode) => <div className="rounded-inner bg-soft p-3.5"><p className="font-number break-words text-title font-bold">{value}</p><p className="muted mt-1 text-label">{label}</p></div>;
   return <section className="space-y-4" aria-label="월별 판매 현황">
     <div><h2 className="text-subhead font-bold">{months[0]} — {month}</h2><p className="muted mt-2 text-body">월별 구매 확정 상품 금액, 배송비 제외</p></div>
     {!USE_MOCK && <LiveStatus state={live}/>}
@@ -27,7 +28,7 @@ export function SellerMonthlySales({ sellerId, month, orders, now }: { sellerId:
           <span className={`mt-2 block text-label ${selectedMonth === r.month ? 'font-bold text-ink' : 'text-muted'}`}>{Number(r.month.slice(5))}월</span>
         </button>)}
       </div>
-      <div aria-live="polite" aria-atomic="true" className="space-y-3"><h3 className="text-headline font-bold">{selectedMonth} 구매 확정</h3><div className="grid grid-cols-2 gap-2">{tile('판매액', data ? money(data.confirmedAmount) : '-')}{tile('확정 수량', data ? `${data.products.reduce((n, p) => n + p.quantity, 0)}개` : '-')}{tile('수수료 10%', net ? money(net.fee) : '-')}{tile('지급 예정액', net ? money(net.net) : '-')}</div><p className="muted text-body">{data ? `확정 대기 ${data.awaitingOrders}건, ${money(data.awaitingAmount)}` : ''}</p></div>
+      <div aria-live="polite" aria-atomic="true" className="space-y-3"><h3 className="text-headline font-bold">{selectedMonth} 구매 확정</h3><div className="grid grid-cols-2 gap-2">{tile('판매액', data ? <CountUp value={data.confirmedAmount} format={money}/> : '-')}{tile('확정 수량', data ? `${data.products.reduce((n, p) => n + p.quantity, 0)}개` : '-')}{tile('수수료 10%', net ? <CountUp value={net.fee} format={money}/> : '-')}{tile('지급 예정액', net ? <CountUp value={net.net} format={money}/> : '-')}</div><p className="muted text-body">{data ? `확정 대기 ${data.awaitingOrders}건, ${money(data.awaitingAmount)}` : ''}</p></div>
       <p className="muted text-footnote leading-relaxed">판매 수수료는 월 판매액(구매 확정 기준)의 10%예요. 쿠폰 할인 전 상품 금액을 기준으로 하며 배송비는 제외해요.</p>
     </>}
   </section>;

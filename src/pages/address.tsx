@@ -86,11 +86,11 @@ export function AddressFormPage() {
         <div>{labelRow('배송지명')}{input('label', '배송지명', '예: 집, 회사')}</div>
         <div>{labelRow('받는 분', true)}{input('recipientName', '받는 분', '이름을 입력해 주세요')}</div>
         <div>{labelRow('연락처', true)}{input('recipientPhone', '연락처', "'-' 없이 숫자만 입력", { type: 'tel', inputMode: 'numeric' })}</div>
-        <div>{labelRow('주소', true)}
+        <div>{labelRow('주소', true)}<div className="space-y-2">
           <div className="flex items-center gap-3">{input('postalCode', '우편번호', '우편번호', { readOnly: true, onClick: openSearch })}<button type="button" onClick={openSearch} className="h-10 shrink-0 rounded-element border border-border px-3.5 text-label font-bold">주소 검색</button></div>
           <input aria-label="기본 주소" className="field-line text-aux!" value={value.roadAddress} placeholder="기본 주소" readOnly onClick={openSearch}/>
           {jibun && jibun !== value.roadAddress && <p className="mt-1 text-label text-meta">지번 {jibun}</p>}
-          {input('detailAddress', '상세 주소', '상세 주소를 입력해 주세요', { ref: detailRef })}
+          {input('detailAddress', '상세 주소', '상세 주소를 입력해 주세요', { ref: detailRef })}</div>
         </div>
         <div>{labelRow('배송 요청사항')}
           <label className="relative block"><select aria-label="배송 요청사항" className={`field-line appearance-none pr-8 ${value.deliveryMemo ? '' : 'text-placeholder'}`} value={value.deliveryMemo} onChange={e => set({ deliveryMemo: e.target.value })}><option value="">요청사항을 선택해 주세요</option>{DELIVERY_MEMOS.map(m => <option key={m} value={m}>{m}</option>)}{value.deliveryMemo && !DELIVERY_MEMOS.includes(value.deliveryMemo) && <option value={value.deliveryMemo}>{value.deliveryMemo}</option>}</select><ChevronDown size={18} className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 text-muted"/></label>
@@ -141,15 +141,15 @@ export function AddressSearchPage() {
     {/* 검색 뒤에는 카카오 검색 결과 창의 검색칸을 쓴다(검색칸이 두 개 겹치지 않게). 결과가 없을 때만 우리 검색칸을 다시 보여 준다 */}
     {(!searched || empty) && <form onSubmit={e => { e.preventDefault(); run(query); }}>
       {searched
-        ? <label className="flex h-12 items-center gap-2.5 rounded-element bg-soft px-4"><Search size={18} className="shrink-0 text-meta"/><input aria-label="주소 검색" value={query} onChange={e => setQuery(e.target.value)} className="min-w-0 flex-1 bg-transparent text-subhead outline-none"/><button type="button" aria-label="검색어 지우기" onClick={() => { setQuery(''); setSearched(''); setCount(null); }}><X size={16} className="text-meta"/></button></label>
-        : <label className="flex h-12 items-center gap-2.5 rounded-element border-[1.5px] border-ink px-3.5"><Search size={18} className="shrink-0"/><input aria-label="주소 검색" value={query} onChange={e => setQuery(e.target.value)} placeholder="도로명, 건물명 또는 지번으로 검색" className="min-w-0 flex-1 bg-transparent text-subhead outline-none placeholder:text-placeholder" autoFocus/></label>}
+        ? <label className="flex h-14 items-center gap-2.5 rounded-inner bg-soft px-4"><Search size={20} className="shrink-0 text-meta"/><input aria-label="주소 검색" value={query} onChange={e => setQuery(e.target.value)} className="min-w-0 flex-1 bg-transparent text-subhead outline-none"/><button type="button" aria-label="검색어 지우기" onClick={() => { setQuery(''); setSearched(''); setCount(null); }}><X size={16} className="text-meta"/></button></label>
+        : <label className="flex h-14 items-center gap-2.5 rounded-inner bg-soft px-4 shadow-[inset_0_0_0_1.5px_var(--sd-color-ink)]"><Search size={20} className="shrink-0 text-ink"/><input aria-label="주소 검색" value={query} onChange={e => setQuery(e.target.value)} placeholder="도로명, 건물명 또는 지번으로 검색" className="min-w-0 flex-1 bg-transparent text-subhead outline-none placeholder:text-placeholder" autoFocus/></label>}
     </form>}
-    {!searched && <button type="button" disabled={locating} onClick={async () => { setLocating(true); setGeoError(''); try { sessionStorage.setItem(PICK_KEY, JSON.stringify(await currentAddress())); navigate(returnTo, { replace: true }); } catch (e) { setGeoError((e as Error).message); } finally { setLocating(false); } }} className="flex h-11 w-full items-center justify-center gap-2 rounded-element border border-border text-callout font-bold disabled:opacity-60"><LocateFixed size={16}/>{locating ? '현재 위치를 찾는 중…' : '현재 위치로 주소 찾기'}</button>}
+    {!searched && <button type="button" disabled={locating} onClick={async () => { setLocating(true); setGeoError(''); try { sessionStorage.setItem(PICK_KEY, JSON.stringify(await currentAddress())); navigate(returnTo, { replace: true }); } catch (e) { setGeoError((e as Error).message); } finally { setLocating(false); } }} className="press flex h-13.5 w-full items-center justify-center gap-2 rounded-inner bg-info-soft text-callout font-bold text-ink disabled:opacity-60"><LocateFixed size={18}/>{locating ? '현재 위치를 찾는 중…' : '현재 위치로 주소 찾기'}</button>}
     {!searched && <ErrorBox message={geoError}/>}
     {searched && <div ref={frame} aria-label="주소 검색 결과" className={empty ? 'hidden' : 'h-[calc(100dvh-150px)] w-full'}/>}
     {empty && <div className="space-y-8 pt-8">
       <div className="flex flex-col items-center text-center"><span className="grid h-11 w-11 place-items-center rounded-full bg-soft"><MapPin size={20} className="text-meta"/></span><p className="mt-4 text-subhead font-bold">'{searched}' 검색 결과가 없어요</p><p className="mt-2 px-2 text-body leading-relaxed text-aux">결과가 없으면 띄어쓰기를 바꾸거나 건물번호를 빼고 검색해 보세요.</p></div>
-      <div className="space-y-3 rounded-element bg-infobar p-4"><p className="text-body font-bold">이렇게 검색해 보세요</p>{TIPS.map(([label, example]) => <div key={label} className="flex items-center justify-between text-label"><span className="text-aux">{label}</span><button type="button" onClick={() => run(example)}>{example}</button></div>)}</div>
+      <div className="space-y-3 rounded-card bg-soft p-4.5"><p className="text-title font-extrabold">이렇게 검색해 보세요</p>{TIPS.map(([label, example]) => <div key={label} className="flex items-center justify-between text-label"><span className="text-aux">{label}</span><button type="button" onClick={() => run(example)}>{example}</button></div>)}</div>
     </div>}
     {!searched && <>
       <div className="-mx-4 h-2 bg-divider"/>

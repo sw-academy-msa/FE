@@ -10,6 +10,8 @@ import './styles.css';
 import { installMobileViewportGuards } from './mobileViewport';
 const releaseViewportGuards = installMobileViewportGuards();
 if (import.meta.hot) import.meta.hot.dispose(releaseViewportGuards);
+// 아이폰 Safari는 문서에 touchstart가 있어야 :active 누름 효과가 터치에 반응한다
+document.addEventListener('touchstart', () => {}, { passive: true });
 captureAdvertisingReturn();
 initAnalytics();
 function Tracked() { usePageView(); return <App/>; }

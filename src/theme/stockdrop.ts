@@ -13,49 +13,57 @@ import { neutralTheme } from '@astryxdesign/theme-neutral';
  * 밝은 화면만 쓰므로 [light, dark] 대신 한 값만 둔다.
  */
 export const stockdropPalette = {
+  // Pencil 시안(redeisn.pen) 테마 F 값. 시안에 없는 색은 예전 값을 그대로 둔다(표시: 시안 없음)
   // 글자와 기본
-  ink: '#222222', // 본문 글자, 검정 버튼
-  muted: '#858585', // 보조 글자
-  aux: '#7B7B7B', // 브랜드명, 설명
-  meta: '#949494', // 날짜, 부가 정보
-  placeholder: '#A0A0A0',
-  surface: '#FFFFFF', // 화면, 카드, 시트 바탕
-  bg: '#FFFFFF',
-  canvas: '#F4F5F6', // 화면 바깥 바탕
-  hero: '#EDF1F4',
-  overlay: '#00000066', // 시트, 대화상자 뒷배경
+  ink: '#023EB5', // 주색(시안 ink·primary): 기본 버튼, 선택 상태, 막대, 밑줄 탭
+  text: '#1B1D21', // 본문 글자(시안 text)
+  muted: '#62666E', // 보조 글자(시안 text-meta)
+  aux: '#62666E', // 브랜드명, 설명(시안 text-meta)
+  meta: '#62666E', // 날짜, 부가 정보(시안 text-meta)
+  placeholder: '#9A9EA5', // 시안 text-disabled
+  surface: '#FFFFFF', // 화면, 카드, 시트 바탕(시안 card)
+  bg: '#FFFFFF', // 시안 bg
+  canvas: '#F0F2F4', // 화면 바깥 바탕, 구역 사이 띠(시안 surface)
+  hero: '#EDF1F4', // 시안 없음
+  overlay: '#14161999', // 시트, 대화상자 뒷배경(시안 dim)
   // 선과 면
-  line: '#EEEEEE', // 구분선, 입력칸 밑줄
-  border: '#DEDEDE', // 테두리
-  divider: '#F2F2F2',
-  soft: '#F5F5F5', // 옅은 회색 면
-  'soft-btn': '#EEEEEE',
-  infobar: '#FBFBFB',
-  blue: '#222222',
-  'blue-soft': '#F5F5F5',
+  line: '#EAECEE', // 구분선(시안 divider)
+  border: '#D6D9DD', // 테두리(시안 border)
+  divider: '#EAECEE', // 시안 divider
+  soft: '#F0F2F4', // 옅은 회색 면, 입력칸 바탕(시안 surface)
+  'soft-btn': '#F0F2F4', // 회색 버튼(시안 Button tonal)
+  infobar: '#FBFBFB', // 시안 없음
+  blue: '#023EB5', // 시안 primary
+  'blue-soft': '#F0F2F4', // 옅은 회색 면(예전 이름 그대로, 시안 surface)
+  tint: '#E3EAF8E6', // 하단 메뉴 선택 칸(시안 tint)
+  'splash-tagline': '#FFFFFFBB', // 시작 화면 문구(시안 스플래시 Tagline)
+  'tab-bar': '#FFFFFF8C', // 하단 메뉴 바탕(시안 Tab Bar)
+  'tab-shadow': '#0B142729', // 하단 메뉴 그림자(시안 Tab Bar)
+  'tab-glow': '#FFFFFF73', // 하단 메뉴 안쪽 빛(시안 Tab Bar)
+  'search-shadow': '#1416190F', // 홈 검색·알림 알약 그림자(시안 홈 Search)
   // 상태
-  red: '#EF6253', // 오류, 구매 버튼
-  'red-soft': '#FFF2F0',
-  action: '#EF6253',
-  green: '#37AE7C', // 포커스 테두리, 판매 중
-  'green-soft': '#EEF8F3',
-  positive: '#3FB181',
-  'positive-soft': '#EEF8F3',
-  urgent: '#E5484D', // 마감 임박
-  'urgent-soft': '#FDEDED',
-  amber: '#8A7762',
-  'amber-soft': '#F7F5F2',
-  'sold-out': '#333333', // SOLD OUT 배지
-  info: '#2F6FED', // 운영자 입점 심사 배지
-  'info-soft': '#EAF1FF',
-  warning: '#D9730D', // 운영자 판매 심사 배지
-  'gauge-warning': '#E7B93F', // 중간 판매율 게이지, 글자에는 사용하지 않는다
-  'warning-soft': '#FFF1E5',
+  red: '#B9201A', // 오류(시안 error). 구매 버튼은 주색
+  'red-soft': '#FFF2F0', // 시안 없음
+  action: '#023EB5', // 구매 버튼(시안 buy)
+  green: '#0B6E56', // 판매 중(시안 success)
+  'green-soft': '#E0F2EC', // 완료 안내 상자(시안 주문 배송 상세 Notice)
+  positive: '#0B6E56', // 시안 success
+  'positive-soft': '#E0F2EC',
+  urgent: '#D0261F', // 마감 임박(시안 urgent)
+  'urgent-soft': '#FDEDED', // 시안 없음
+  amber: '#8A7762', // 시안 없음
+  'amber-soft': '#F7F5F2', // 시안 없음
+  'sold-out': '#333333', // SOLD OUT 배지(어두운 배지 유지 결정)
+  info: '#023EB5', // 운영자 입점 심사 배지(시안 info-fg)
+  'info-soft': '#E6ECF8', // 시안 info-bg
+  warning: '#7A4B00', // 운영자 판매 심사 배지(시안 warn-fg)
+  'gauge-warning': '#E7B93F', // 중간 판매율 게이지, 글자에는 사용하지 않는다(시안 없음)
+  'warning-soft': '#FBF0DC', // 시안 warn-bg
   // 안내 상자(판매 등록 AI 분석 상태). 글자·아이콘은 옅은 면 위에서 대비 4.5:1 이상
-  'positive-strong': '#1D7A53', // positive-soft 위 4.9:1 — 완료 상자 제목·아이콘
-  caution: '#8A5A00', // caution-soft 위 5.5:1 — 미완료 상자 제목·아이콘
-  'caution-soft': '#FFF7E0', // 미완료 상자 면(테두리는 gauge-warning)
-  'aux-strong': '#5C5C5C', // 옅은 면 위 6.1:1 — 안내 상자 본문
+  'positive-strong': '#0B6E56', // 완료 상자 제목·아이콘(시안 success)
+  caution: '#7A4B00', // 미완료 상자 제목·아이콘(시안 warn-fg)
+  'caution-soft': '#FBF0DC', // 미완료 상자 면(시안 warn-bg)
+  'aux-strong': '#464A51', // 옅은 면 위 본문(시안 text-2)
 } as const;
 export type PaletteName = keyof typeof stockdropPalette;
 
@@ -80,18 +88,20 @@ export const stockdropType = {
 
 /** 모서리. inner, element, container는 Astryx 토큰(--radius-*)이고 나머지는 STOCKDROP 값. 클래스 이름은 rounded-<이름> */
 export const stockdropRadius = {
-  badge: '3px', // 작은 상태 배지
-  inner: '4px', // 사진, 안내 상자, 입력 상자
-  element: '6px', // 버튼
-  dialog: '8px', // 가운데 대화상자
-  container: '16px', // 바텀 시트 위쪽
+  badge: '8px', // 작은 상태 배지(시안 r-s)
+  inner: '14px', // 사진, 안내 상자, 입력칸(시안 r-m)
+  element: '14px', // 버튼(시안 r-m)
+  card: '20px', // 카드, 큰 안내 상자(시안 r-l)
+  dialog: '28px', // 가운데 대화상자(시안 r-xl, Popup)
+  container: '28px', // 바텀 시트 위쪽(결정: 28)
+  pill: '999px', // 알약 모양(시안 r-pill)
 } as const;
 
 const p = stockdropPalette;
 /** Astryx 부품이 읽는 토큰. 값은 위 팔레트에서 가져온다 */
 export const stockdropTokens = {
   // 글자
-  '--color-text-primary': p.ink,
+  '--color-text-primary': p.text,
   '--color-text-secondary': p.muted,
   '--color-text-disabled': p.placeholder,
   '--color-text-accent': p.ink,
@@ -104,7 +114,7 @@ export const stockdropTokens = {
   '--color-background-popover': p.surface,
   '--color-background-muted': p.soft,
   '--color-overlay': p.overlay,
-  // 주요 버튼(검정)과 그 위 글자
+  // 주요 버튼(주색 파랑)과 그 위 글자
   '--color-accent': p.ink,
   '--color-accent-muted': p['soft-btn'],
   '--color-on-accent': p.surface,
@@ -129,6 +139,8 @@ export const stockdropLocalTokens: Record<string, string> = {
   ...Object.fromEntries(Object.entries(stockdropType).map(([name, value]) => [`--sd-text-${name}`, value])),
   '--sd-radius-badge': stockdropRadius.badge,
   '--sd-radius-dialog': stockdropRadius.dialog,
+  '--sd-radius-card': stockdropRadius.card,
+  '--sd-radius-pill': stockdropRadius.pill,
 };
 
 /**
@@ -149,8 +161,8 @@ export const SHEET_EXIT_MS = 240;
 /** 버튼 눌림: 100ms 동안 0.97배 */
 export const stockdropPress = { scale: '0.97', duration: '100ms' } as const;
 
-/** 버튼 높이와 글자 */
-export const stockdropButton = { height: '48px', fontSize: stockdropType.body } as const;
+/** 버튼 높이(결정: 48 유지)와 글자(시안 Button 16 굵게) */
+export const stockdropButton = { height: '48px', fontSize: stockdropType.headline } as const;
 
 /** 본문 글꼴. Astryx 부품과 화면 전체(body)가 같이 쓴다(--font-family-body) */
 const font = { family: 'Noto Sans KR', fallbacks: 'sans-serif' };
@@ -162,14 +174,14 @@ export const stockdropTheme = defineTheme({
   tokens: { ...stockdropTokens, ...stockdropMotion },
   localTokens: stockdropLocalTokens,
   components: {
-    // 판매 등록 단계 진행 막대(Astryx ProgressBar): 얇은 4px 막대, 바탕은 선 색, 채움은 본문 색
+    // 판매 등록 단계 진행 막대(Astryx ProgressBar): 얇은 4px 막대, 바탕은 선 색, 채움은 주색
     'progress-bar-track': { base: { height: '4px', backgroundColor: 'var(--sd-color-line)' } },
     'progress-bar-fill': { base: { backgroundColor: 'var(--sd-color-ink)' } },
     button: {
       base: { minHeight: stockdropButton.height, fontSize: stockdropButton.fontSize, fontWeight: '700', touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent', transitionProperty: 'transform, background-color, opacity', transitionDuration: stockdropPress.duration, transitionTimingFunction: 'ease-out' },
       ':active': { transform: `scale(${stockdropPress.scale})` },
-      'variant:secondary': { backgroundColor: 'var(--color-background-surface)', color: 'var(--color-text-primary)', boxShadow: 'inset 0 0 0 1px var(--color-border)' },
-      'variant:buy': { backgroundColor: 'var(--sd-color-red)', color: 'var(--color-on-error)' },
+      'variant:secondary': { backgroundColor: 'var(--color-background-surface)', color: 'var(--color-text-primary)', boxShadow: 'inset 0 0 0 1px var(--color-border-emphasized)' },
+      'variant:buy': { backgroundColor: 'var(--sd-color-action)', color: 'var(--color-on-accent)' },
     },
   },
 });

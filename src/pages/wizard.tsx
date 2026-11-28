@@ -155,7 +155,7 @@ const Label = ({ children, hint }: { children: ReactNode; hint?: string }) => <p
 /** AI 분석 상태 상자. 색에만 기대지 않게 아이콘과 제목이 상태를 말한다: 진행 중 회색(반짝), 완료 초록(체크), 미완료 노랑(주의) */
 type AiTone = 'progress' | 'done' | 'warn';
 const AI_TONE: Record<AiTone, { box: string; head: string; Icon: typeof Sparkles }> = {
-  progress: { box: 'bg-soft', head: 'text-ink', Icon: Sparkles },
+  progress: { box: 'bg-soft', head: 'text-text', Icon: Sparkles },
   done: { box: 'bg-positive-soft', head: 'text-positive-strong', Icon: CheckCircle2 },
   warn: { box: 'border border-gauge-warning bg-caution-soft', head: 'text-caution', Icon: AlertTriangle },
 };
@@ -653,7 +653,7 @@ export function WizardPage() {
         <Label hint={revision ? '· 승인 후 변경 불가' : '· 필수 · 최대 10장'}>상품 사진</Label>
         <div className="flex gap-2 overflow-x-auto">
           {!revision && d.images.length < 10 && <label className="flex h-20 w-20 shrink-0 cursor-pointer flex-col items-center justify-center gap-1 rounded-element border border-border"><Plus size={20} strokeWidth={1.5}/><span className="text-footnote text-meta">{uploading ? '처리 중' : `${d.images.length}/10`}</span><input aria-label="상품 사진 업로드" type="file" accept="image/jpeg,image/png,image/webp" multiple className="sr-only" disabled={uploading} onChange={e => { const picked = Array.from(e.target.files ?? []); e.target.value = ''; void upload(picked); }}/></label>}
-          {d.images.map((src, i) => <button type="button" key={src.slice(-24) + i} disabled={revision} onClick={() => setPhoto(i)} className="relative shrink-0"><ProductImage src={src} alt={`상품 사진 ${i + 1}`} className="h-20 w-20"/>{i === 0 && <span className="absolute bottom-1.5 left-1.5 rounded-badge bg-black/70 px-1.5 py-0.5 text-caption font-bold text-white">대표</span>}</button>)}
+          {d.images.map((src, i) => <button type="button" key={src.slice(-24) + i} disabled={revision} onClick={() => setPhoto(i)} className="photo-reveal relative shrink-0"><ProductImage src={src} alt={`상품 사진 ${i + 1}`} className="h-20 w-20"/>{i === 0 && <span className="absolute bottom-1.5 left-1.5 rounded-badge bg-black/70 px-1.5 py-0.5 text-caption font-bold text-white">대표</span>}</button>)}
         </div>
         {progress && <p role="status" className="text-label text-aux">{progress}</p>}
         <ErrorBox message={photoError}/>{!revision && retryFiles.length > 0 && !uploading && <button type="button" onClick={() => void upload(retryFiles)} className="h-9 rounded-element border border-border px-3 text-label font-bold">남은 사진 {retryFiles.length}장 다시 올리기</button>}
@@ -756,7 +756,7 @@ export function WizardPage() {
           </>;
         })()}
         <label className="block text-body">배송 안내 글<textarea aria-label="배송 안내" rows={3} className="mt-1 w-full rounded-element border border-border p-3 text-callout outline-none" value={d.shippingNotice ?? ''} onChange={e => patch({ shippingNotice: e.target.value })}/></label>
-        <p className={`text-right text-label ${(d.shippingNotice ?? '').length > SHIPPING_NOTICE_MAX ? 'text-[var(--danger,#d32f2f)]' : 'text-meta'}`}>{(d.shippingNotice ?? '').length.toLocaleString('ko-KR')} / {SHIPPING_NOTICE_MAX.toLocaleString('ko-KR')}자</p>
+        <p className={`text-right text-label ${(d.shippingNotice ?? '').length > SHIPPING_NOTICE_MAX ? 'text-red' : 'text-meta'}`}>{(d.shippingNotice ?? '').length.toLocaleString('ko-KR')} / {SHIPPING_NOTICE_MAX.toLocaleString('ko-KR')}자</p>
         <FieldError name="shippingNotice"/>
       </section>
     </>}

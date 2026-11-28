@@ -3,8 +3,9 @@ import { Button as AxButton } from '@astryxdesign/core/Button';
 import { BottomSheet as AxBottomSheet } from '@astryxdesign/core/BottomSheet';
 import { Dialog as AxDialog } from '@astryxdesign/core/Dialog';
 import type { ButtonHTMLAttributes, MouseEvent, ReactNode } from 'react';
-import { Link, NavLink, useBlocker, useHref, useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Bell, Timer, X, Home, CalendarDays, Package, UserRound, ChevronRight, Info, Copy } from 'lucide-react';
+import { Link, NavLink, useBlocker, useHref, useLocation, useNavigate, useViewTransitionState } from 'react-router-dom';
+import { Bell, Timer, X, Package, Info, Copy, Check } from 'lucide-react';
+import { Icon } from './icons';
 import type { Product, Order } from '../domain';
 import { money, saleState, stockTotal } from '../domain';
 import { temporarySoldOut, TEMPORARY_SOLD_OUT_NOTE } from './stockPresentation';
@@ -23,7 +24,7 @@ export const useToast = () => useContext(ToastContext);
 /** 버튼 안 글자를 이어 붙인다. Astryx Button은 label을 접근 이름(aria-label)으로 쓰므로 보이는 글자와 같게 맞춘다 */
 const textOf = (node: ReactNode): string => node == null || typeof node === 'boolean' ? '' : typeof node === 'string' || typeof node === 'number' ? String(node) : Array.isArray(node) ? node.map(textOf).join('') : isValidElement<{ children?: ReactNode }>(node) ? textOf(node.props.children) : '';
 /**
- * 공통 버튼(Astryx Button). 기본은 검정, outline은 흰 바탕 테두리, buy는 빨강. disabled는 지금처럼 진짜 disabled로 둬서 Enter 제출과 :disabled 스타일을 지킨다.
+ * 공통 버튼(Astryx Button). 기본은 주색(파랑), outline은 흰 바탕 테두리, buy도 주색(시안 buy). disabled는 지금처럼 진짜 disabled로 둬서 Enter 제출과 :disabled 스타일을 지킨다.
  * closeSheet가 있으면 감싼 시트(Modal, BottomSheet)를 닫는다.
  * to가 있으면 화면 이동 링크(<a href>)로 그린다(예전 btn 클래스를 붙인 Link). state, replace는 react-router Link와 같다
  */
@@ -42,9 +43,42 @@ export function Button({ children, outline, buy, className = '', disabled, type 
   return <AxButton {...props} {...native} label={label} type={type as 'button' | 'submit' | 'reset'} href={link ? href : undefined} onClick={click} variant={outline ? 'secondary' : buy ? 'buy' : 'primary'} size="lg" isDisabled={disabled} className={`ax-btn ${className}`}>{children}</AxButton>;
 }
 
-export function Field({ label, hint, required, error, children }: { label: string; hint?: string; required?: boolean; error?: string; children: ReactNode }) { return <div><span className="label">{label}{required && <span className="muted ml-1 text-caption">· 필수</span>}</span>{children}{error && <p role="alert" className="mt-2 text-label text-red">{error}</p>}{hint && <p className="muted mt-2 text-caption leading-relaxed">{hint}</p>}</div>; }
+/** 한 번 움직이는 효과(오류 흔들림 sd-shake, 알림 종 흔들림 sd-ring). 움직임 줄이기 설정이면 움직이지 않는다 */
+function play(el: Element | null, name: string) { if (!el || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return; el.classList.remove(name); void (el as HTMLElement).getBoundingClientRect(); el.classList.add(name); }
+const shake = (el: HTMLElement | null) => play(el, 'sd-shake');
+/** 상품 알림을 켜는 순간 종 아이콘을 흔든다(알림 신청 동작은 그대로) */
+export const ringBell = (button: Element) => play(button.querySelector('svg'), 'sd-ring');
+let focusQueued = false;
+/** 새로 틀린 칸들 중 화면 맨 위 칸의 입력으로 포커스를 옮긴다. 이미 입력칸에 있으면(입력 중) 옮기지 않는다 */
+function focusFirstInvalid() {
+  if (focusQueued) return; focusQueued = true;
+  requestAnimationFrame(() => {
+    focusQueued = false;
+    const a = document.activeElement;
+    if (a instanceof HTMLInputElement || a instanceof HTMLTextAreaElement || a instanceof HTMLSelectElement) return;
+    document.querySelector<HTMLElement>('[data-invalid] :is(input, textarea, select)')?.focus();
+  });
+}
+/** 오류가 새로 생기거나 바뀌면 흔들고(focus면 첫 틀린 칸으로 포커스). 화면이 열릴 때부터 있던 오류는 그대로 둔다 */
+function useErrorCue(error: string | undefined, ref: { current: HTMLElement | null }, focus: boolean) {
+  const mounted = useRef(false);
+  useEffect(() => {
+    if (!mounted.current) { mounted.current = true; return; }
+    if (!error) return;
+    shake(ref.current); if (focus) focusFirstInvalid();
+  }, [error, ref, focus]);
+}
+export function Field({ label, hint, required, error, children }: { label: string; hint?: string; required?: boolean; error?: string; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useErrorCue(error, ref, true);
+  return <div ref={ref} data-invalid={error ? '' : undefined}><span className="label">{label}{required && <span className="muted ml-1.5 text-label font-medium">· 필수</span>}</span>{children}{error && <p role="alert" className="mt-2 text-label text-red">{error}</p>}{hint && <p className="muted mt-2 text-caption leading-relaxed">{hint}</p>}</div>;
+}
 export function Note({ title, children, green = false }: { title?: string; children: ReactNode; green?: boolean }) { return <div className={`note ${green ? 'bg-green-soft!' : ''}`}>{title && <h3 className="mb-1 font-bold">{title}</h3>}<div className="muted">{children}</div></div>; }
-export function ErrorBox({ message }: { message: string }) { return message ? <div role="alert" className="rounded-inner bg-red-soft p-3 text-label leading-relaxed text-red">{message}</div> : null; }
+export function ErrorBox({ message }: { message: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useErrorCue(message, ref, false);
+  return message ? <div ref={ref} role="alert" className="rounded-inner bg-red-soft p-3 text-label leading-relaxed text-red">{message}</div> : null;
+}
 /** iOS식 12선 로딩 표시. 12개 선이 한 칸씩(steps) 돌아 끝으로 갈수록 흐려진다. 색은 부모 글자색(기본 보조색) */
 export function Spinner({ size = 22, className = 'text-muted' }: { size?: number; className?: string }) {
   return <svg role="progressbar" aria-label="불러오는 중" width={size} height={size} viewBox="0 0 24 24" className={`ios-spinner ${className}`}>
@@ -60,11 +94,13 @@ export function Empty({ title, message, children }: { title: string; message?: s
 /** backTo: 뒤로 가기 버튼이 이전 기록 대신 갈 화면(탭 전환 기록이 쌓이는 화면 등) */
 export function Header({ title, subtitle, back = true, action, bare = false, backTo, onBack }: { title: string; subtitle?: string; back?: boolean; action?: ReactNode; bare?: boolean; backTo?: string; onBack?: () => void }) {
   const navigate = useNavigate();
-  return <header className={bare ? 'mb-5 pb-3' : 'divider mb-5 pb-3'}><div className="flex min-h-9.5 items-center gap-3">{back && <button type="button" aria-label="이전 화면" onClick={() => onBack ? onBack() : backTo ? navigate(backTo, { replace: true }) : window.history.state?.idx > 0 ? navigate(-1) : navigate('/')} className="-ml-1 grid h-9 w-9 shrink-0 place-items-center"><ArrowLeft size={20}/></button>}<h1 className="min-w-0 flex-1 text-title font-bold tracking-[-.5px]">{title}</h1>{action}</div>{subtitle && <p className="muted mt-1 text-footnote leading-relaxed">{subtitle}</p>}</header>;
+  return <header className={bare ? 'mb-5 pb-3' : 'divider mb-5 pb-3'}><div className="flex min-h-9.5 items-center gap-3">{back && <button type="button" aria-label="이전 화면" onClick={() => onBack ? onBack() : backTo ? navigate(backTo, { replace: true }) : window.history.state?.idx > 0 ? navigate(-1) : navigate('/')} className="press -ml-3 grid h-11 w-11 shrink-0 place-items-center"><Icon name="Back" size={24}/></button>}<h1 className="min-w-0 flex-1 text-title font-bold tracking-[-.5px]">{title}</h1>{action}</div>{subtitle && <p className="muted mt-1 text-footnote leading-relaxed">{subtitle}</p>}</header>;
 }
-export function Badge({ children, live = false, red = false }: { children: ReactNode; live?: boolean; red?: boolean }) { return <span className={`inline-flex w-fit items-center rounded-badge px-2 py-1 text-caption font-semibold ${live ? 'bg-green-soft text-green' : red ? 'bg-red-soft text-red' : 'bg-blue-soft text-ink'}`}>{children}</span>; }
-export function InfoRow({ label, value, strong = false }: { label: string; value: ReactNode; strong?: boolean }) { return <div className="flex items-start justify-between gap-4 py-1"><span className="muted shrink-0 text-label">{label}</span><span className={`min-w-0 text-right text-label leading-relaxed ${strong ? 'font-bold' : ''}`}>{value}</span></div>; }
-export function MenuRow({ label, to, children }: { label: string; to: string; children?: ReactNode }) { return <Link to={to} className="divider flex min-h-13 items-center gap-3"><span className="min-w-0 flex-1 text-body">{label}</span>{children}<ChevronRight size={17} className="muted"/></Link>; }
+export function Badge({ children, live = false, red = false }: { children: ReactNode; live?: boolean; red?: boolean }) { return <span className={`inline-flex w-fit items-center rounded-badge px-2 py-1 text-caption font-semibold ${live ? 'bg-green-soft text-green' : red ? 'bg-red-soft text-red' : 'bg-blue-soft text-text'}`}>{children}</span>; }
+/** 정보 한 줄(시안 결제 금액 Row): 이름 14 보조색, 값 14 굵게. strong은 합계 줄(위 구분선, 값 20 가장 굵게) */
+export function InfoRow({ label, value, strong = false }: { label: string; value: ReactNode; strong?: boolean }) { return <div className={`flex items-center justify-between gap-4 ${strong ? 'mt-1 border-t border-line pt-4' : 'py-2'}`}><span className="muted shrink-0 text-callout">{label}</span><span className={`min-w-0 text-right leading-relaxed ${strong ? 'text-title-lg font-black' : 'text-callout font-semibold'}`}>{value}</span></div>; }
+/** 메뉴 한 줄(시안 2단계 · 마이 하위 화면 Row): 높이 60, 16 굵게 */
+export function MenuRow({ label, to, children }: { label: string; to: string; children?: ReactNode }) { return <Link to={to} className="divider flex min-h-15 items-center gap-2.5"><span className="min-w-0 flex-1 text-headline font-semibold">{label}</span>{children}<Icon name="Caret" size={18} className="muted shrink-0"/></Link>; }
 const signedUrl = (u: string) => /[?&]X-Amz-(Expires|Signature)=/i.test(u);
 export function ProductImage({ src, alt, className = '' }: { src: string; alt: string; className?: string }) {
   const reported = useRef('');
@@ -83,11 +119,25 @@ export function ProductImage({ src, alt, className = '' }: { src: string; alt: s
     {spinner}
   </span>;
 }
-export function ProductSummary({ product, option, amount }: { product: { name: string; brand: string; image: string }; option?: ReactNode; amount?: number }) { return <div className="divider flex items-center gap-3 pb-4"><ProductImage src={product.image} alt={product.name} className="h-21.5 w-19 shrink-0"/><div className="min-w-0 flex-1 space-y-1.5"><p className="muted text-caption">{product.brand}</p><p className="text-callout font-semibold">{product.name}</p>{option && <div className="muted whitespace-pre-line text-footnote leading-relaxed">{option}</div>}{amount !== undefined && <p className="font-number text-callout font-bold">{money(amount)}</p>}</div></div>; }
+/** 상품 요약 줄(시안 주문 결제 Product): 사진 76, 이름 17 굵게, 옵션 13, 금액 18 가장 굵게 */
+export function ProductSummary({ product, option, amount }: { product: { name: string; brand: string; image: string }; option?: ReactNode; amount?: number }) { return <div className="flex items-center gap-3.5 pb-2"><ProductImage src={product.image} alt={product.name} className="h-19 w-19 shrink-0"/><div className="min-w-0 flex-1 space-y-1"><p className="text-title-sm font-bold">{product.name}</p>{option && <div className="whitespace-pre-line text-body font-medium leading-relaxed text-muted">{option}</div>}{amount !== undefined && <p className="text-title font-black">{money(amount)}</p>}</div></div>; }
 const pad = (n: number) => String(n).padStart(2, '0');
 export const clockLeft = (ms: number) => { const s = Math.max(0, Math.floor(ms / 1000)); return `${pad(Math.floor(s / 3600))}:${pad(Math.floor(s % 3600 / 60))}:${pad(s % 60)}`; };
 export const openLabel = (t: number, now: number) => { const d = new Date(t), n = new Date(now); const same = d.toDateString() === n.toDateString(); return `${same ? '오늘' : `${d.getMonth() + 1}월 ${d.getDate()}일`} ${pad(d.getHours())}:${pad(d.getMinutes())} 오픈`; };
 export const soldOutLabel = (p: Product) => { if (!p.soldOutAt) return '판매 종료'; const m = Math.max(1, Math.round((p.soldOutAt - p.startsAt) / 60_000)); return `${m >= 60 ? `${Math.floor(m / 60)}시간 ${m % 60}분` : `${m}분`} 만에 완판됐어요`; };
+/** 금액 올라가기(판매자 매출): 0에서 값까지 0.6초 동안 센다. 화면에는 숫자 하나만 그리고, 세는 동안 aria-busy. 움직임 줄이기면 바로 값 */
+export function CountUp({ value, format }: { value: number; format: (n: number) => string }) {
+  const [shown, setShown] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches ? value : 0);
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { setShown(value); return; }
+    const start = performance.now(); let frame = 0;
+    const step = (t: number) => { const k = Math.min(1, (t - start) / 600); setShown(Math.round(value * (1 - (1 - k) ** 3))); if (k < 1) frame = requestAnimationFrame(step); };
+    frame = requestAnimationFrame(step); return () => cancelAnimationFrame(frame);
+  }, [value]);
+  return <span aria-busy={shown !== value}>{format(shown)}</span>;
+}
+/** 숫자가 바뀌면 그 자리 숫자만 아래에서 올라온다(숫자 굴러가기). 글자 자체는 그대로라 읽기·검색 결과가 같다 */
+export function RollingText({ text }: { text: string }) { return <>{[...text].map((ch, i) => /\d/.test(ch) ? <span key={`${i}-${ch}`} className="sd-roll">{ch}</span> : ch)}</>; }
 export function ProductCard({ product: p, now, availableCount, notified, onNotify }: { product: Product; now: number; availableCount?: number; notified?: boolean; onNotify?: () => void }) {
   const status = saleState(p, now);
   const total = stockTotal(p), left = availableCount ?? total;
@@ -99,30 +149,48 @@ export function ProductCard({ product: p, now, availableCount, notified, onNotif
   const myHold = !!mine && st.holds.some(h => h.userId === mine && h.productId === p.id && (h.status === 'pending' || h.status === 'reserved' && (h.expiresAt ?? Infinity) > now));
   const myOrder = !!mine && !myHold && st.orders.some(o => o.userId === mine && o.productId === p.id && !['cancelled', 'refunded'].includes(o.status));
   const pct = total ? Math.min(100, Math.max(0, (1 - left / total) * 100)) : 0;
-  return <Link to={`/product/${p.id}`} className="block min-w-0">
-    <div className="relative">
-      <ProductImage src={p.images[0]} alt={p.name} className={`aspect-square w-full ${soldOut && !myHold ? 'opacity-50' : ''}`}/>
-      {status === '판매 중' && !soldOut && <span className="absolute left-2 top-2 flex items-center gap-1 rounded-inner bg-black/75 px-1.5 py-1 text-footnote font-bold tabular-nums text-white"><Timer size={12}/>{clockLeft(p.endsAt - now)}</span>}
-      {status === '판매 예정' && <span className="absolute left-2 top-2 flex items-center gap-1 rounded-inner bg-black/75 px-1.5 py-1 text-footnote font-bold text-white"><Bell size={12}/>{openLabel(p.startsAt, now)}</span>}
-      {urgent && <span className="absolute bottom-2 left-2 rounded-inner bg-urgent px-1.5 py-1 text-footnote font-bold text-white">마감 임박</span>}
-      {myHold ? <span className="absolute inset-x-2 bottom-2 rounded-inner bg-ink px-2 py-1.5 text-center text-label font-bold text-white">확보한 재고 · 결제 이어하기</span>
-        : myOrder && soldOut ? <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-inner bg-ink px-3 py-1.5 text-label font-bold text-white">구매 완료</span>
-        : soldOut && <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-inner bg-sold-out px-3 py-1.5 text-label font-bold text-white">{temporary ? '일시 품절' : 'SOLD OUT'}</span>}
+  // 홈 상품 카드(사용자 요청으로 시안의 목록 줄 대신 2열 카드): 정사각 사진(아래 시간 띠, 오른쪽 위 알림 종), 카테고리·이름·가격, 판매 상황. 상태 표시·문구·버튼 이름은 그대로
+  const bell = (label: string, on: boolean) => <button type="button" aria-label={label} onClick={e => { e.preventDefault(); if (!on) ringBell(e.currentTarget); onNotify?.(); }} className={`press absolute right-1.5 top-1.5 grid h-9 w-9 place-items-center rounded-full bg-surface ${on ? 'text-ink' : 'text-text'}`}><Icon name={on ? 'AlertOn' : 'AlertOff'} size={20}/></button>;
+  // 확대 전환: 이 상품 상세로 가는 동안 사진에 이름을 붙여 상세 큰 사진으로 이어지게 한다
+  const zooming = useViewTransitionState(`/product/${p.id}`);
+  return <Link to={`/product/${p.id}`} viewTransition className="block min-w-0">
+    <div className="relative aspect-square w-full" style={{ viewTransitionName: zooming ? 'product-photo' : undefined }}>
+      <ProductImage src={p.images[0]} alt={p.name} className={`h-full w-full ${soldOut && !myHold ? 'opacity-50' : ''}`}/>
+      {status === '판매 중' && !soldOut && <span className="absolute inset-x-1.5 bottom-1.5 flex h-7 items-center justify-center gap-1 rounded-[14px] bg-overlay text-label font-bold tabular-nums text-white"><Timer size={12}/><span><RollingText text={clockLeft(p.endsAt - now)}/></span></span>}
+      {status === '판매 예정' && <span className="absolute inset-x-1.5 bottom-1.5 flex h-7 items-center justify-center gap-[5px] rounded-[14px] bg-overlay text-footnote font-medium text-white">{openLabel(p.startsAt, now)}</span>}
+      {urgent && <span className="absolute left-1.5 top-1.5 rounded-pill bg-urgent px-2 py-0.5 text-footnote font-bold text-white">마감 임박</span>}
+      {myHold ? <span className="absolute inset-x-1.5 top-1/2 -translate-y-1/2 rounded-inner bg-ink px-1 py-1.5 text-center text-footnote font-bold leading-tight text-white">확보한 재고 · 결제 이어하기</span>
+        : myOrder && soldOut ? <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-inner bg-ink px-3 py-1.5 text-label font-bold text-white">구매 완료</span>
+        : soldOut && <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-inner bg-sold-out px-3 py-1.5 text-label font-bold text-white">{temporary ? '일시 품절' : 'SOLD OUT'}</span>}
+      {status === '판매 예정' && onNotify && bell(notified ? '알림 설정됨' : '오픈 알림 받기', !!notified)}
+      {/* 판매 중에도 신청한 상품은 가격 인하·수량 임박 알림을 받으므로 끌 수 있게 둔다 */}
+      {status === '판매 중' && notified && onNotify && bell('상품 알림 끄기', true)}
     </div>
-    <p className="mt-2.5 text-footnote font-bold text-aux">{p.brand}</p>
-    <h3 className={`mt-0.5 text-callout ${soldOut ? 'text-meta' : ''}`}>{p.name}</h3>
-    <p className={`mt-0.5 text-headline font-bold ${soldOut ? 'text-meta' : ''}`}>{money(p.price)}</p>
-    {status === '판매 중' && !soldOut && <><div className="mt-2 h-1 w-full rounded-full bg-line"><div className={`h-1 rounded-full ${urgent ? 'bg-urgent' : 'bg-ink'}`} style={{ width: `${pct}%` }}/></div><p className={`mt-1.5 text-label ${urgent ? 'font-bold text-urgent' : 'text-aux'}`}>{urgent ? `서두르세요! ${left}개 남음` : `${total}개 중 ${left}개 남음`}</p></>}
-    {status === '판매 예정' && <><p className="mt-2 text-label text-aux">{total}개 한정 · 1인 {p.maxPerAccount}개</p>{onNotify && <button type="button" onClick={e => { e.preventDefault(); onNotify(); }} className={`mt-2 flex h-8 w-full items-center justify-center gap-1 rounded-inner text-label font-bold ${notified ? 'bg-ink text-white' : 'border border-border'}`}><Bell size={13}/>{notified ? '알림 설정됨' : '오픈 알림 받기'}</button>}</>}
-    {/* 판매 중에도 신청한 상품은 가격 인하·수량 임박 알림을 받으므로 끌 수 있게 둔다 */}
-    {status === '판매 중' && notified && onNotify && <button type="button" onClick={e => { e.preventDefault(); onNotify(); }} className="mt-2 flex h-8 w-full items-center justify-center gap-1 rounded-inner border border-border text-label font-bold"><Bell size={13}/>상품 알림 끄기</button>}
-    {soldOut && <p className="mt-2 text-label text-aux">{temporary ? TEMPORARY_SOLD_OUT_NOTE : soldOutLabel(p)}</p>}
-    {status === '판매 종료' && !soldOut && <p className="mt-2 text-label text-aux">판매 종료</p>}
+    <div className="mt-2.5 space-y-2">
+      <div className="space-y-[3px]">
+        <p className="text-label font-medium text-muted">{p.category}</p>
+        <h3 className={`text-subhead font-semibold leading-5 ${soldOut ? 'text-meta' : ''}`}>{p.name}</h3>
+        <p className={`text-title-sm font-extrabold ${soldOut ? 'text-meta' : ''}`}>{money(p.price)}</p>
+      </div>
+      {status === '판매 중' && !soldOut && <div className="space-y-1.5"><div className="h-1 w-full rounded-[2px] bg-line"><div className={`h-1 rounded-[2px] ${urgent ? 'bg-urgent' : 'bg-ink'}`} style={{ width: `${pct}%` }}/></div><p className={`text-label ${urgent ? 'font-bold text-urgent' : 'text-muted'}`}><RollingText text={urgent ? `서두르세요! ${left}개 남음` : `${total}개 중 ${left}개 남음`}/></p></div>}
+      {status === '판매 예정' && <p className="text-label text-muted">{total}개 한정 · 1인 {p.maxPerAccount}개</p>}
+      {soldOut && <p className="text-label text-muted">{temporary ? TEMPORARY_SOLD_OUT_NOTE : soldOutLabel(p)}</p>}
+      {status === '판매 종료' && !soldOut && <p className="text-label text-muted">판매 종료</p>}
+    </div>
   </Link>;
 }
 export function Progress({ step }: { step: number }) { return <div aria-label={`상품 등록 ${step} / 7단계`} className="mb-5 flex gap-[5px]">{Array.from({ length: 7 }, (_, i) => <div key={i} className={`h-1 flex-1 rounded-[2px] ${i < step ? 'bg-ink' : 'bg-line'}`}/>)}</div>; }
 export const ORDER_LABELS: Record<Order['status'], string> = { paid: '결제 완료', preparing: '배송 준비', shipping: '배송 중', delivered: '배송 완료', cancelled: '취소 완료', refunded: '환불 완료' };
-export function DeliveryProgress({ status }: { status: Order['status'] }) { const active = ['paid', 'preparing', 'shipping', 'delivered'].indexOf(status); return <div className="divider grid grid-cols-4 gap-1 pb-5">{['결제 완료', '배송 준비', '배송 중', '배송 완료'].map((label, i) => <div key={label} className="flex flex-col items-center gap-2"><span className={`font-number grid h-7.5 w-7.5 place-items-center rounded-full text-footnote ${i <= active ? 'bg-ink text-surface' : 'bg-blue-soft text-muted'}`}>{i < active || status === 'delivered' && i === active ? '✓' : i + 1}</span><span className={`text-caption ${i === active ? 'font-bold' : 'muted'}`}>{label}</span></div>)}</div>; }
+/** 배송 현황(시안 배송 현황 · 상태별): 회색 상자 안 네 단계. 지난 단계는 흰 원, 지금 단계는 주색 큰 원, 이후는 회색 원. 단계 사이 선은 지난 곳까지 주색 */
+const DELIVERY_STEPS = [['결제 완료', 'Payments'], ['배송 준비', 'Inventory'], ['배송 중', 'Shipping'], ['배송 완료', 'DeliveredHome']] as const;
+export function DeliveryProgress({ status }: { status: Order['status'] }) {
+  const active = ['paid', 'preparing', 'shipping', 'delivered'].indexOf(status);
+  const line = (on: boolean, hidden: boolean) => <span className={`h-[3px] flex-1 ${hidden ? '' : on ? 'bg-ink' : 'bg-border'}`}/>;
+  return <div className="flex rounded-card bg-soft px-2 pb-4.5 pt-5.5">{DELIVERY_STEPS.map(([label, icon], i) => <div key={label} aria-current={i === active ? 'step' : undefined} className="flex flex-1 flex-col items-center gap-2.5">
+    <div className="flex h-14 w-full items-center">{line(i <= active, i === 0)}<span className="grid h-11 w-11 place-items-center">{i === active ? <span className="grid h-10 w-10 place-items-center rounded-full bg-ink text-white"><Icon name={icon} size={22}/></span> : <span className={`grid h-9 w-9 place-items-center rounded-full ${i < active ? 'border border-line bg-surface text-text' : 'bg-line text-placeholder'}`}><Icon name={icon} size={20}/></span>}</span>{line(i < active, i === DELIVERY_STEPS.length - 1)}</div>
+    <span className={`text-body ${i === active ? 'font-extrabold text-text' : i < active ? 'font-semibold text-aux-strong' : 'font-medium text-placeholder'}`}>{label}</span>
+  </div>)}</div>;
+}
 /**
  * 열린 창(모달·시트·사진 보기)을 브라우저 뒤로 가기(아이폰 스와이프 포함)로 닫는다.
  * 열 때 같은 주소로 기록을 하나 쌓고, 뒤로 가기가 오면 페이지 대신 창만 닫는다. 버튼으로 닫으면 쌓은 기록을 되돌린다
@@ -192,7 +260,7 @@ function Sheet({ label, onClose, restoreOnUnmount = true, padding, children }: {
     roots.forEach(({ element }) => element.classList.add('overflow-hidden'));
     return () => roots.forEach(({ element, locked }) => { if (!locked) element.classList.remove('overflow-hidden'); });
   }, []);
-  return <SheetClose.Provider value={requestClose}><AxBottomSheet ref={panel} label={label} onOpenChange={next => { if (!next) requestClose(); }} isOpen={open} finalFocusRef={opener} height="hug" padding={padding} className="mx-auto max-w-[390px] border-0 text-ink">{children}</AxBottomSheet></SheetClose.Provider>;
+  return <SheetClose.Provider value={requestClose}><AxBottomSheet ref={panel} label={label} onOpenChange={next => { if (!next) requestClose(); }} isOpen={open} finalFocusRef={opener} height="hug" padding={padding} className="mx-auto max-w-[390px] border-0 text-text">{children}</AxBottomSheet></SheetClose.Provider>;
 }
 /** 시트 안의 닫기 버튼이 내려가는 움직임과 함께 닫도록 */
 const SheetClose = createContext<(() => void) | null>(null);
@@ -205,15 +273,27 @@ export const useFromTab = () => !!(useLocation().state as { tab?: boolean } | nu
 export function BottomNav() {
   const { pathname } = useLocation();
   // 지금 보고 있는 탭을 다시 누르면 맨 위로 올리고 그 화면을 새로 그려 데이터를 다시 받는다
-  const items = [['/', '홈', Home], ['/schedule', '판매 일정', CalendarDays], ['/orders', '주문', Package], ['/my', '마이', UserRound]] as const;
-  return <nav aria-label="하단 메뉴" className="fixed bottom-0 left-1/2 z-30 w-full max-w-[390px] -translate-x-1/2 border-t border-line bg-surface px-1 pb-[max(14px,env(safe-area-inset-bottom))] pt-2"><div className="flex">{items.map(([to, label, Icon]) => <NavLink end key={to} to={to} state={{ tab: true }} onClick={e => { if (pathname === to) { e.preventDefault(); window.scrollTo(0, 0); window.dispatchEvent(new Event(TAB_REFRESH)); } }} className={({ isActive }) => `flex min-h-11 flex-1 flex-col items-center justify-center gap-1 text-[9px] ${isActive ? 'font-bold text-ink' : 'text-muted'}`}><Icon size={20} strokeWidth={1.5}/>{label}</NavLink>)}</div></nav>;
+  const items = [['/', '홈', 'Home'], ['/schedule', '판매 일정', 'Calendar'], ['/orders', '주문', 'Package'], ['/my', '마이', 'User']] as const;
+  // 마이 하위 화면(/my/membership, /my/selling 등)도 마이 탭이 선택된 상태
+  const on = (to: string) => to === pathname || (to === '/my' && pathname.startsWith('/my/'));
+  const active = items.findIndex(([to]) => on(to));
+  // 시안 Tab Bar(사용자 요청으로 높이 66 → 60, 아이콘 22, 글자 10으로 조금 줄임): 알약, 선택 칸(tint)이 고른 탭으로 미끄러진다. 바닥에서 max(14px, 안전 영역)
+  return <nav aria-label="하단 메뉴" className="fixed bottom-0 left-1/2 z-30 w-full max-w-[390px] -translate-x-1/2 px-4 pb-[max(14px,env(safe-area-inset-bottom))]"><div className="tab-bar relative flex h-15 rounded-pill border border-border p-1">
+    {active >= 0 && <span aria-hidden className="tab-indicator absolute inset-y-1 left-1 w-[calc((100%-8px)/4)] rounded-pill bg-tint" style={{ transform: `translateX(${active * 100}%)` }}/>}
+    {items.map(([to, label, icon]) => <NavLink end={to !== '/my'} key={to} to={to} state={{ tab: true }} onClick={e => { if (pathname === to) { e.preventDefault(); window.scrollTo(0, 0); window.dispatchEvent(new Event(TAB_REFRESH)); } }} className={({ isActive }) => `relative flex h-13 flex-1 flex-col items-center justify-center gap-0.5 text-[10px] ${isActive ? 'font-extrabold text-ink' : 'font-medium text-text'}`}>{({ isActive }) => <><Icon name={`${icon}${isActive ? 'On' : 'Off'}`} size={22}/>{label}</>}</NavLink>)}
+  </div></nav>;
 }
 export async function copyText(text: string) { if (!navigator.clipboard) throw new Error('클립보드를 사용할 수 없습니다. 번호를 길게 눌러 복사해 주세요.'); await navigator.clipboard.writeText(text); }
-export function CopyButton({ value }: { value: string }) { const toast = useToast(); return <button aria-label="복사" className="grid h-8 w-8 place-items-center" onClick={() => copyText(value).then(() => toast('복사했습니다.')).catch(e => toast(e.message))}><Copy size={16} className="muted"/></button>; }
+/** 복사 버튼: 복사하면 잠시 체크 표시로 바뀐다 */
+export function CopyButton({ value }: { value: string }) {
+  const toast = useToast(); const [done, setDone] = useState(false);
+  useEffect(() => { if (!done) return; const t = setTimeout(() => setDone(false), 1500); return () => clearTimeout(t); }, [done]);
+  return <button aria-label="복사" className="press grid h-8 w-8 place-items-center" onClick={() => copyText(value).then(() => { setDone(true); toast('복사했습니다.'); }).catch(e => toast(e.message))}>{done ? <Check size={16} className="text-ink"/> : <Copy size={16} className="muted"/>}</button>;
+}
 export function Unavailable({ message = '접근할 수 없는 화면입니다.' }: { message?: string }) { return <><Header title="접근 안내"/><Empty title={message} message="이 화면을 사용할 수 있는 계정으로 전환해 주세요."><Button to="/my">마이페이지로</Button></Empty></>; }
 export function Loading({ text = '확인하고 있어요…' }: { text?: string }) { return <div className="muted flex items-center justify-center gap-2 py-10 text-label"><Info size={16}/>{text}</div>; }
 
-/** 바텀시트 — 상단 모서리 16, 손잡이, 뒤 배경 어둡게(Astryx BottomSheet) */
+/** 바텀시트 — 상단 모서리 28, 손잡이, 뒤 배경 어둡게(Astryx BottomSheet) */
 export function BottomSheet({ title, children, onClose }: { title?: string; children: ReactNode; onClose: () => void }) {
   return <Sheet label={title ?? '선택'} onClose={onClose} padding={4}>{title && <div className="-mx-4 mb-4 mt-1 flex items-center justify-between border-b border-line px-4 pb-3"><h2 className="text-headline font-bold">{title}</h2><SheetCloseButton onClose={onClose} className="-mr-3 grid h-11 w-11 place-items-center" iconClassName="muted"/></div>}{children}</Sheet>;
 }
@@ -222,28 +302,28 @@ export function BottomSheet({ title, children, onClose }: { title?: string; chil
 export function QuantityStepper({ value, min = 0, max, onChange }: { value: number; min?: number; max: number; onChange: (n: number) => void }) {
   return (
     <div className="inline-flex items-center gap-3">
-      <button aria-label="수량 감소" onClick={() => onChange(Math.max(min, value - 1))} disabled={value <= min} className="grid h-8 w-8 place-items-center rounded-full border border-border text-title font-bold disabled:opacity-30">−</button>
+      <button aria-label="수량 감소" onClick={() => onChange(Math.max(min, value - 1))} disabled={value <= min} className="press grid h-8 w-8 place-items-center rounded-full border border-border text-title font-bold disabled:opacity-30">−</button>
       <span className="font-number w-6 text-center text-subhead font-bold">{value}</span>
-      <button aria-label="수량 증가" onClick={() => onChange(Math.min(max, value + 1))} disabled={value >= max} className="grid h-8 w-8 place-items-center rounded-full border border-border text-title font-bold disabled:opacity-30">+</button>
+      <button aria-label="수량 증가" onClick={() => onChange(Math.min(max, value + 1))} disabled={value >= max} className="press grid h-8 w-8 place-items-center rounded-full border border-border text-title font-bold disabled:opacity-30">+</button>
     </div>
   );
 }
 
-/** 칩 — 선택 시 ink 바탕 흰 글자, 기본 흰 바탕 border */
+/** 칩(시안 Chip): 높이 44 알약. 선택은 주색 바탕 흰 글자, 기본은 흰 바탕 테두리 */
 export function Chip({ selected, onClick, children }: { selected: boolean; onClick: () => void; children: ReactNode }) {
   return (
-    <button onClick={onClick} aria-pressed={selected} className={`inline-flex h-8 items-center rounded-full px-3.5 text-label font-medium transition-colors ${selected ? 'bg-ink text-surface' : 'border border-border bg-surface text-ink'}`}>
+    <button onClick={onClick} aria-pressed={selected} className={`press inline-flex h-11 items-center rounded-pill px-4 text-callout transition-colors ${selected ? 'bg-ink font-bold text-surface' : 'border border-border bg-surface font-medium text-aux-strong'}`}>
       {children}
     </button>
   );
 }
 
 /**
- * 가운데 대화상자(Astryx Dialog, native dialog). 폭 318, 모서리 8, 안쪽 여백 24, 그림자 없음은 지금 디자인 그대로.
+ * 가운데 대화상자(Astryx Dialog, native dialog). 폭 318, 모서리 28(시안 Popup), 안쪽 여백 24, 그림자 없음.
  * onDismiss가 있으면 Esc로 닫히고(form), dismissOnBackdrop이면 바깥 누르기로도 닫힌다(info). 없으면 버튼으로만 닫힌다(required)
  */
 function CenterDialog({ title, onDismiss, dismissOnBackdrop = false, children }: { title: string; onDismiss?: () => void; dismissOnBackdrop?: boolean; children: ReactNode }) {
-  return <AxDialog isOpen onOpenChange={open => { if (!open) onDismiss?.(); }} purpose={!onDismiss ? 'required' : dismissOnBackdrop ? 'info' : 'form'} width={318} maxHeight="92dvh" padding={6} aria-label={title} className="max-w-[calc(100%-32px)] rounded-dialog bg-surface text-ink shadow-none">
+  return <AxDialog isOpen onOpenChange={open => { if (!open) onDismiss?.(); }} purpose={!onDismiss ? 'required' : dismissOnBackdrop ? 'info' : 'form'} width={318} maxHeight="92dvh" padding={6} aria-label={title} className="max-w-[calc(100%-32px)] rounded-dialog bg-surface text-text shadow-none">
     <div className="space-y-4"><h2 className="text-headline font-bold">{title}</h2>{children}</div>
   </AxDialog>;
 }
@@ -330,7 +410,7 @@ export function LoginRequired({ returnTo, onClose }: { returnTo: string; onClose
   </CenterDialog>;
 }
 
-/** 토글 스위치 — 48×28, 켜짐 #222222 */
+/** 토글 스위치(시안 Toggle) — 52×32, 손잡이 26, 켜짐 주색, 꺼짐 테두리 색 */
 export function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
-  return <button type="button" role="switch" aria-label={label} aria-checked={checked} onClick={() => onChange(!checked)} className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${checked ? 'bg-ink' : 'bg-border'}`}><span className={`absolute top-[3px] h-5.5 w-5.5 rounded-full bg-white shadow-sm transition-all ${checked ? 'left-[23px]' : 'left-[3px]'}`}/></button>;
+  return <button type="button" role="switch" aria-label={label} aria-checked={checked} onClick={() => onChange(!checked)} className={`relative h-8 w-13 shrink-0 rounded-full transition-colors ${checked ? 'bg-ink' : 'bg-border'}`}><span className={`absolute top-[3px] h-6.5 w-6.5 rounded-full bg-surface transition-all ${checked ? 'left-[23px]' : 'left-[3px]'}`}/></button>;
 }

@@ -92,13 +92,16 @@ test('상품 전용 캠페인은 해당 상품에서만 받기 행을 보여 준
 });
 
 test('마이페이지: 이용 중 멤버십 카드, 내 쿠폰(탭 3개, 사용 중 비활성), 관리 시트 해지', async ({ page }) => {
-  const sv = server(); await serve(page, sv); await login(page, '/my');
+  const sv = server(); await serve(page, sv); await login(page, '/my/membership'); // 멤버십 카드는 마이페이지 배너에서 들어가는 멤버십 화면(/my/membership)으로 옮겨졌다
   const card = page.getByRole('region', { name: 'STOCKDROP 멤버십' });
   await expect(card.getByRole('heading', { name: '멤버십 이용 중' })).toBeVisible();
   await expect(card.getByText('12월 26일 · 4,900원')).toBeVisible();
-  // 기존 순서: 주문·배송 조회 → (새) 멤버십 → 내 쿠폰 → 회원 권한
-  const order = await page.evaluate(() => ['주문 · 배송 조회', 'STOCKDROP 멤버십', '내 쿠폰', '회원 권한'].map(t => [...document.querySelectorAll('main *')].findIndex(e => e.children.length === 0 && e.textContent?.trim() === t)));
-  expect(order).toEqual([...order].sort((a, b) => a - b));
+  // 마이페이지 순서: 주문·배송 조회 → 멤버십 배너(이용 중) → 회원 권한. 회원의 내 쿠폰은 멤버십 화면에 있고, 배너를 누르면 멤버십 화면으로 간다(리디자인)
+  await page.goto('/#/my');
+  const order = await page.evaluate(() => ['주문 · 배송 조회', 'STOCKDROP 멤버십(이용 중)', '회원 권한'].map(t => [...document.querySelectorAll('main *')].findIndex(e => e.children.length === 0 && e.textContent?.trim() === t)));
+  expect(order.every(i => i >= 0)).toBe(true); expect(order).toEqual([...order].sort((a, b) => a - b));
+  await expect(page.getByText('내 쿠폰', { exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: /STOCKDROP 멤버십\(이용 중\)/ }).click(); await expect(page).toHaveURL(/#\/my\/membership$/);
   await expect(page.getByRole('button', { name: /내 쿠폰 2장 · 곧 만료 1장/ })).toBeVisible(); await noOverflow(page);
   await page.getByRole('button', { name: /내 쿠폰/ }).click();
   const sheet = page.getByRole('dialog');
@@ -116,7 +119,7 @@ test('마이페이지: 이용 중 멤버십 카드, 내 쿠폰(탭 3개, 사용 
 });
 
 test('마이페이지: 비회원 큰 카드와 가입 시트(서버 요금, 약관 버전 본문, 동의 전 비활성)', async ({ page }) => {
-  const sv = server({ membership: NONE }); await serve(page, sv); await login(page, '/my');
+  const sv = server({ membership: NONE }); await serve(page, sv); await login(page, '/my/membership'); // 멤버십 카드는 마이페이지 배너에서 들어가는 멤버십 화면(/my/membership)으로 옮겨졌다
   const card = page.getByRole('region', { name: 'STOCKDROP 멤버십' });
   await expect(card.getByText('월 4,900원으로')).toBeVisible(); await expect(card.getByText('매달 3,000원 쿠폰')).toBeVisible();
   await card.getByRole('button', { name: '혜택 확인하고 가입하기' }).click();
@@ -130,7 +133,7 @@ test('마이페이지: 비회원 큰 카드와 가입 시트(서버 요금, 약�
 });
 
 test('마이페이지: 결제 실패 유예와 가입 확인 중 상태', async ({ page }) => {
-  const sv = server({ membership: membership({ state: 'GRACE', entitlementUntil: '2026-12-28T15:00:00Z' }) }); await serve(page, sv); await login(page, '/my');
+  const sv = server({ membership: membership({ state: 'GRACE', entitlementUntil: '2026-12-28T15:00:00Z' }) }); await serve(page, sv); await login(page, '/my/membership'); // 멤버십 카드는 마이페이지 배너에서 들어가는 멤버십 화면(/my/membership)으로 옮겨졌다
   const card = page.getByRole('region', { name: 'STOCKDROP 멤버십' });
   await expect(card.getByText('결제에 실패했어요')).toBeVisible(); await expect(card.getByText('유예 중')).toBeVisible(); await expect(card.getByText('2026.12.29까지')).toBeVisible();
   await expect(card.getByRole('button', { name: '카드 다시 등록하기' })).toBeVisible();
@@ -220,7 +223,7 @@ test('분석 동의가 없으면 AI 이벤트를 보내지 않는다', async ({ 
 });
 
 test('해지 예약 카드의 해지 취소하기: DELETE 뒤 다시 읽어 이용 중으로', async ({ page }) => {
-  const sv = server({ membership: membership({ state: 'CANCEL_SCHEDULED', autoRenew: false, cancelRequested: false, cancelWithdrawalRequested: false }) }); await serve(page, sv); await login(page, '/my');
+  const sv = server({ membership: membership({ state: 'CANCEL_SCHEDULED', autoRenew: false, cancelRequested: false, cancelWithdrawalRequested: false }) }); await serve(page, sv); await login(page, '/my/membership'); // 멤버십 카드는 마이페이지 배너에서 들어가는 멤버십 화면(/my/membership)으로 옮겨졌다
   const card = page.getByRole('region', { name: 'STOCKDROP 멤버십' });
   await expect(card.getByText('해지 예약')).toBeVisible();
   const refreshesBefore = sv.refreshes;
@@ -232,13 +235,13 @@ test('해지 예약 카드의 해지 취소하기: DELETE 뒤 다시 읽어 이�
 });
 
 test('해지 취소 처리 중이면 버튼 대신 처리 중', async ({ page }) => {
-  const sv = server({ membership: membership({ state: 'CANCEL_SCHEDULED', autoRenew: false, cancelWithdrawalRequested: true }) }); await serve(page, sv); await login(page, '/my');
+  const sv = server({ membership: membership({ state: 'CANCEL_SCHEDULED', autoRenew: false, cancelWithdrawalRequested: true }) }); await serve(page, sv); await login(page, '/my/membership'); // 멤버십 카드는 마이페이지 배너에서 들어가는 멤버십 화면(/my/membership)으로 옮겨졌다
   await expect(page.getByRole('region', { name: 'STOCKDROP 멤버십' }).getByRole('button', { name: '해지 취소 처리 중' })).toBeDisabled();
 });
 
 for (const mode of ['hash', 'search'] as const) test(`가입: 세션 생성 → 카드 인증 → 귀환(쿼리 ${mode === 'hash' ? '해시 안' : '해시 앞'}) → completion → 15-1 가입 완료`, async ({ page }) => {
   const sv = server({ membership: NONE }); sv.afterComplete = () => { sv.membership = membership(); };
-  await serve(page, sv); await tossSdk(page, mode); await login(page, '/my');
+  await serve(page, sv); await tossSdk(page, mode); await login(page, '/my/membership'); // 멤버십 카드는 마이페이지 배너에서 들어가는 멤버십 화면(/my/membership)으로 옮겨졌다
   await page.getByRole('button', { name: '혜택 확인하고 가입하기' }).click();
   const sheet = page.getByRole('dialog'); await sheet.getByRole('checkbox').check();
   await sheet.getByRole('button', { name: '동의하고 카드 등록하기' }).click();
@@ -254,7 +257,7 @@ for (const mode of ['hash', 'search'] as const) test(`가입: 세션 생성 → 
 });
 
 test('가입 실패 귀환 → 15-2 카드 등록 실패, 다시 시도하기는 가입 시트', async ({ page }) => {
-  const sv = server({ membership: NONE }); await serve(page, sv); await tossSdk(page, 'fail'); await login(page, '/my');
+  const sv = server({ membership: NONE }); await serve(page, sv); await tossSdk(page, 'fail'); await login(page, '/my/membership'); // 멤버십 카드는 마이페이지 배너에서 들어가는 멤버십 화면(/my/membership)으로 옮겨졌다
   await page.getByRole('button', { name: '혜택 확인하고 가입하기' }).click();
   await page.getByRole('dialog').getByRole('checkbox').check(); await page.getByRole('dialog').getByRole('button', { name: '동의하고 카드 등록하기' }).click();
   const fail = page.getByRole('dialog'); await expect(fail.getByText('카드를 등록하지 못했어요')).toBeVisible({ timeout: 20000 });
@@ -265,7 +268,7 @@ test('가입 실패 귀환 → 15-2 카드 등록 실패, 다시 시도하기는
 test('결제 실패 유예 중 카드 다시 등록 → 새 카드 결제 성공', async ({ page }) => {
   const sv = server({ membership: membership({ state: 'GRACE', entitlementUntil: '2026-12-28T15:00:00Z' }), billing: { ...BILLING_NONE, subscriptionId: 's1', state: 'GRACE', autoRenew: true, version: 4, billingRegistrationRequired: false } });
   sv.afterComplete = () => { sv.membership = membership(); sv.billing = { ...BILLING_NONE, subscriptionId: 's1', state: 'ACTIVE', autoRenew: true, version: 5, billingRegistrationRequired: false }; };
-  await serve(page, sv); await tossSdk(page, 'hash'); await login(page, '/my');
+  await serve(page, sv); await tossSdk(page, 'hash'); await login(page, '/my/membership'); // 멤버십 카드는 마이페이지 배너에서 들어가는 멤버십 화면(/my/membership)으로 옮겨졌다
   await page.getByRole('region', { name: 'STOCKDROP 멤버십' }).getByRole('button', { name: '카드 다시 등록하기' }).click();
   const sheet = page.getByRole('dialog'); await expect(sheet.getByText('등록하면 이번 기간 이용료를 새 카드로 바로 결제해요.')).toBeVisible();
   await sheet.getByRole('checkbox').check(); await sheet.getByRole('button', { name: '동의하고 카드 등록하기' }).click();
@@ -274,7 +277,7 @@ test('결제 실패 유예 중 카드 다시 등록 → 새 카드 결제 성공
 });
 
 test('카드 등록 세션 충돌(409 MEMBERSHIP_CONFLICT)은 안내만', async ({ page }) => {
-  const sv = server({ membership: NONE, sessionError: 'MEMBERSHIP_CONFLICT' }); await serve(page, sv); await login(page, '/my');
+  const sv = server({ membership: NONE, sessionError: 'MEMBERSHIP_CONFLICT' }); await serve(page, sv); await login(page, '/my/membership'); // 멤버십 카드는 마이페이지 배너에서 들어가는 멤버십 화면(/my/membership)으로 옮겨졌다
   await page.getByRole('button', { name: '혜택 확인하고 가입하기' }).click();
   const sheet = page.getByRole('dialog'); await sheet.getByRole('checkbox').check(); await sheet.getByRole('button', { name: '동의하고 카드 등록하기' }).click();
   await expect(sheet.getByText(/다른 카드 등록이 진행 중이에요/)).toBeVisible();

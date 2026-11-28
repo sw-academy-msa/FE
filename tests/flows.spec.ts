@@ -78,7 +78,8 @@ test('사업자 PDF 신청 후 운영자 승인 시 기존 구매 권한과 주�
   // 승인 뒤에는 전환 버튼 없이 마이페이지 하나에 판매 관리와 구매 메뉴가 함께 있고, 하단 메뉴도 하나다
   await actor(page, 'buyer'); await page.goto('/#/my'); expect((await state(page)).orders).toHaveLength(orderCount);
   await expect(page.getByRole('button', { name: /모드로 전환/ })).toHaveCount(0);
-  await expect(page.getByText('판매 상품 관리')).toBeVisible(); await expect(page.getByText('주문 · 배송 조회')).toBeVisible(); await expect(page.getByRole('link', { name: '계정 설정' })).toBeVisible();
+  // 판매자 마이페이지는 허브(카드 네 개)로 나뉘었다: 판매 관리·내 구매 카드에서 하위 화면으로 들어간다
+  await page.getByRole('link', { name: /판매 관리/ }).click(); await expect(page.getByText('판매 상품 관리')).toBeVisible(); await page.goBack(); await page.getByRole('link', { name: /내 구매/ }).click(); await expect(page.getByText('주문 · 배송 조회')).toBeVisible(); await page.goBack(); await expect(page.getByRole('link', { name: '계정 설정' })).toBeVisible();
   await expect(page.getByRole('navigation', { name: '하단 메뉴' })).toBeVisible();
   await page.goto('/#/seller/my'); await expect(page).toHaveURL(/#\/my$/);
 });
