@@ -22,7 +22,6 @@ for (const fixture of stocks) {
       await route.fulfill({ json: { success: true, data } });
     });
     await page.goto('/#/');
-    await page.getByRole('button', { name: '건너뛰기', exact: true }).click();
     await page.getByRole('button', { name: '가입 없이 둘러보기', exact: true }).click();
     const card = page.getByRole('link', { name: /재고 표시 상품/ }).first();
     await expect(card.getByText(fixture.temporary ? '일시 품절' : 'SOLD OUT', { exact: true })).toBeVisible();
