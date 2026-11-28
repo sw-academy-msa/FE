@@ -29,7 +29,7 @@ export function HomePager<T extends { id: string }>({ items, page, onPage, rende
   const go = (i: number) => { if (i >= 0 && i < count && i !== cur) onPage(i); };
   return <div className="space-y-4">
     <div ref={ref} data-testid="home-products" onScroll={onScroll} style={{ gap: GAP, scrollbarWidth: 'none' }} className="flex snap-x snap-mandatory items-start overflow-x-auto overscroll-x-contain">
-      {pages.map((list, i) => <section key={i} aria-roledescription="페이지" aria-label={`상품 ${count}페이지 중 ${i + 1}페이지`} data-current={i === cur ? 'true' : undefined} inert={i !== cur} className="flex w-full shrink-0 snap-start flex-col">{list.map(render)}</section>)}
+      {pages.map((list, i) => <section key={i} aria-roledescription="페이지" aria-label={`상품 ${count}페이지 중 ${i + 1}페이지`} data-current={i === cur ? 'true' : undefined} inert={i !== cur} className="grid w-full shrink-0 snap-start grid-cols-2 content-start gap-x-3 gap-y-6">{list.map(render)}</section>)}
     </div>
     {count > 1 && <nav aria-label="상품 페이지" className="flex items-center justify-center gap-1">
       <button type="button" aria-label="이전 페이지" disabled={cur === 0} onClick={() => go(cur - 1)} className="grid h-8 w-8 place-items-center text-aux disabled:opacity-30"><ChevronLeft size={18}/></button>

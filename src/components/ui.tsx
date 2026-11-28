@@ -149,34 +149,34 @@ export function ProductCard({ product: p, now, availableCount, notified, onNotif
   const myHold = !!mine && st.holds.some(h => h.userId === mine && h.productId === p.id && (h.status === 'pending' || h.status === 'reserved' && (h.expiresAt ?? Infinity) > now));
   const myOrder = !!mine && !myHold && st.orders.some(o => o.userId === mine && o.productId === p.id && !['cancelled', 'refunded'].includes(o.status));
   const pct = total ? Math.min(100, Math.max(0, (1 - left / total) * 100)) : 0;
-  // 시안 최종 색 · 홈 새로 올라온 상품 줄: 사진 112(아래 시간 띠), 카테고리·이름·가격, 오른쪽 알림 종(44). 예전 카드의 상태 표시와 문구는 그대로 둔다
-  const bell = (label: string, on: boolean) => <button type="button" aria-label={label} onClick={e => { e.preventDefault(); if (!on) ringBell(e.currentTarget); onNotify?.(); }} className={`press grid h-11 w-11 shrink-0 place-items-center rounded-full ${on ? 'text-ink' : 'text-text'}`}><Icon name={on ? 'AlertOn' : 'AlertOff'} size={24}/></button>;
+  // 홈 상품 카드(사용자 요청으로 시안의 목록 줄 대신 2열 카드): 정사각 사진(아래 시간 띠, 오른쪽 위 알림 종), 카테고리·이름·가격, 판매 상황. 상태 표시·문구·버튼 이름은 그대로
+  const bell = (label: string, on: boolean) => <button type="button" aria-label={label} onClick={e => { e.preventDefault(); if (!on) ringBell(e.currentTarget); onNotify?.(); }} className={`press absolute right-1.5 top-1.5 grid h-9 w-9 place-items-center rounded-full bg-surface ${on ? 'text-ink' : 'text-text'}`}><Icon name={on ? 'AlertOn' : 'AlertOff'} size={20}/></button>;
   // 확대 전환: 이 상품 상세로 가는 동안 사진에 이름을 붙여 상세 큰 사진으로 이어지게 한다
   const zooming = useViewTransitionState(`/product/${p.id}`);
-  return <Link to={`/product/${p.id}`} viewTransition className="flex min-w-0 items-center gap-4 border-b border-line py-4">
-    <div className="relative h-28 w-28 shrink-0" style={{ viewTransitionName: zooming ? 'product-photo' : undefined }}>
-      <ProductImage src={p.images[0]} alt={p.name} className={`h-28 w-28 ${soldOut && !myHold ? 'opacity-50' : ''}`}/>
+  return <Link to={`/product/${p.id}`} viewTransition className="block min-w-0">
+    <div className="relative aspect-square w-full" style={{ viewTransitionName: zooming ? 'product-photo' : undefined }}>
+      <ProductImage src={p.images[0]} alt={p.name} className={`h-full w-full ${soldOut && !myHold ? 'opacity-50' : ''}`}/>
       {status === '판매 중' && !soldOut && <span className="absolute inset-x-1.5 bottom-1.5 flex h-7 items-center justify-center gap-1 rounded-[14px] bg-overlay text-label font-bold tabular-nums text-white"><Timer size={12}/><span><RollingText text={clockLeft(p.endsAt - now)}/></span></span>}
       {status === '판매 예정' && <span className="absolute inset-x-1.5 bottom-1.5 flex h-7 items-center justify-center gap-[5px] rounded-[14px] bg-overlay text-footnote font-medium text-white">{openLabel(p.startsAt, now)}</span>}
       {urgent && <span className="absolute left-1.5 top-1.5 rounded-pill bg-urgent px-2 py-0.5 text-footnote font-bold text-white">마감 임박</span>}
       {myHold ? <span className="absolute inset-x-1.5 top-1/2 -translate-y-1/2 rounded-inner bg-ink px-1 py-1.5 text-center text-footnote font-bold leading-tight text-white">확보한 재고 · 결제 이어하기</span>
         : myOrder && soldOut ? <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-inner bg-ink px-3 py-1.5 text-label font-bold text-white">구매 완료</span>
         : soldOut && <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-inner bg-sold-out px-3 py-1.5 text-label font-bold text-white">{temporary ? '일시 품절' : 'SOLD OUT'}</span>}
+      {status === '판매 예정' && onNotify && bell(notified ? '알림 설정됨' : '오픈 알림 받기', !!notified)}
+      {/* 판매 중에도 신청한 상품은 가격 인하·수량 임박 알림을 받으므로 끌 수 있게 둔다 */}
+      {status === '판매 중' && notified && onNotify && bell('상품 알림 끄기', true)}
     </div>
-    <div className="min-w-0 flex-1 space-y-2.5">
+    <div className="mt-2.5 space-y-2">
       <div className="space-y-[3px]">
         <p className="text-label font-medium text-muted">{p.category}</p>
-        <h3 className={`text-headline font-semibold leading-[21px] ${soldOut ? 'text-meta' : ''}`}>{p.name}</h3>
-        <p className={`text-[19px] font-extrabold ${soldOut ? 'text-meta' : ''}`}>{money(p.price)}</p>
+        <h3 className={`text-subhead font-semibold leading-5 ${soldOut ? 'text-meta' : ''}`}>{p.name}</h3>
+        <p className={`text-title-sm font-extrabold ${soldOut ? 'text-meta' : ''}`}>{money(p.price)}</p>
       </div>
       {status === '판매 중' && !soldOut && <div className="space-y-1.5"><div className="h-1 w-full rounded-[2px] bg-line"><div className={`h-1 rounded-[2px] ${urgent ? 'bg-urgent' : 'bg-ink'}`} style={{ width: `${pct}%` }}/></div><p className={`text-label ${urgent ? 'font-bold text-urgent' : 'text-muted'}`}><RollingText text={urgent ? `서두르세요! ${left}개 남음` : `${total}개 중 ${left}개 남음`}/></p></div>}
       {status === '판매 예정' && <p className="text-label text-muted">{total}개 한정 · 1인 {p.maxPerAccount}개</p>}
       {soldOut && <p className="text-label text-muted">{temporary ? TEMPORARY_SOLD_OUT_NOTE : soldOutLabel(p)}</p>}
       {status === '판매 종료' && !soldOut && <p className="text-label text-muted">판매 종료</p>}
     </div>
-    {status === '판매 예정' && onNotify && bell(notified ? '알림 설정됨' : '오픈 알림 받기', !!notified)}
-    {/* 판매 중에도 신청한 상품은 가격 인하·수량 임박 알림을 받으므로 끌 수 있게 둔다 */}
-    {status === '판매 중' && notified && onNotify && bell('상품 알림 끄기', true)}
   </Link>;
 }
 export function Progress({ step }: { step: number }) { return <div aria-label={`상품 등록 ${step} / 7단계`} className="mb-5 flex gap-[5px]">{Array.from({ length: 7 }, (_, i) => <div key={i} className={`h-1 flex-1 rounded-[2px] ${i < step ? 'bg-ink' : 'bg-line'}`}/>)}</div>; }

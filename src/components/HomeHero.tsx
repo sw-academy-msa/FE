@@ -7,7 +7,7 @@ import { clockLeft, ProductImage, RollingText } from './ui';
 
 const CARD = 336, GAP = 10, AUTO_MS = 4000;
 /**
- * 홈 상단 상품 슬라이드(시안 최종 색 · 홈 Hero Carousel): 판매 중 상품 카드(부모가 마감 임박 먼저, 최대 5개로 고른다).
+ * 홈 상단 상품 슬라이드(시안 최종 색 · 홈 Hero Carousel, 사용자 요청으로 카드를 가운데 정렬): 판매 중 상품 카드(부모가 마감 임박 먼저, 최대 5개로 고른다).
  * 4초마다 다음 카드로 넘기고(마지막 다음은 처음), 정지/재생 버튼으로 멈춘다. 움직임 줄이기 설정이면 멈춘 채 시작한다
  */
 export function HomeHero({ products, now, left }: { products: Product[]; now: number; left: (p: Product) => number }) {
@@ -25,12 +25,12 @@ export function HomeHero({ products, now, left }: { products: Product[]; now: nu
   }, [playing, count]);
   if (!count) return null;
   return <section aria-label="지금 판매 중인 상품" className="relative -mx-4">
-    <div ref={ref} style={{ scrollbarWidth: 'none' }} className="flex snap-x snap-mandatory scroll-pl-5 gap-2.5 overflow-x-auto px-5 pt-4">
+    <div ref={ref} style={{ scrollbarWidth: 'none' }} className="flex snap-x snap-mandatory gap-2.5 overflow-x-auto px-[calc((100%-336px)/2)] pt-4">
       {products.map((p, i) => {
         return <HeroCard key={p.id} product={p} index={i} count={count} now={now} left={left}/>;
       })}
     </div>
-    {count > 1 && <button type="button" aria-label={playing ? '슬라이드 정지' : '슬라이드 재생'} onClick={() => setPlaying(v => !v)} className="press absolute left-[310px] top-[30px] grid h-8 w-8 place-items-center rounded-full bg-overlay text-surface">{playing ? <Pause size={14} fill="currentColor"/> : <Play size={14} fill="currentColor"/>}</button>}
+    {count > 1 && <button type="button" aria-label={playing ? '슬라이드 정지' : '슬라이드 재생'} onClick={() => setPlaying(v => !v)} className="press absolute left-[calc(50%+122px)] top-[30px] grid h-8 w-8 place-items-center rounded-full bg-overlay text-surface">{playing ? <Pause size={14} fill="currentColor"/> : <Play size={14} fill="currentColor"/>}</button>}
   </section>;
 }
 
@@ -38,7 +38,7 @@ export function HomeHero({ products, now, left }: { products: Product[]; now: nu
 function HeroCard({ product: p, index: i, count, now, left }: { product: Product; index: number; count: number; now: number; left: (p: Product) => number }) {
   const zooming = useViewTransitionState(`/product/${p.id}`);
   const urgent = p.endsAt - now <= 3_600_000, l = left(p), total = stockTotal(p);
-  return <Link to={`/product/${p.id}`} viewTransition className="w-[336px] shrink-0 snap-start overflow-hidden rounded-card border border-border bg-surface">
+  return <Link to={`/product/${p.id}`} viewTransition className="w-[336px] shrink-0 snap-center overflow-hidden rounded-card border border-border bg-surface">
           <div className="relative h-[308px]" style={{ viewTransitionName: zooming ? 'product-photo' : undefined }}>
             <ProductImage src={p.images[0]} alt={p.name} className="absolute! inset-0 h-full w-full rounded-none!"/>
             <span className={`absolute left-3.5 top-3.5 flex items-center gap-1.5 rounded-pill bg-surface px-3 py-2 text-body font-bold ${urgent ? 'text-urgent' : 'text-green'}`}><span className="h-[7px] w-[7px] rounded-full bg-current"/>{urgent ? '마감 임박' : '판매 중'}</span>
