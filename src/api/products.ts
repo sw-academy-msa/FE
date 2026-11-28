@@ -23,7 +23,7 @@ export function productSummaryFromApi(d: ProductSummaryDto): Product {
     id: d.id, sellerId: '', name: d.name, brand: d.brandOrStore, category: d.category, description: '', images: d.image?.url ? [d.image.url] : [], originalUrl: '',
     price: d.price, shipping: 0, maxPerAccount: 0, dispatchDays: 0, startsAt: Date.parse(d.startsAt), endsAt: Date.parse(d.endsAt), published: true,
     options: [], dimensions: [], extras: [], reason: '', faqs: [], soldOutAt: ms(d.soldOutAt),
-    live: { initial: d.stock?.initialQuantity ?? 0, available: d.stock?.availableQuantity ?? 0 },
+    live: { initial: d.stock?.initialQuantity ?? 0, available: d.stock?.availableQuantity ?? 0, confirmed: d.stock?.confirmedQuantity, approximate: d.stock?.approximate },
   };
 }
 /** 상세 → Product. 옵션 stock은 서버의 남은 수량(availableQuantity) */
@@ -40,7 +40,7 @@ export function productFromApi(d: ProductDetailDto): Product {
     reason: d.disposalReason ?? '',
     faqs: (d.faqs ?? []).map(faqFromApi),
     soldOutAt: ms(d.soldOutAt),
-    live: { initial: d.stock?.initialQuantity ?? 0, available: d.stock?.availableQuantity ?? 0 },
+    live: { initial: d.stock?.initialQuantity ?? 0, available: d.stock?.availableQuantity ?? 0, confirmed: d.stock?.confirmedQuantity, approximate: d.stock?.approximate },
   };
 }
 export const optionFromApi = (o: ProductOptionDto) => ({ id: o.id, name: o.label, stock: o.availableQuantity });
